@@ -1,0 +1,54 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "cd .. && husky frontend/.husky"
+  },
+  "lint-staged": {
+    "*.{css,html,json,md,tsx,ts}": [
+      "prettier --write"
+    ],
+    "src/**/*.{tsx,ts}": [
+      "eslint --fix"
+    ]
+  },
+  "dependencies": {
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/merge": "^6.12.1",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.41.1",
+    "@reduxjs/toolkit": "^2.11.2",
+    "axios": "^1.16.0",
+    "dayjs": "^1.11.20",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-redux": "^9.2.0",
+    "react-router-dom": "^7.14.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.12.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "eslint-plugin-unused-imports": "^4.3.0",
+    "globals": "^17.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.4",
+    "prettier": "^3.6.2",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.58.2",
+    "vite": "^8.0.10"
+  }
+}
