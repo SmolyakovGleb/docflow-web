@@ -76,7 +76,32 @@
 - Срок жизни: 30 дней
 - Cookie: `httponly=True`, `samesite="lax"`, `secure=False` в dev / `True` в prod
 
+**Безопасность:**
+- `UserRead` схема никогда не содержит `password_hash` — проверить что поле отсутствует в response
+- Rate limiting на `POST /auth/login` и `POST /auth/register`: максимум 10 запросов/минуту с одного IP. Использовать `slowapi` (обёртка над `limits` для FastAPI). Добавить в `pyproject.toml`
+- При неверном пароле всегда возвращать одинаковое время ответа — bcrypt это обеспечивает автоматически (не добавлять досрочный return)
+- Логаут удаляет cookie через `response.delete_cookie("session")`
+
 **Проверка:** регистрация → логин → `GET /auth/me` возвращает пользователя → логаут → `GET /auth/me` возвращает 401.
+
+**Тесты (TDD — писать до реализации):**
+
+Unit (`tests/services/test_auth_service.py`):
+- `test_hash_password_not_plaintext` — хэш не равен паролю
+- `test_verify_password_correct` — правильный пароль проходит
+- `test_verify_password_wrong` — неправильный пароль отклоняется
+- `test_create_and_decode_jwt` — раундтрип без потерь
+- `test_decode_expired_jwt` — `freezegun` сдвигает время на 31 день, ожидаем ошибку
+
+Integration (`tests/test_auth.py`):
+- `test_register_success` — 201, `session` cookie в ответе
+- `test_register_duplicate_email` — 400
+- `test_login_success` — 200, cookie установлен
+- `test_login_wrong_password` — 401
+- `test_me_authenticated` — 200, email в теле
+- `test_me_unauthenticated` — 401
+- `test_logout_clears_cookie` — 200, cookie удалён
+- `test_rate_limit_login` — 11-й запрос подряд → 429
 
 ---
 
@@ -98,6 +123,20 @@
 - При callback проверить `state` из cookie
 - Если `github_id` уже привязан к другому пользователю — 409
 - После callback редиректить на `http://localhost:3000/settings`
+
+**Безопасность:**
+- `github_access_token` хранить в БД **зашифрованным**, не plaintext. Шифрование симметричное: AES-256-GCM через библиотеку `cryptography` (`Fernet`), ключ — `SESSION_SECRET`. Расшифровывать только в момент обращения к GitHub API
+- `state`-cookie ставить с `httponly=True`, `max_age=300` (5 минут), удалять после проверки
+- Scope OAuth App: запрашивать минимально необходимый — `repo` (нужен для чтения/записи файлов)
+
+**Тесты (TDD — `pytest-mock` мокает httpx):**
+
+`tests/test_github_oauth.py`:
+- `test_connect_redirects_to_github` — 302, URL содержит `client_id` и `state`
+- `test_callback_saves_token` — мокаем GitHub API, проверяем что `github_access_token` сохранён (зашифрован)
+- `test_callback_wrong_state` — 400/403
+- `test_callback_account_already_linked` — 409
+- `test_disconnect_clears_fields` — 200, `github_linked=false` в `/auth/me`
 
 ---
 
@@ -122,6 +161,17 @@ CRUD для проектов.
 - `webhook_secret` возвращается только в `POST /projects` (при создании)
 - Для `DELETE`: каскад не удаляет задачи (ON DELETE SET NULL или просто оставить project_id)
 
+**Безопасность:**
+- Resource ownership — вспомогательная функция `get_project_or_404(project_id, current_user)`: получает проект, проверяет `user_id`, иначе 404 (не 403 — не раскрывать что объект существует). Использовать во всех роутерах где нужна проверка владельца
+- `webhook_secret` не включать в `ProjectRead` и `GET /projects` / `GET /projects/{id}` — только в ответ на `POST /projects`
+
+**Тесты (`tests/test_projects.py`):**
+- `test_create_project` — 201, `webhook_secret` в ответе, URL содержит project id
+- `test_get_projects_own_only` — два пользователя, каждый видит только свои проекты
+- `test_get_project_not_found` — чужой project_id → 404 (не 403)
+- `test_webhook_secret_not_in_get` — GET /projects/{id} не содержит `webhook_secret`
+- `test_delete_project` — 204, повторный GET → 404
+
 ---
 
 ## Этап 6 — GitHub API клиент
@@ -144,6 +194,19 @@ CRUD для проектов.
 - Обернуть HTTP ошибки в кастомный `GitHubAPIError(status_code, detail)`
 - Контент файлов приходит base64-encoded — декодировать
 
+**Безопасность:**
+- Всегда использовать `base_url = "https://api.github.com"` — не принимать URL от пользователя (защита от SSRF)
+- Не логировать `access_token` — в логах может появиться в traceback при ошибке. Перехватывать исключения до логирования и вырезать заголовок `Authorization`
+- `get_user_repos()` — возвращать только репозитории текущего пользователя, не принимать произвольный `owner` от клиента
+
+**Тесты (TDD — `pytest-mock` мокает httpx, `respx` или `mocker.patch`):**
+
+`tests/services/test_github_client.py`:
+- `test_get_file_content_decodes_base64` — мокаем ответ GitHub, проверяем декодирование
+- `test_get_file_sha_returns_none_if_404` — 404 от GitHub → None (файл не существует)
+- `test_create_or_update_file_sends_correct_payload` — проверяем тело запроса
+- `test_github_api_error_raised_on_500` — GitHub вернул 500 → `GitHubAPIError`
+
 ---
 
 ## Этап 7 — Webhook
@@ -165,6 +228,27 @@ CRUD для проектов.
 - Для каждого нового файла: скачать через `GitHubClient`, создать `Task(status="queued")`
 - Запустить `pipeline_runner.run_task(task_id)` как FastAPI `BackgroundTask`
 - Ответ 202 с `{created, task_ids, skipped}`
+
+**Безопасность:**
+- HMAC считать от **сырого тела запроса** (bytes) до парсинга JSON — получить через `Request.body()`
+- При неверной подписи всегда возвращать 403, не раскрывать детали (`"Invalid webhook signature"`)
+- `project_id` в URL — UUID, но проверять что проект существует до верификации HMAC нельзя (timing oracle). Порядок: сначала найти проект, получить secret, затем проверить HMAC
+
+**Тесты (TDD — мокаем `GitHubClient` и `pipeline_runner`):**
+
+`tests/services/test_webhook_security.py` (unit, без БД):
+- `test_hmac_valid` — правильная подпись проходит
+- `test_hmac_invalid` — неправильная подпись отклоняется
+- `test_hmac_timing_safe` — разные длины подписей не дают утечки по времени
+
+`tests/test_webhook.py` (integration):
+- `test_webhook_creates_tasks` — валидный push → 202, задачи созданы в БД
+- `test_webhook_invalid_signature` — 403
+- `test_webhook_wrong_branch` — push в не-source ветку → 400
+- `test_webhook_non_md_files` — нет .md файлов → 400
+- `test_webhook_deduplication_queued` — файл уже в `queued` → в `skipped`
+- `test_webhook_exclude_patterns` — файл совпадает с паттерном → пропущен
+- `test_webhook_multiple_files` — 3 файла → 3 задачи
 
 ---
 
@@ -215,6 +299,21 @@ CRUD для проектов.
   - `github_sha = null`, `source_file_sha = null` для загружаемых файлов
 - `POST /tasks/{id}/retry` — повторный запуск; если SHA source изменился — 409, иначе сброс и старт
 
+**Безопасность:**
+- Все операции с задачами — проверять что `task.project.user_id == current_user.id` (через `get_project_or_404`)
+- Upload файла: ограничение `Content-Length` максимум **1 MB** (`if len(content) > 1_048_576: raise 413`)
+- Upload файла: проверять расширение — принимать только `.md` (`if not filename.endswith(".md"): raise 400`)
+- `original_content` и `translated_content` не фильтруются — это доверенный контент из GitHub/пайплайна, но не рендерить как HTML на бэке
+
+**Тесты (`tests/test_tasks.py`):**
+- `test_get_tasks_own_only` — пользователь видит только задачи своих проектов
+- `test_get_task_not_found` — чужая задача → 404
+- `test_patch_task_updates_content` — 200, `translated_content` обновлён
+- `test_patch_task_running_rejected` — статус `running` → 400
+- `test_upload_non_md_rejected` — файл `.txt` → 400
+- `test_upload_too_large_rejected` — файл > 1MB → 413
+- `test_manual_task_from_repo` — мокаем GitHub, задача создана
+
 ---
 
 ## Этап 10 — Публикация
@@ -232,6 +331,13 @@ CRUD для проектов.
 5. Создать `Publication` в БД
 6. `task.status = "published"`
 7. Отправить уведомление через `bitrix_notify`
+
+**Тесты (`tests/test_publish.py`, мокаем `GitHubClient`):**
+- `test_publish_success` — 200, `Publication` создана в БД, `task.status = published`
+- `test_publish_not_done_status` — статус не `done` → 400
+- `test_publish_conflict_detected` — SHA изменился → 409 с `{base, ours, theirs}`
+- `test_publish_new_file` — файла нет в target → публикуется без SHA
+- `test_publish_other_user_task` — 404
 
 ---
 
@@ -259,6 +365,12 @@ CRUD для проектов.
 **Детали:**
 - History: JOIN `publications → tasks → projects`, фильтры по `project_id`, `published_by`, диапазону дат; сортировка по `published_at DESC`
 - Analytics: агрегирующие SQL-запросы через SQLAlchemy — `count()`, `avg()`, `group by date`; видимость по той же логике `source_repo IN (...)`
+
+**Тесты (`tests/test_history.py`):**
+- `test_history_shared_by_source_repo` — два пользователя с одним `source_repo` видят общую историю
+- `test_history_isolated_by_source_repo` — разные `source_repo` → разные истории
+- `test_history_filter_by_project` — фильтр по `project_id` работает
+- `test_analytics_success_rate` — правильно считает процент успешных задач
 
 ---
 
@@ -301,11 +413,18 @@ CRUD для проектов.
 ## Этап 14 — Финальная сборка
 
 - Подключить все роутеры в `app/api/router.py` с правильными prefix и tags
-- CORS: разрешить `http://localhost:3000` в dev
 - Глобальный exception handler для `GitHubAPIError` → 502
 - Проверить все 401/403/404 кейсы
 - Пройтись по `docs/api.md` и убедиться, что все коды ответов совпадают
 - Smoke-тест: запустить `docker compose up`, пройти полный флоу через Swagger UI
+
+**Безопасность — финальный чеклист:**
+- CORS: `allow_origins=["http://localhost:3000"]` в dev, `["https://your-domain.com"]` в prod — никогда не `["*"]` (иначе любой сайт может делать запросы от имени пользователя через cookie)
+- Убедиться что в Swagger UI (`/docs`) не торчат секретные поля (`password_hash`, `github_access_token`, `webhook_secret`)
+- Все роутеры кроме `/health`, `/auth/register`, `/auth/login`, `/auth/github/callback`, `POST /webhook/{id}` — требуют валидный JWT (`Depends(get_current_user)`)
+- Заголовки безопасности через middleware: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`
+- `slowapi` rate limiter подключён глобально в `main.py`
+- Добавить `cryptography` в `pyproject.toml` для шифрования GitHub токенов
 
 ---
 

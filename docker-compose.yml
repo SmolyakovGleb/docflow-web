@@ -14,6 +14,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    # порт не пробрасывается наружу — БД доступна только внутри docflow-network
 
   backend:
     build:

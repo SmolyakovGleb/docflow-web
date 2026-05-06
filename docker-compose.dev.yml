@@ -1,4 +1,21 @@
 services:
+  db:
+    ports:
+      - "5432:5432"  # только в dev — для DataGrip и локальных тестов
+
+  db_test:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: docflow
+      POSTGRES_PASSWORD: docflow_secret
+      POSTGRES_DB: docflow_test
+    ports:
+      - "5433:5432"
+    networks:
+      - docflow-network
+    tmpfs:
+      - /var/lib/postgresql/data  # в памяти — быстрее, данные не нужны между запусками
+
   backend:
     volumes:
       - ./backend:/app/backend
