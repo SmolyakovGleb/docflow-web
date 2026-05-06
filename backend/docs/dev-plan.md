@@ -157,8 +157,11 @@ CRUD для проектов.
 
 **Детали:**
 - Все операции только с проектами текущего пользователя (`project.user_id == current_user.id`)
-- `webhook_url` формируется как `{settings.base_url}/webhook/{project.id}` (или захардкодить паттерн)
+- Создание проекта доступно только пользователю с привязанным GitHub-аккаунтом
+- `source_repo` и `target_repo` валидируются по простому формату `owner/repo`
+- `webhook_url` формируется как `{settings.app_base_url}/webhook/{project.id}`
 - `webhook_secret` возвращается только в `POST /projects` (при создании)
+- `exclude_patterns` возвращается в `GET /projects`, `GET /projects/{id}` и `PATCH /projects/{id}`
 - Для `DELETE`: каскад не удаляет задачи (ON DELETE SET NULL или просто оставить project_id)
 
 **Безопасность:**
@@ -167,10 +170,15 @@ CRUD для проектов.
 
 **Тесты (`tests/test_projects.py`):**
 - `test_create_project` — 201, `webhook_secret` в ответе, URL содержит project id
+- `test_create_project_requires_github_link` — без GitHub-link создание запрещено
+- `test_create_project_validates_repo_format` — невалидный `owner/repo` → 422
 - `test_get_projects_own_only` — два пользователя, каждый видит только свои проекты
 - `test_get_project_not_found` — чужой project_id → 404 (не 403)
 - `test_webhook_secret_not_in_get` — GET /projects/{id} не содержит `webhook_secret`
+- `test_get_project_returns_exclude_patterns` — read-ответ содержит `exclude_patterns`
+- `test_patch_project_updates_fields` — PATCH обновляет допустимые поля проекта
 - `test_delete_project` — 204, повторный GET → 404
+- `test_delete_project_keeps_tasks_with_null_project_id` — после удаления проекта связанные задачи сохраняются
 
 ---
 

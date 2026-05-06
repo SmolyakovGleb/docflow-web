@@ -201,6 +201,7 @@ https://github.com/login/oauth/authorize?client_id=...&scope=repo&state=...
     "source_branch": "main",
     "target_repo": "bitrix24/b24restdocs",
     "target_branch": "main",
+    "exclude_patterns": ["**/CHANGELOG.md", "**/README.md"],
     "webhook_url": "https://your-host/webhook/550e8400-e29b-41d4-a716-446655440001",
     "created_at": "2026-05-05T10:00:00Z"
   }
@@ -228,6 +229,8 @@ https://github.com/login/oauth/authorize?client_id=...&scope=repo&state=...
 > `exclude_patterns` — опциональный массив паттернов в gitignore-синтаксисе. Файлы, совпадающие с паттернами, игнорируются при обработке webhook.
 
 **Логика:**
+- Требует привязанный GitHub-аккаунт у текущего пользователя
+- Валидирует `source_repo` и `target_repo` в формате `owner/repo`
 - Генерирует `webhook_secret` (случайная строка)
 - Сохраняет проект в БД
 
@@ -240,6 +243,7 @@ https://github.com/login/oauth/authorize?client_id=...&scope=repo&state=...
   "source_branch": "main",
   "target_repo": "bitrix24/b24restdocs",
   "target_branch": "main",
+  "exclude_patterns": ["**/CHANGELOG.md", "**/README.md"],
   "webhook_url": "https://your-host/webhook/550e8400-e29b-41d4-a716-446655440001",
   "webhook_secret": "whsec_abc123...",
   "created_at": "2026-05-05T10:00:00Z"
@@ -268,7 +272,8 @@ https://github.com/login/oauth/authorize?client_id=...&scope=repo&state=...
 ```json
 {
   "name": "b24 RU→EN (prod)",
-  "target_branch": "docs-en"
+  "target_branch": "docs-en",
+  "exclude_patterns": ["**/drafts/**"]
 }
 ```
 
