@@ -23,8 +23,8 @@ class NotificationChannel(Base):
     bitrix_token: Mapped[str | None]
     destination_type: Mapped[str | None]
     destination_id: Mapped[str | None]
-    events: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
-    is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    events: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, server_default="{}")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

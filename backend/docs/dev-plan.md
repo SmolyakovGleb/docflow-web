@@ -455,17 +455,25 @@ CRUD для проектов.
 - `app/services/bitrix_notify.py`
 - `app/api/routes/notifications.py`
 
-**Сервис `bitrix_notify.py`:**
-- `async def notify(event: str, payload: dict)` — загружает активные каналы с нужным event, итерирует
-- Для `incoming_webhook`: `POST {webhook_url}` с JSON телом
-- Для `rest_api`: `POST {bitrix_url}/im.message.add` с токеном, `DIALOG_ID` из `destination_type + destination_id`
+**MVP-решение:**
+- Полноценная интеграция Bitrix24 **отложена до post-MCP**
+- `bitrix_notify.notify(...)` остаётся безопасной no-op заглушкой
+- Таблица `notification_channels` и её модель сохраняются как задел, но в MVP не используются
 
-**Эндпоинты:**
-- `GET /notifications/channels`
-- `POST /notifications/channels`
-- `PATCH /notifications/channels/{id}`
-- `DELETE /notifications/channels/{id}`
-- `POST /notifications/channels/{id}/test` — отправить тестовое сообщение
+**Эндпоинты (MVP):**
+- `GET /notifications/channels` — возвращает `[]`
+- `POST /notifications/channels` — `501 Not Implemented`
+- `PATCH /notifications/channels/{id}` — `501 Not Implemented`
+- `DELETE /notifications/channels/{id}` — `501 Not Implemented`
+- `POST /notifications/channels/{id}/test` — `501 Not Implemented`
+
+**Сообщение заглушек:**
+- `Bitrix24 notification delivery is deferred until post-MCP`
+
+**Post-MCP:**
+- Вернуться к реальной отправке через `incoming_webhook` и `rest_api`
+- Подключить работу с таблицей `notification_channels`
+- Реализовать тестовые отправки и UI-управление каналами
 
 ---
 

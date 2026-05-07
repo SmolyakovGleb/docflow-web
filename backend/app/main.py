@@ -73,6 +73,13 @@ def create_app() -> FastAPI:
                     "редактирование отложено до post-MVP per-user модели."
                 ),
             },
+            {
+                "name": "notifications",
+                "description": (
+                    "Уведомления Bitrix24. В MVP доступен только пустой read-only список каналов; "
+                    "реальная доставка и управление каналами отложены до post-MCP."
+                ),
+            },
         ],
     )
     app.state.limiter = limiter
