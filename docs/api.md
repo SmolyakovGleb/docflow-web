@@ -830,7 +830,10 @@ file: <binary .md file>
 
 ## Notification Channels
 
-Каналы уведомлений не привязаны к конкретной команде. Можно создать несколько каналов с разными методами доставки, адресатами и наборами событий.
+MVP-режим: полноценная доставка в Bitrix24 и управление каналами **отложены до post-MCP**.
+
+> В текущем MVP `bitrix_notify.notify(...)` работает как безопасная no-op заглушка.  
+> `GET /notifications/channels` возвращает пустой список, а остальные endpoints раздела — `501 Not Implemented`.
 
 **Поддерживаемые события (`events`):**
 
@@ -845,120 +848,57 @@ file: <binary .md file>
 
 ### GET /notifications/channels
 
-Список всех каналов уведомлений.
+Список каналов уведомлений.
+
+В MVP каналы ещё не управляются и endpoint возвращает пустой список.
 
 **Response 200:**
 ```json
-[
-  {
-    "id": "...",
-    "name": "Ошибки в чат разработки",
-    "method": "incoming_webhook",
-    "destination_label": "incoming webhook",
-    "events": ["failure", "conflict"],
-    "is_active": true,
-    "created_at": "2026-05-05T10:00:00Z"
-  },
-  {
-    "id": "...",
-    "name": "Готово к проверке → Анна",
-    "method": "rest_api",
-    "destination_label": "user · 42",
-    "events": ["done"],
-    "is_active": true,
-    "created_at": "2026-05-05T11:00:00Z"
-  }
-]
+[]
 ```
-
-> `destination_label` — читаемое описание адресата, `webhook_url` и `bitrix_token` в списке не возвращаются.
 
 ---
 
 ### POST /notifications/channels
 
-Создать канал уведомлений.
+В MVP создание каналов не реализовано.
 
-**Вариант A — Incoming Webhook (проще):**
+**Response 501:**
 ```json
-{
-  "name": "Ошибки в чат разработки",
-  "method": "incoming_webhook",
-  "webhook_url": "https://your-domain.bitrix24.ru/rest/1/abc123/imbot.message.add/",
-  "events": ["failure", "conflict"]
-}
-```
-
-> Получить URL: Bitrix24 → Marketplace → Входящие вебхуки → Создать. Адресат задаётся в Bitrix24 при создании вебхука.
-
-**Вариант B — REST API (гибче):**
-```json
-{
-  "name": "Готово к проверке → Анна",
-  "method": "rest_api",
-  "bitrix_token": "abc123...",
-  "destination_type": "user",
-  "destination_id": "42",
-  "events": ["done"]
-}
-```
-
-| `destination_type` | `destination_id` | Куда отправляет |
-|--------------------|-----------------|-----------------|
-| `user` | ID пользователя в Bitrix24 | Личное сообщение |
-| `chat` | ID чата | Групповой чат |
-| `channel` | ID канала | Открытый канал |
-
-**Response 201:**
-```json
-{
-  "id": "550e8400-...",
-  "name": "Ошибки в чат разработки",
-  "method": "incoming_webhook",
-  "events": ["failure", "conflict"],
-  "is_active": true
-}
+{ "detail": "Bitrix24 notification delivery is deferred until post-MCP" }
 ```
 
 ---
 
 ### PATCH /notifications/channels/{id}
 
-Обновить канал: включить/выключить, изменить события, адресат.
+В MVP обновление каналов не реализовано.
 
-**Request body** (все поля опциональны):
+**Response 501:**
 ```json
-{
-  "name": "Ошибки (обновлено)",
-  "events": ["failure", "conflict", "done"],
-  "is_active": false
-}
+{ "detail": "Bitrix24 notification delivery is deferred until post-MCP" }
 ```
-
-**Response 200** — обновлённый канал.
 
 ---
 
 ### DELETE /notifications/channels/{id}
 
-Удалить канал.
+В MVP удаление каналов не реализовано.
 
-**Response 204**
+**Response 501:**
+```json
+{ "detail": "Bitrix24 notification delivery is deferred until post-MCP" }
+```
 
 ---
 
 ### POST /notifications/channels/{id}/test
 
-Отправить тестовое сообщение для проверки настроек.
+В MVP тестовая отправка не реализована.
 
-**Response 200:**
+**Response 501:**
 ```json
-{ "ok": true, "message": "Тестовое сообщение отправлено" }
-```
-
-**Response 502** — ошибка Bitrix24 API:
-```json
-{ "detail": "Bitrix24 error: webhook_url is invalid" }
+{ "detail": "Bitrix24 notification delivery is deferred until post-MCP" }
 ```
 
 ---
