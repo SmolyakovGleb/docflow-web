@@ -52,6 +52,27 @@ def create_app() -> FastAPI:
                     "Не требует авторизации — аутентификация через HMAC-подпись (`X-Hub-Signature-256`)."
                 ),
             },
+            {
+                "name": "history",
+                "description": (
+                    "История публикаций. Видны публикации всех пользователей, "
+                    "работающих с тем же `source_repo`."
+                ),
+            },
+            {
+                "name": "analytics",
+                "description": (
+                    "Агрегированная статистика: успешность переводов, среднее время, "
+                    "динамика по дням, топ ошибок."
+                ),
+            },
+            {
+                "name": "dictionaries",
+                "description": (
+                    "Словари пайплайна. В MVP доступен read-only просмотр merged-данных; "
+                    "редактирование отложено до post-MVP per-user модели."
+                ),
+            },
         ],
     )
     app.state.limiter = limiter

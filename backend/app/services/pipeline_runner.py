@@ -8,6 +8,7 @@ import shutil
 import sys
 import tempfile
 import traceback
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -196,6 +197,7 @@ async def run_task(task_id: UUID) -> None:
             task.log = log_handler.get_log()
             task.error = None
             task.status = "done"
+            task.completed_at = datetime.now(UTC)
             await session.commit()
             await _emit_event(queue, "status_change", {"status": "done"})
         except Exception:
@@ -203,6 +205,7 @@ async def run_task(task_id: UUID) -> None:
             task.log = log_handler.get_log() if log_handler else None
             task.error = traceback.format_exc()
             task.status = "failed"
+            task.completed_at = datetime.now(UTC)
             await session.commit()
             await _emit_event(queue, "status_change", {"status": "failed"})
         finally:

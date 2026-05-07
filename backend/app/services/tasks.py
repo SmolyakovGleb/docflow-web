@@ -462,6 +462,7 @@ async def reset_task_for_retry(
     task.translated_content = None
     task.log = None
     task.error = None
+    task.completed_at = None
     task.status = "queued"
     await session.commit()
     return task

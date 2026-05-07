@@ -20,7 +20,7 @@ class DictionaryEntry(Base):
     dict_type: Mapped[str]
     key: Mapped[str]
     value: Mapped[str]
-    is_deleted: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     updated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

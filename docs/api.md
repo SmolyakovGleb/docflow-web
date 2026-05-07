@@ -743,7 +743,10 @@ file: <binary .md file>
 
 ## Dictionaries
 
-Управление пользовательскими правками словарей пайплайна.
+Просмотр словарей пайплайна в read-only режиме для MVP.
+
+> Реальное редактирование словарей отложено до post-MVP, потому что целевая модель должна быть per-user.  
+> В текущем MVP `POST`, `PATCH` и `DELETE` существуют как заглушки и возвращают `501 Not Implemented`.
 
 Поддерживаемые типы (`dict_type`):
 
@@ -761,7 +764,7 @@ file: <binary .md file>
 
 ### GET /dictionaries/{dict_type}
 
-Получить все записи словаря: базовые (из файла submodule) + пользовательские правки.
+Получить merged-снимок словаря: базовые записи из `pipeline/data/` + текущие записи из БД.
 
 **Response 200:**
 ```json
@@ -788,42 +791,40 @@ file: <binary .md file>
 
 `source`: `"base"` — из файла submodule, `"user"` — пользовательская запись в БД.
 
+Для `prompt` response содержит один entry с `key="main"`.
+
 ---
 
 ### POST /dictionaries/{dict_type}
 
-Добавить новую запись.
+В MVP редактирование словарей не реализовано.
 
-**Request body:**
+**Response 501:**
 ```json
-{ "key": "лид", "value": "lead" }
-```
-
-**Response 201:**
-```json
-{ "id": "...", "dict_type": "dictionary", "key": "лид", "value": "lead", "is_deleted": false }
+{ "detail": "Per-user dictionary editing is deferred until post-MVP" }
 ```
 
 ---
 
 ### PATCH /dictionaries/{dict_type}/{entry_id}
 
-Обновить существующую пользовательскую запись или перекрыть базовую.
+В MVP редактирование словарей не реализовано.
 
-**Request body:**
+**Response 501:**
 ```json
-{ "value": "deal (updated)" }
+{ "detail": "Per-user dictionary editing is deferred until post-MVP" }
 ```
-
-**Response 200** — обновлённая запись.
 
 ---
 
 ### DELETE /dictionaries/{dict_type}/{entry_id}
 
-Удалить пользовательскую запись. Для базовых записей (из submodule) — устанавливает `is_deleted=true`, эффективно исключая термин из словаря.
+В MVP редактирование словарей не реализовано.
 
-**Response 204**
+**Response 501:**
+```json
+{ "detail": "Per-user dictionary editing is deferred until post-MVP" }
+```
 
 ---
 

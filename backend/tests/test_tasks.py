@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import secrets
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -30,6 +31,7 @@ async def create_task(
     translated_content: str | None = "# Target",
     log: str | None = None,
     error: str | None = None,
+    completed_at: datetime | None = None,
 ) -> Task:
     task = Task(
         project_id=project.id,
@@ -44,6 +46,7 @@ async def create_task(
         status=status,
         log=log,
         error=error,
+        completed_at=completed_at,
     )
     db_session.add(task)
     await db_session.commit()
@@ -379,6 +382,7 @@ async def test_retry_task_success(auth_client, db_session, test_project, test_us
         translated_content="# Target",
         log="old log",
         error="old error",
+        completed_at=datetime(2026, 5, 7, 12, 0, tzinfo=UTC),
     )
 
     github_client = mocker.Mock()
@@ -399,6 +403,7 @@ async def test_retry_task_success(auth_client, db_session, test_project, test_us
     assert task.translated_content is None
     assert task.log is None
     assert task.error is None
+    assert task.completed_at is None
     run_task.assert_awaited_once()
 
 

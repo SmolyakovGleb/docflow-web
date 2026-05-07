@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
@@ -158,6 +159,25 @@ async def test_publish_new_file(auth_client, db_session, test_project, test_user
         branch=test_project.target_branch,
     )
     notify.assert_awaited_once()
+
+
+async def test_publish_keeps_completed_at(auth_client, db_session, test_project, test_user, mocker):
+    await link_github(test_user, db_session)
+    task = await create_task(db_session, test_project)
+    task.completed_at = datetime(2026, 5, 7, 12, 0, tzinfo=UTC)
+    await db_session.commit()
+
+    github_client = mocker.Mock()
+    github_client.get_file_sha = mocker.AsyncMock(return_value="target-sha")
+    github_client.create_or_update_file = mocker.AsyncMock(return_value="commit-sha")
+    mocker.patch("app.services.tasks.GitHubClient", return_value=github_client)
+    mocker.patch("app.services.tasks.bitrix_notify.notify", new=mocker.AsyncMock())
+
+    response = await auth_client.post(f"/tasks/{task.id}/publish")
+
+    assert response.status_code == 200
+    await db_session.refresh(task)
+    assert task.completed_at == datetime(2026, 5, 7, 12, 0, tzinfo=UTC)
 
 
 async def test_publish_requires_github_link(auth_client, db_session, test_project):

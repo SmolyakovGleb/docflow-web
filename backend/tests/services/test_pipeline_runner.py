@@ -92,6 +92,7 @@ async def test_run_task_success(engine, db_session, test_project, mocker):
     assert updated_task.translated_content == "# Translated"
     assert "pipeline log" in (updated_task.log or "")
     assert updated_task.error is None
+    assert updated_task.completed_at is not None
 
 
 async def test_run_task_failure_sets_failed_status(engine, db_session, test_project, mocker):
@@ -136,6 +137,7 @@ async def test_run_task_failure_sets_failed_status(engine, db_session, test_proj
     assert updated_task.translated_content is None
     assert "RuntimeError: pipeline crashed" in (updated_task.error or "")
     assert "before failure" in (updated_task.log or "")
+    assert updated_task.completed_at is not None
 
 
 async def test_run_task_captures_log(engine, db_session, test_project, mocker):

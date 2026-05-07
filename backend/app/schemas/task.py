@@ -20,6 +20,7 @@ class TaskSummary(BaseModel):
     file_path: str = Field(..., description="Путь к файлу относительно корня репозитория, напр. `api-reference/crm/deals/crm-deal-get.md`")
     status: TaskStatus = Field(..., description="Статус: `queued` → `running` → `done`/`failed` → `published`")
     created_at: datetime
+    completed_at: datetime | None = Field(None, description="Когда перевод завершился статусом `done` или `failed`")
     updated_at: datetime
 
 

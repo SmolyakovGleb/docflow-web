@@ -425,13 +425,27 @@ CRUD для проектов.
 - `app/api/routes/dictionaries.py`
 - `app/services/dictionary_merger.py` (уже создан в этапе 8)
 
-**Эндпоинты:**
-- `GET /dictionaries/{dict_type}` — мёрж базовых файлов + БД записей
-- `POST /dictionaries/{dict_type}`
-- `PATCH /dictionaries/{dict_type}/{entry_id}`
-- `DELETE /dictionaries/{dict_type}/{entry_id}` — soft delete (`is_deleted=True`) для базовых
+**MVP-решение:**
+- Реальное редактирование словарей **отложено до post-MVP**, потому что целевая модель должна быть **per-user**, а не глобальной.
+- В MVP реализуется только read-only просмотр merged-данных.
+
+**Эндпоинты (MVP):**
+- `GET /dictionaries/{dict_type}` — merged view базовых файлов + текущих БД-записей
+- `POST /dictionaries/{dict_type}` — `501 Not Implemented`
+- `PATCH /dictionaries/{dict_type}/{entry_id}` — `501 Not Implemented`
+- `DELETE /dictionaries/{dict_type}/{entry_id}` — `501 Not Implemented`
 
 **Поддерживаемые типы:** `dictionary`, `glossary`, `static_terms`, `section_headings`, `note_titles`, `include_labels`, `prompt`
+
+**Детали MVP:**
+- `GET` возвращает стабильный read-only снимок словаря для UI
+- Для `prompt` response содержит один entry с `key="main"`
+- Записи с `is_deleted=true` не попадают в merged response
+- Сообщение заглушек: `Per-user dictionary editing is deferred until post-MVP`
+
+**Post-MVP:**
+- Вернуться к проектированию персональных overrides (`user_id`, возможно `project_id`)
+- После этого заменить `501`-заглушки реальной логикой CRUD
 
 ---
 
