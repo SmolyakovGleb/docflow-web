@@ -11,6 +11,7 @@ from app.db.session import get_db_session
 from app.models.user import User
 from app.schemas.task import (
     RetryRequest,
+    TaskPublishResponse,
     TaskCreateResponse,
     TaskDetail,
     TaskListResponse,
@@ -21,6 +22,7 @@ from app.schemas.task import (
 from app.services import pipeline_runner
 from app.services.auth import get_current_user
 from app.services.tasks import (
+    PublishConflictError,
     SourceFileChangedError,
     create_manual_task_from_upload,
     create_manual_tasks_from_repo,
@@ -28,9 +30,11 @@ from app.services.tasks import (
     list_tasks,
     parse_manual_repo_payload,
     parse_upload_payload,
+    publish_task,
     reset_task_for_retry,
     update_task_content,
 )
+from app.services.github import GitHubAPIError
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
@@ -54,7 +58,16 @@ async def _stream_task_events(task_id: UUID) -> AsyncIterator[str]:
         pipeline_runner.TASK_EVENT_QUEUES.pop(task_id, None)
 
 
-@router.get("", response_model=TaskListResponse)
+@router.get(
+    "",
+    response_model=TaskListResponse,
+    summary="Список задач",
+    description=(
+        "Задачи текущего пользователя по всем его проектам. "
+        "Задачи с `project_id=null` (orphaned) не включаются. "
+        "Фильтры: `project_id`, `status`. Поддерживается пагинация."
+    ),
+)
 async def get_tasks(
     session: DbSession,
     current_user: CurrentUser,
@@ -79,13 +92,31 @@ async def get_tasks(
     )
 
 
-@router.get("/{task_id}", response_model=TaskDetail)
+@router.get(
+    "/{task_id}",
+    response_model=TaskDetail,
+    summary="Детали задачи",
+    description="Полные данные задачи: оригинал, перевод, SHA файлов, история публикаций.",
+    responses={
+        200: {"description": "Детали задачи"},
+        404: {"description": "Задача не найдена или принадлежит другому пользователю"},
+    },
+)
 async def get_task(task_id: UUID, session: DbSession, current_user: CurrentUser) -> TaskDetail:
     task = await get_task_or_404(session, task_id, current_user, with_publications=True)
     return TaskDetail.model_validate(task)
 
 
-@router.get("/{task_id}/log")
+@router.get(
+    "/{task_id}/log",
+    summary="Лог пайплайна",
+    description="Сырой текстовый лог выполнения пайплайна (`text/plain`). `204` если задача ещё в очереди и лог пуст.",
+    responses={
+        200: {"description": "Лог (text/plain)"},
+        204: {"description": "Лог пуст"},
+        404: {"description": "Задача не найдена"},
+    },
+)
 async def get_task_log(task_id: UUID, session: DbSession, current_user: CurrentUser) -> Response:
     task = await get_task_or_404(session, task_id, current_user)
     if not task.log:
@@ -93,7 +124,17 @@ async def get_task_log(task_id: UUID, session: DbSession, current_user: CurrentU
     return PlainTextResponse(task.log)
 
 
-@router.patch("/{task_id}", response_model=TaskDetail)
+@router.patch(
+    "/{task_id}",
+    response_model=TaskDetail,
+    summary="Обновить перевод",
+    description="Сохраняет отредактированный перевод. Допускается только для статусов `done` и `failed`.",
+    responses={
+        200: {"description": "Задача обновлена"},
+        400: {"description": "Нельзя редактировать задачу со статусом `running` или `queued`"},
+        404: {"description": "Задача не найдена"},
+    },
+)
 async def patch_task(
     task_id: UUID,
     payload: TaskUpdate,
@@ -105,7 +146,27 @@ async def patch_task(
     return TaskDetail.model_validate(updated_task)
 
 
-@router.post("/manual", response_model=TaskCreateResponse, status_code=201)
+@router.post(
+    "/manual",
+    response_model=TaskCreateResponse,
+    status_code=201,
+    summary="Ручной запуск перевода",
+    description=(
+        "Два варианта запуска:\n\n"
+        "**A — файлы из репозитория** (`application/json`):\n"
+        "```json\n{\"project_id\": \"...\", \"file_paths\": [\"docs/crm-deal-get.md\"]}\n```\n"
+        "Требует привязанный GitHub-аккаунт. Скачивает файлы через GitHub API.\n\n"
+        "**B — загрузка файла** (`multipart/form-data`):\n"
+        "Поля: `project_id`, `target_path`, `file` (только `.md`, UTF-8, максимум 1 MB).\n"
+        "GitHub-аккаунт не требуется.\n\n"
+        "Поддерживает частичный успех: `skipped` содержит пропущенные файлы с причиной."
+    ),
+    responses={
+        201: {"description": "Задачи созданы и поставлены в очередь"},
+        400: {"description": "GitHub не привязан / невалидный файл / неверный формат запроса"},
+        413: {"description": "Файл превышает 1 MB"},
+    },
+)
 async def create_manual_tasks(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -141,7 +202,24 @@ async def create_manual_tasks(
     )
 
 
-@router.post("/{task_id}/retry", status_code=202)
+@router.post(
+    "/{task_id}/retry",
+    status_code=202,
+    summary="Повторить перевод",
+    description=(
+        "Сбрасывает результаты задачи (`translated_content`, `log`, `error`) и запускает пайплайн заново. "
+        "Применимо для статусов `done` и `failed`.\n\n"
+        "Если source-файл изменился в GitHub с момента создания задачи — возвращает `409`. "
+        "Передайте `force: true` чтобы продолжить со старой версией файла. "
+        "Для upload-задач (`github_ref=manual`, `source_file_sha=null`) проверка SHA пропускается."
+    ),
+    responses={
+        202: {"description": "Задача поставлена в очередь"},
+        400: {"description": "Нельзя повторить задачу со статусом `running`"},
+        404: {"description": "Задача не найдена"},
+        409: {"description": "Source-файл изменился — нужен `force: true` или новая задача"},
+    },
+)
 async def retry_task(
     task_id: UUID,
     background_tasks: BackgroundTasks,
@@ -174,7 +252,73 @@ async def retry_task(
     return {"id": str(reset_task.id), "status": reset_task.status}
 
 
-@router.get("/{task_id}/events")
+@router.post(
+    "/{task_id}/publish",
+    response_model=TaskPublishResponse,
+    summary="Опубликовать перевод",
+    description=(
+        "Публикует `translated_content` в target-репозиторий через GitHub API. "
+        "Доступно только для `status=done`.\n\n"
+        "**Алгоритм:**\n"
+        "1. Получить текущий SHA EN-файла в target repo\n"
+        "2. Сравнить с `task.target_file_sha` (зафиксирован при создании задачи)\n"
+        "3. Расхождение → `409` с `base/ours/theirs` для 3-way diff в UI\n"
+        "4. Совпадение → создать/обновить файл в GitHub, записать `Publication`, "
+        "обновить `task.status=published`\n\n"
+        "При `409`: отредактируйте перевод через `PATCH /tasks/{id}`, затем повторите publish."
+    ),
+    responses={
+        200: {"description": "Опубликовано успешно, возвращает `commit_sha`"},
+        400: {"description": "Задача не в статусе `done`"},
+        404: {"description": "Задача не найдена"},
+        409: {"description": "EN-файл изменился вручную — конфликт, нужен 3-way merge"},
+        502: {"description": "Ошибка GitHub API"},
+    },
+)
+async def publish_task_route(
+    task_id: UUID,
+    session: DbSession,
+    current_user: CurrentUser,
+) -> TaskPublishResponse:
+    task = await get_task_or_404(session, task_id, current_user)
+    try:
+        result = await publish_task(session, task, current_user)
+    except PublishConflictError as exc:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": "Conflict: target file was modified since this task was created",
+                "conflict": {
+                    "base": exc.base,
+                    "ours": exc.ours,
+                    "theirs": exc.theirs,
+                },
+            },
+        )
+    except GitHubAPIError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
+
+    return TaskPublishResponse.model_validate(result)
+
+
+@router.get(
+    "/{task_id}/events",
+    summary="SSE-стрим событий задачи",
+    description=(
+        "Server-Sent Events о прогрессе выполнения пайплайна (`text/event-stream`). "
+        "Используется фронтендом пока задача в статусе `running`.\n\n"
+        "**Типы событий:**\n"
+        "- `stage_update` — смена этапа: `{stage, index, total}`\n"
+        "- `log_line` — строка лога: `{line}`\n"
+        "- `status_change` — финальный статус: `{status}` (`done` или `failed`)\n\n"
+        "После `status_change` поток закрывается. "
+        "Если задача уже завершена или ещё в `queued` — сразу отправляется одно событие `status_change`."
+    ),
+    responses={
+        200: {"description": "SSE-поток (text/event-stream)"},
+        404: {"description": "Задача не найдена"},
+    },
+)
 async def task_events(
     task_id: UUID,
     session: DbSession,

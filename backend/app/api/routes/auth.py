@@ -91,7 +91,18 @@ def to_user_read(user: User) -> UserRead:
     return UserRead.model_validate(user)
 
 
-@router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Регистрация",
+    description="Создаёт нового пользователя и устанавливает `session` cookie (httponly). Лимит: 10 запросов/мин с одного IP.",
+    responses={
+        201: {"description": "Пользователь создан, cookie установлен"},
+        400: {"description": "Email уже занят"},
+        429: {"description": "Превышен лимит запросов"},
+    },
+)
 @limiter.limit("10/minute")
 async def register(
     request: Request,
@@ -127,7 +138,17 @@ async def register(
     return to_user_read(user)
 
 
-@router.post("/login", response_model=UserRead)
+@router.post(
+    "/login",
+    response_model=UserRead,
+    summary="Вход",
+    description="Аутентификация по email/паролю. Устанавливает `session` cookie (httponly, 30 дней). Лимит: 10 запросов/мин с одного IP.",
+    responses={
+        200: {"description": "Успешный вход, cookie установлен"},
+        401: {"description": "Неверный email или пароль"},
+        429: {"description": "Превышен лимит запросов"},
+    },
+)
 @limiter.limit("10/minute")
 async def login(
     request: Request,
@@ -151,12 +172,29 @@ async def login(
     return to_user_read(user)
 
 
-@router.get("/me", response_model=UserRead)
+@router.get(
+    "/me",
+    response_model=UserRead,
+    summary="Текущий пользователь",
+    description="Возвращает данные авторизованного пользователя. `github_linked=true` означает привязанный GitHub-аккаунт.",
+    responses={
+        200: {"description": "Данные пользователя"},
+        401: {"description": "Нет валидного session cookie"},
+    },
+)
 async def me(current_user: CurrentUser) -> UserRead:
     return to_user_read(current_user)
 
 
-@router.get("/github/connect")
+@router.get(
+    "/github/connect",
+    summary="Начать привязку GitHub",
+    description="Редирект на GitHub OAuth (scope: `repo`). CSRF-токен сохраняется в httponly cookie на 5 минут.",
+    responses={
+        302: {"description": "Редирект на github.com/login/oauth/authorize"},
+        401: {"description": "Нет активной сессии"},
+    },
+)
 async def github_connect(_: CurrentUser) -> RedirectResponse:
     state = generate_github_oauth_state()
     response = RedirectResponse(url=get_github_oauth_url(state), status_code=status.HTTP_302_FOUND)
@@ -164,7 +202,20 @@ async def github_connect(_: CurrentUser) -> RedirectResponse:
     return response
 
 
-@router.get("/github/callback")
+@router.get(
+    "/github/callback",
+    summary="GitHub OAuth callback",
+    description=(
+        "Обрабатывает callback от GitHub: обменивает `code` на токен, сохраняет GitHub-профиль "
+        "пользователя (зашифрованный токен). Редиректит на `/settings`."
+    ),
+    responses={
+        302: {"description": "Успешная привязка, редирект на /settings"},
+        400: {"description": "Неверный CSRF state"},
+        401: {"description": "Нет активной сессии"},
+        409: {"description": "GitHub-аккаунт уже привязан к другому пользователю"},
+    },
+)
 async def github_callback(
     code: str,
     state: str,
@@ -212,7 +263,15 @@ async def github_callback(
     return response
 
 
-@router.post("/change-password")
+@router.post(
+    "/change-password",
+    summary="Сменить пароль",
+    responses={
+        200: {"description": "Пароль изменён"},
+        400: {"description": "Текущий пароль неверный"},
+        401: {"description": "Нет активной сессии"},
+    },
+)
 async def change_password(
     payload: ChangePasswordRequest,
     session: DbSession,
@@ -229,13 +288,29 @@ async def change_password(
     return {"ok": True}
 
 
-@router.post("/logout")
+@router.post(
+    "/logout",
+    summary="Выход",
+    description="Удаляет `session` cookie.",
+    responses={
+        200: {"description": "Cookie удалён"},
+        401: {"description": "Нет активной сессии"},
+    },
+)
 async def logout(response: Response, _: CurrentUser) -> dict[str, bool]:
     clear_session_cookie(response)
     return {"ok": True}
 
 
-@router.delete("/github/connect")
+@router.delete(
+    "/github/connect",
+    summary="Отвязать GitHub",
+    description="Обнуляет GitHub-поля пользователя. Проекты сохраняются, но создавать задачи и публиковать будет нельзя.",
+    responses={
+        200: {"description": "GitHub отвязан"},
+        401: {"description": "Нет активной сессии"},
+    },
+)
 async def disconnect_github(session: DbSession, current_user: CurrentUser) -> dict[str, bool]:
     current_user.github_id = None
     current_user.github_login = None

@@ -12,10 +12,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.publication import Publication
 from app.models.project import Project
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.task import ManualTaskFromRepo, TaskStatus, TaskUpdate
+from app.services import bitrix_notify
 from app.services.auth import decrypt_github_access_token
 from app.services.github import GitHubClient
 from app.services.projects import get_project_or_404
@@ -23,6 +25,7 @@ from app.services.projects import get_project_or_404
 ACTIVE_TASK_STATUSES = ("queued", "running")
 EDITABLE_TASK_STATUSES = {"done", "failed"}
 RETRYABLE_TASK_STATUSES = {"done", "failed"}
+PUBLISHABLE_TASK_STATUSES = {"done"}
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,25 @@ class SourceFileChangedError(Exception):
 
     def __post_init__(self) -> None:
         Exception.__init__(self, f"source SHA changed: {self.old_sha!r} → {self.new_sha!r}")
+
+
+@dataclass(frozen=True)
+class PublishConflictError(Exception):
+    base: str
+    ours: str
+    theirs: str
+
+    def __post_init__(self) -> None:
+        Exception.__init__(self, "Conflict: target file was modified since this task was created")
+
+
+@dataclass(frozen=True)
+class PublishTaskResult:
+    task_id: UUID
+    status: str
+    commit_sha: str
+    target_repo: str
+    target_path: str
 
 
 def ensure_github_access(user: User) -> str:
@@ -161,6 +183,16 @@ def ensure_task_retryable(task: Task) -> None:
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=f"Cannot retry task with status '{task.status}'",
+    )
+
+
+def ensure_task_publishable(task: Task) -> None:
+    if task.status in PUBLISHABLE_TASK_STATUSES:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Task must be in 'done' status to publish",
     )
 
 
@@ -413,7 +445,8 @@ async def reset_task_for_retry(
     if not is_manual_upload_task(task):
         access_token = ensure_github_access(current_user)
         github_client = GitHubClient(access_token)
-        assert task.project is not None
+        if task.project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
         current_sha = await github_client.get_file_sha(
             task.project.source_repo,
             task.file_path,
@@ -432,3 +465,78 @@ async def reset_task_for_retry(
     task.status = "queued"
     await session.commit()
     return task
+
+
+async def publish_task(
+    session: AsyncSession,
+    task: Task,
+    current_user: User,
+) -> PublishTaskResult:
+    ensure_task_publishable(task)
+
+    project = task.project
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    access_token = ensure_github_access(current_user)
+    github_client = GitHubClient(access_token)
+    current_sha = await github_client.get_file_sha(
+        project.target_repo,
+        task.file_path,
+        project.target_branch,
+    )
+
+    if current_sha != task.target_file_sha:
+        theirs = ""
+        if current_sha is not None:
+            theirs, _ = await github_client.get_file_content(
+                project.target_repo,
+                task.file_path,
+                project.target_branch,
+            )
+        raise PublishConflictError(
+            base=task.original_content,
+            ours=task.translated_content or "",
+            theirs=theirs,
+        )
+
+    commit_sha = await github_client.create_or_update_file(
+        repo=project.target_repo,
+        path=task.file_path,
+        message=f"Publish translation: {task.file_path}",
+        content=task.translated_content or "",
+        sha=current_sha,
+        branch=project.target_branch,
+    )
+
+    publication = Publication(
+        task_id=task.id,
+        published_by=current_user.id,
+        target_repo=project.target_repo,
+        target_path=task.file_path,
+        commit_sha=commit_sha,
+        target_file_sha_before=current_sha,
+    )
+    session.add(publication)
+    task.status = "published"
+    await session.commit()
+
+    await bitrix_notify.notify(
+        "published",
+        {
+            "task_id": str(task.id),
+            "project_id": str(project.id),
+            "target_repo": project.target_repo,
+            "target_path": task.file_path,
+            "commit_sha": commit_sha,
+            "published_by": str(current_user.id),
+        },
+    )
+
+    return PublishTaskResult(
+        task_id=task.id,
+        status="published",
+        commit_sha=commit_sha,
+        target_repo=project.target_repo,
+        target_path=task.file_path,
+    )

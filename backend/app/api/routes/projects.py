@@ -20,7 +20,12 @@ DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-@router.get("", response_model=list[ProjectRead])
+@router.get(
+    "",
+    response_model=list[ProjectRead],
+    summary="Список проектов",
+    description="Возвращает все проекты текущего пользователя, отсортированные по дате создания (новые первые). `webhook_secret` в ответе отсутствует.",
+)
 async def get_projects(session: DbSession, current_user: CurrentUser) -> list[Project]:
     result = await session.scalars(
         select(Project)
@@ -30,7 +35,23 @@ async def get_projects(session: DbSession, current_user: CurrentUser) -> list[Pr
     return list(result.all())
 
 
-@router.post("", response_model=ProjectCreateResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ProjectCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Создать проект",
+    description=(
+        "Создаёт пару source/target репозиториев и генерирует `webhook_secret`. "
+        "`webhook_secret` возвращается **только здесь** — сохраните его для настройки GitHub Webhook. "
+        "`source_repo` и `target_repo` должны быть в формате `owner/repo`. "
+        "Требует привязанный GitHub-аккаунт."
+    ),
+    responses={
+        201: {"description": "Проект создан, `webhook_secret` в ответе"},
+        400: {"description": "GitHub-аккаунт не привязан или невалидный формат репо"},
+        422: {"description": "Ошибка валидации полей"},
+    },
+)
 async def create_project(
     payload: ProjectCreate,
     session: DbSession,
@@ -54,12 +75,29 @@ async def create_project(
     return project
 
 
-@router.get("/{project_id}", response_model=ProjectRead)
+@router.get(
+    "/{project_id}",
+    response_model=ProjectRead,
+    summary="Детали проекта",
+    responses={
+        200: {"description": "Проект найден"},
+        404: {"description": "Проект не найден или не принадлежит текущему пользователю"},
+    },
+)
 async def get_project(project_id: UUID, session: DbSession, current_user: CurrentUser) -> Project:
     return await get_project_or_404(session, project_id, current_user)
 
 
-@router.patch("/{project_id}", response_model=ProjectRead)
+@router.patch(
+    "/{project_id}",
+    response_model=ProjectRead,
+    summary="Обновить проект",
+    description="Частичное обновление: передавайте только изменяемые поля. `source_repo` и `target_repo` изменить нельзя.",
+    responses={
+        200: {"description": "Проект обновлён"},
+        404: {"description": "Проект не найден или не принадлежит текущему пользователю"},
+    },
+)
 async def update_project(
     project_id: UUID,
     payload: ProjectUpdate,
@@ -75,7 +113,16 @@ async def update_project(
     return project
 
 
-@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{project_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Удалить проект",
+    description="Удаляет проект. Связанные задачи сохраняются (`project_id` → `null`).",
+    responses={
+        204: {"description": "Проект удалён"},
+        404: {"description": "Проект не найден или не принадлежит текущему пользователю"},
+    },
+)
 async def delete_project(
     project_id: UUID,
     session: DbSession,

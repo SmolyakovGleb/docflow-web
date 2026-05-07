@@ -7,6 +7,8 @@
 param([Parameter(ValueFromRemainingArguments)]$PytestArgs)
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 

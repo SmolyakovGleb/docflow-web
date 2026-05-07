@@ -53,7 +53,31 @@ async def _get_project_owner(session: AsyncSession, project: Project) -> User:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
 
-@router.post("/webhook/{project_id}", status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/webhook/{project_id}",
+    status_code=status.HTTP_202_ACCEPTED,
+    tags=["webhook"],
+    summary="GitHub push webhook",
+    description=(
+        "Принимает `push`-события от GitHub. Аутентификация через HMAC-подпись "
+        "(`X-Hub-Signature-256` + `project.webhook_secret`).\n\n"
+        "**Алгоритм:**\n"
+        "1. Верифицировать HMAC-подпись\n"
+        "2. `ping` → `200 {ok: true}`\n"
+        "3. Фильтр: только `.md` из `commits[*].added/modified` в `source_branch`\n"
+        "4. Применить `exclude_patterns`, дедупликацию (`queued`/`running`)\n"
+        "5. Скачать файлы через GitHub API (атомарно — при ошибке задачи не создаются)\n"
+        "6. Создать задачи и запустить пайплайн в фоне\n\n"
+        "**Возможные `skipped.reason`:** `already_queued`, `pipeline_running`, `excluded_by_pattern`."
+    ),
+    responses={
+        202: {"description": "Задачи созданы и поставлены в очередь"},
+        400: {"description": "Неверный branch / нет .md файлов / нет GitHub-привязки у владельца"},
+        403: {"description": "Неверная HMAC-подпись"},
+        404: {"description": "Проект не найден"},
+        502: {"description": "Ошибка GitHub API при скачивании файла"},
+    },
+)
 async def github_webhook(
     project_id: UUID,
     request: Request,
