@@ -4,7 +4,6 @@ import json
 from typing import Annotated, Any
 from uuid import UUID
 
-import pathspec
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
@@ -17,6 +16,7 @@ from app.models.user import User
 from app.services import pipeline_runner
 from app.services.auth import decrypt_github_access_token
 from app.services.github import GitHubAPIError, GitHubClient
+from app.services.tasks import _apply_exclude_patterns
 from app.services.webhook import is_valid_github_signature
 
 router = APIRouter(tags=["webhook"])
@@ -35,31 +35,6 @@ def _collect_markdown_files(payload: dict[str, Any]) -> list[str]:
 
     return list(dict.fromkeys(files))
 
-
-def _apply_exclude_patterns(
-    file_paths: list[str],
-    patterns: list[str],
-) -> tuple[list[str], list[dict[str, Any]]]:
-    if not patterns:
-        return file_paths, []
-
-    spec = pathspec.PathSpec.from_lines("gitignore", patterns)
-    included: list[str] = []
-    skipped: list[dict[str, Any]] = []
-
-    for file_path in file_paths:
-        if spec.match_file(file_path):
-            skipped.append(
-                {
-                    "file_path": file_path,
-                    "reason": "excluded_by_pattern",
-                    "existing_task_id": None,
-                }
-            )
-            continue
-        included.append(file_path)
-
-    return included, skipped
 
 
 async def _get_project_or_404(session: AsyncSession, project_id: UUID) -> Project:

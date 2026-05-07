@@ -365,11 +365,13 @@ Content-Type: application/json
 
 Список задач с фильтрацией.
 
+По умолчанию возвращает задачи пользователя по всем его проектам. `project_id` — опциональный фильтр, а не обязательный параметр. Задачи с `project_id = null` в список не попадают.
+
 **Query params:**
 
 | Параметр | Тип | По умолчанию | Описание |
 |----------|-----|-------------|----------|
-| `project_id` | UUID | — | Фильтр по проекту (обязателен, если у пользователя > 1 проекта) |
+| `project_id` | UUID | — | Опциональный фильтр по одному из проектов текущего пользователя |
 | `status` | string | — | Фильтр: `queued`, `running`, `done`, `failed`, `published` |
 | `limit` | int | 50 | Максимум записей |
 | `offset` | int | 0 | Смещение для пагинации |
@@ -450,7 +452,7 @@ Content-Type: application/json
 **Response** (`Content-Type: text/event-stream`):
 ```
 event: stage_update
-data: {"stage": "Parser", "index": 1, "total": 7}
+data: {"stage": "prepare", "index": 1, "total": 3}
 
 event: log_line
 data: {"line": "  Размер: 5820 символов"}
@@ -459,13 +461,15 @@ event: log_line
 data: {"line": "  Плейсхолдеров: 61"}
 
 event: stage_update
-data: {"stage": "Translator", "index": 3, "total": 7}
+data: {"stage": "pipeline", "index": 2, "total": 3}
 
 event: status_change
 data: {"status": "done"}
 ```
 
 После получения `status_change` фронтенд закрывает SSE и запрашивает полную задачу через `GET /tasks/{id}`.
+
+Если клиент подключился, когда задача ещё `queued` или уже завершена, сервер сразу возвращает одно событие `status_change` с текущим статусом и закрывает поток.
 
 **Response 404** — задача не найдена.
 
@@ -511,13 +515,24 @@ data: {"status": "done"}
 Content-Type: multipart/form-data
 
 project_id: 550e8400-e29b-41d4-a716-446655440001
+target_path: api-reference/crm/deals/crm-deal-get.md
 file: <binary .md file>
 ```
 
 **Логика:**
-- Для файлов из репо: скачивает содержимое через GitHub API, фиксирует SHA; применяет `exclude_patterns` проекта
-- Для загружаемых файлов: использует переданное содержимое; `source_file_sha = null`
-- Задачи создаются с `commit_message = "manual"`, `github_sha = null`
+- Для файлов из репо:
+  - требует привязанный GitHub-аккаунт
+  - скачивает содержимое через GitHub API, фиксирует `source_file_sha`
+- Для загружаемых файлов:
+  - не требует GitHub-link
+  - использует `target_path` как итоговый путь задачи
+  - принимает только `.md`, максимум 1 MB, только UTF-8
+  - создаёт задачу с `source_file_sha = null`
+- Для обоих вариантов:
+  - применяется `exclude_patterns` проекта
+  - дедупликация проверяет активные задачи со статусами `queued` и `running`
+  - ручные задачи сохраняются с `github_ref = "manual"`, `github_sha = null`, `commit_message = "manual"`
+  - API поддерживает частичный успех: валидные задачи создаются, пропуски возвращаются в `skipped`
 
 **Response 201:**
 ```json
@@ -527,17 +542,24 @@ file: <binary .md file>
     "550e8400-e29b-41d4-a716-446655440010",
     "550e8400-e29b-41d4-a716-446655440011"
   ],
-  "skipped": []
+  "skipped": [
+    {
+      "file_path": "docs/private/secret.md",
+      "reason": "excluded_by_pattern",
+      "existing_task_id": null
+    },
+    {
+      "file_path": "docs/already-running.md",
+      "reason": "pipeline_running",
+      "existing_task_id": "550e8400-e29b-41d4-a716-446655440099"
+    }
+  ]
 }
 ```
 
-**Response 409** — файл уже в очереди (дедупликация):
+**Response 400** — запуск из репозитория без GitHub-link:
 ```json
-{
-  "detail": "File already has an active task",
-  "existing_task_id": "550e8400-...",
-  "existing_status": "queued"
-}
+{ "detail": "GitHub account is not linked" }
 ```
 
 ---
@@ -552,6 +574,8 @@ file: <binary .md file>
 ```
 
 > `force: true` — перевести сохранённую версию файла даже если source изменился.
+
+> Для upload-задач (`github_ref = "manual"` и `source_file_sha = null`) GitHub-проверка source SHA не выполняется.
 
 **Response 202:**
 ```json

@@ -283,12 +283,14 @@ CRUD для проектов.
 
 **Детали pipeline_runner:**
 - Обновить `task.status = "running"`, `task.updated_at`
+- Запускать пайплайн строго по очереди через глобальный `asyncio.Lock`
 - Вызвать `dictionary_merger.merge()` — загрузить базовые словари из `pipeline/data/`, смёржить с `dictionary_entries` из БД
-- Записать `task.original_content` во временный файл (`tempfile.NamedTemporaryFile`)
-- Вызвать `pipeline.run(input_path, output_path, **merged_dicts)` — импорт из `pipeline/src/`
-- Перехватить stdout/stderr → записывать построчно в очередь для SSE
+- Поддержать `dictionary`, `glossary`, `prompt` и файлы `pipeline/data/pre_translator/*.json`
+- Создать временную рабочую директорию задачи, записать туда `task.original_content`
+- Вызвать `pipeline.run(...)` через адаптер в `pipeline_runner.py`, временно подменив `OUTPUT_DIR` и `pre_translator` data dir
+- Перехватить логи пайплайна через `logging.Handler` → записывать построчно в очередь для SSE
 - При успехе: прочитать output файл → `task.translated_content`, `task.status = "done"`, `task.log = лог`
-- При исключении: `task.status = "failed"`, `task.error = traceback.format_exc()`
+- При исключении: `task.status = "failed"`, `task.error = traceback.format_exc()`, `translated_content = null`
 - Очистить временные файлы
 
 **SSE (`GET /tasks/{id}/events`):**
@@ -296,11 +298,12 @@ CRUD для проектов.
 - Связь runner ↔ SSE через глобальный `dict[UUID, asyncio.Queue]` в `pipeline_runner.py`:
   - при старте runner создаёт `Queue` и кладёт в словарь по `task_id`
   - SSE-эндпоинт достаёт очередь из словаря и читает из неё
+  - runner кладёт в очередь события `{"event": "stage_update", "data": {"stage": "...", "index": 1, "total": 3}}`
   - runner кладёт в очередь события `{"event": "log_line", "data": {...}}` построчно
-  - по завершении кладёт `{"event": "status_change", "data": {"status": "done"}}` и `None` как sentinel
+  - по завершении кладёт `{"event": "status_change", "data": {"status": "done"}}` или `failed` и `None` как sentinel
   - SSE читает до `None`, затем закрывает поток и удаляет очередь из словаря
 - Формат каждого события: `event: log_line\ndata: {"line": "..."}\n\n`
-- Если клиент подключился когда задача уже завершена (нет очереди) — сразу отправить `status_change` с текущим статусом
+- Если клиент подключился когда задача ещё `queued` или уже завершена (нет очереди) — сразу отправить `status_change` с текущим статусом и закрыть поток
 
 ---
 
@@ -308,31 +311,53 @@ CRUD для проектов.
 
 **Файлы:**
 - Дополнить `app/api/routes/tasks.py`
+- Дополнить `app/services/tasks.py`
 
 **Эндпоинты:**
-- `GET /tasks` — список с фильтрами `project_id`, `status`, пагинация
+- `GET /tasks` — список задач пользователя по всем его проектам; фильтры `project_id`, `status`, пагинация
 - `GET /tasks/{id}` — полные данные включая `original_content`, `translated_content`, `publications`
-- `GET /tasks/{id}/log` — сырой лог (text/plain)
+- `GET /tasks/{id}/log` — сырой лог (text/plain), `204` если лог ещё пуст
 - `PATCH /tasks/{id}` — обновить `translated_content` (только `done` / `failed`)
 - `POST /tasks/manual` — ручной запуск (вариант A: файл из репо, вариант B: upload)
-  - `github_ref` для ручных задач: хранить строку `"manual"` (поле NOT NULL, реального ref нет)
-  - `github_sha = null`, `source_file_sha = null` для загружаемых файлов
-- `POST /tasks/{id}/retry` — повторный запуск; если SHA source изменился — 409, иначе сброс и старт
+  - вариант A принимает JSON `{project_id, file_paths}`
+  - вариант B принимает `multipart/form-data` с полями `project_id`, `target_path`, `file`
+  - для ручных задач `github_ref = "manual"`, `github_sha = null`, `commit_message = "manual"`
+  - для upload-задач дополнительно `source_file_sha = null`
+  - запуск из репозитория требует GitHub-link, upload не требует
+  - частичный успех допустим: созданные задачи возвращаются вместе со `skipped`
+- `POST /tasks/{id}/retry` — повторный запуск; body опционален, при `force=true` игнорирует конфликт source SHA
+  - для upload-задач (`github_ref="manual"` и `source_file_sha = null`) проверка source SHA пропускается
+  - при конфликте source SHA вернуть `409` с `{detail, source_diff: {old_sha, new_sha}}`
 
 **Безопасность:**
-- Все операции с задачами — проверять что `task.project.user_id == current_user.id` (через `get_project_or_404`)
-- Upload файла: ограничение `Content-Length` максимум **1 MB** (`if len(content) > 1_048_576: raise 413`)
-- Upload файла: проверять расширение — принимать только `.md` (`if not filename.endswith(".md"): raise 400`)
+- Все операции с задачами — проверять, что задача принадлежит проекту текущего пользователя; orphaned tasks (`project_id = null`) не показывать в списке
+- Upload файла: ограничение размера максимум **1 MB** (`if len(content) > 1_048_576: raise 413`)
+- Upload файла: проверять расширение по имени файла — принимать только `.md`
+- Upload файла: принимать только UTF-8 текст, иначе `400`
+- Для manual create применять `exclude_patterns` проекта до проверки дедупликации активных задач
 - `original_content` и `translated_content` не фильтруются — это доверенный контент из GitHub/пайплайна, но не рендерить как HTML на бэке
 
 **Тесты (`tests/test_tasks.py`):**
 - `test_get_tasks_own_only` — пользователь видит только задачи своих проектов
+- `test_get_tasks_without_project_filter_returns_all_own` — без `project_id` возвращаются задачи по всем проектам пользователя
+- `test_get_tasks_hides_orphaned_tasks` — orphaned tasks не попадают в список
 - `test_get_task_not_found` — чужая задача → 404
+- `test_get_task_detail_success` — detail-ответ содержит `original_content`, `translated_content`, `publications`
+- `test_get_task_log_returns_text` — лог отдается как `text/plain`
+- `test_get_task_log_no_content` — пустой лог возвращает `204`
 - `test_patch_task_updates_content` — 200, `translated_content` обновлён
 - `test_patch_task_running_rejected` — статус `running` → 400
+- `test_manual_task_from_repo_requires_github_link` — запуск из репозитория без GitHub-link запрещён
+- `test_manual_task_upload_success` — upload-сценарий создаёт ручную задачу
+- `test_manual_task_upload_without_github_link_allowed` — upload работает без GitHub-link
 - `test_upload_non_md_rejected` — файл `.txt` → 400
 - `test_upload_too_large_rejected` — файл > 1MB → 413
+- `test_manual_task_partial_success_with_skipped` — partial success возвращает созданные задачи и `skipped` по exclude/dedup
 - `test_manual_task_from_repo` — мокаем GitHub, задача создана
+- `test_retry_task_success` — retry сбрасывает результат и перезапускает задачу
+- `test_retry_task_running_rejected` — `running` нельзя отправить в retry
+- `test_retry_task_source_changed_conflict` — при изменении source SHA вернуть `409` и `source_diff`
+- `test_retry_manual_upload_skips_source_sha_check` — upload-задача ретраится без GitHub-проверки
 
 ---
 

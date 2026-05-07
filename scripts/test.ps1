@@ -52,3 +52,4 @@ Write-Host "==> pytest $PytestArgs"
 Set-Location "$RepoRoot\backend"
 $env:DATABASE_TEST_URL = "postgresql+asyncpg://docflow:docflow_secret@localhost:5433/docflow_test"
 & $Python -m pytest @PytestArgs
+Set-Location $RepoRoot
