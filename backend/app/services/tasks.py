@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -26,6 +27,7 @@ ACTIVE_TASK_STATUSES = ("queued", "running")
 EDITABLE_TASK_STATUSES = {"done", "failed"}
 RETRYABLE_TASK_STATUSES = {"done", "failed"}
 PUBLISHABLE_TASK_STATUSES = {"done"}
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -554,6 +556,14 @@ async def publish_task(
     session.add(publication)
     task.status = "published"
     await session.commit()
+    logger.info(
+        "task_published",
+        extra={
+            "task_id": str(task.id),
+            "target_repo": project.target_repo,
+            "commit_sha": commit_sha,
+        },
+    )
 
     await bitrix_notify.notify(
         "published",

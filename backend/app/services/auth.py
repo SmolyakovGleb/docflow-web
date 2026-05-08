@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import get_settings
 from app.core.encryption import decrypt_value, encrypt_value
+from app.core.request_context import set_user_id
 from app.db.session import get_db_session
 from app.models.user import User
 
@@ -193,4 +194,5 @@ async def get_current_user(
     if user is None or user.token_version != token_version:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
+    set_user_id(str(user.id))
     return user

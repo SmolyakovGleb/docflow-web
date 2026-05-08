@@ -2,17 +2,25 @@
 
 ## Стек
 
-| Пакет                                         | Версия | Роль                   |
-| --------------------------------------------- | ------ | ---------------------- |
-| React                                         | 19     | UI                     |
-| TypeScript                                    | 6      | Типизация              |
-| Vite                                          | 8      | Сборка                 |
-| react-router-dom                              | 7      | Роутинг                |
-| @reduxjs/toolkit                              | 2      | State + RTK Query      |
-| react-redux                                   | 9      | React-интеграция Redux |
-| axios                                         | 1      | HTTP (baseQuery)       |
-| dayjs                                         | latest | Форматирование дат     |
-| @codemirror/view, state, lang-markdown, merge | 6      | Diff-редактор          |
+| Пакет                                         | Версия | Роль                             |
+| --------------------------------------------- | ------ | -------------------------------- |
+| React                                         | 19     | UI                               |
+| TypeScript                                    | 6      | Типизация                        |
+| Vite                                          | 8      | Сборка                           |
+| react-router-dom                              | 7      | Роутинг                          |
+| @reduxjs/toolkit                              | 2      | State + RTK Query                |
+| react-redux                                   | 9      | React-интеграция Redux           |
+| axios                                         | 1      | HTTP (baseQuery)                 |
+| dayjs                                         | latest | Форматирование дат               |
+| @codemirror/view, state, lang-markdown, merge | 6      | Diff-редактор                    |
+| react-hook-form                               | 7      | Формы                            |
+| @hookform/resolvers                           | 5      | Интеграция react-hook-form + zod |
+| zod                                           | 3      | Валидация схем + вывод типов     |
+| recharts                                      | 2      | Графики (Analytics)              |
+| sonner                                        | 2      | Toast-уведомления                |
+| clsx                                          | 2      | Условные CSS-классы              |
+| @radix-ui/react-dialog                        | 1      | Accessible модалки               |
+| lucide-react                                  | 0.x    | Иконки (tree-shakeable SVG)      |
 
 CSS-фреймворк не используется — чистый CSS + CSS Modules.
 React Query и Zustand не используются — server state через RTK Query, client state через slices.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from typing import Annotated
 from uuid import UUID
@@ -18,6 +19,7 @@ from app.services.projects import ensure_github_linked, get_project_or_404
 router = APIRouter(prefix="/projects", tags=["projects"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+logger = logging.getLogger(__name__)
 
 
 @router.get(
@@ -76,6 +78,7 @@ async def create_project(
 
     response = ProjectCreateResponse.model_validate(project)
     response.webhook_secret = plaintext_secret
+    logger.info("project_created", extra={"project_id": str(project.id)})
     return response
 
 
@@ -148,4 +151,5 @@ async def delete_project(
     project = await get_project_or_404(session, project_id, current_user)
     await session.delete(project)
     await session.commit()
+    logger.info("project_deleted", extra={"project_id": str(project_id)})
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -23,6 +24,7 @@ from app.services.webhook import is_valid_github_signature
 router = APIRouter(tags=["webhook"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 ACTIVE_TASK_STATUSES = ("queued", "running")
+logger = logging.getLogger(__name__)
 
 
 def _collect_markdown_files(payload: dict[str, Any]) -> list[str]:
@@ -93,6 +95,10 @@ async def github_webhook(
     signature = request.headers.get("X-Hub-Signature-256")
     plaintext_secret = decrypt_webhook_secret(project.webhook_secret)
     if not is_valid_github_signature(plaintext_secret, raw_body, signature):
+        logger.warning(
+            "webhook_invalid_signature",
+            extra={"project_id": str(project.id)},
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid webhook signature",
@@ -218,6 +224,14 @@ async def github_webhook(
     for task in tasks_to_create:
         background_tasks.add_task(pipeline_runner.run_task, task.id)
 
+    logger.info(
+        "webhook_processed",
+        extra={
+            "project_id": str(project.id),
+            "created": len(tasks_to_create),
+            "skipped": len(skipped_files),
+        },
+    )
     return {
         "created": len(tasks_to_create),
         "task_ids": [task.id for task in tasks_to_create],

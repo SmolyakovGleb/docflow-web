@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Annotated
 
@@ -35,6 +36,7 @@ from app.services.auth import (
 limiter = Limiter(key_func=get_remote_address)
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -135,6 +137,7 @@ async def register(
     await session.refresh(user)
 
     set_session_cookie(response, create_jwt(user.id, user.token_version))
+    logger.info("user_registered", extra={"user_id": str(user.id)})
     return to_user_read(user)
 
 
@@ -159,9 +162,11 @@ async def login(
     user = await session.scalar(select(User).where(User.email == payload.email))
     if user is None:
         await verify_password_async(payload.password, DUMMY_PASSWORD_HASH)
+        logger.info("login_failed", extra={"reason": "user_not_found"})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not await verify_password_async(payload.password, user.password_hash):
+        logger.info("login_failed", extra={"reason": "wrong_password", "user_id": str(user.id)})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     user.last_login_at = datetime.now(timezone.utc)
@@ -169,6 +174,7 @@ async def login(
     await session.refresh(user)
 
     set_session_cookie(response, create_jwt(user.id, user.token_version))
+    logger.info("login_success", extra={"user_id": str(user.id)})
     return to_user_read(user)
 
 
@@ -269,6 +275,10 @@ async def github_callback(
     current_user.github_login = str(github_user["login"])
     current_user.github_access_token = encrypt_github_access_token(access_token)
     await session.commit()
+    logger.info(
+        "github_linked",
+        extra={"user_id": str(current_user.id), "github_login": current_user.github_login},
+    )
 
     settings = get_settings()
     response = RedirectResponse(
@@ -308,6 +318,7 @@ async def change_password(
     await session.commit()
 
     set_session_cookie(response, create_jwt(current_user.id, current_user.token_version))
+    logger.info("password_changed", extra={"user_id": str(current_user.id)})
     return {"ok": True}
 
 
@@ -328,6 +339,7 @@ async def logout(
     current_user.token_version += 1
     await session.commit()
     clear_session_cookie(response)
+    logger.info("logout", extra={"user_id": str(current_user.id)})
     return {"ok": True}
 
 

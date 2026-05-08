@@ -25,6 +25,7 @@ TASK_EVENT_QUEUES: dict[UUID, asyncio.Queue[dict[str, Any] | None]] = {}
 PIPELINE_RUN_LOCK = asyncio.Lock()
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 MAX_TASK_EVENT_QUEUES = 200
+app_logger = logging.getLogger(__name__)
 
 
 def _evict_oldest_queues_if_needed() -> None:
@@ -204,6 +205,7 @@ async def run_task(task_id: UUID) -> None:
         try:
             task.status = "running"
             await session.commit()
+            app_logger.info("task_started", extra={"task_id": str(task.id)})
 
             await _emit_event(queue, "stage_update", {"stage": "prepare", "index": 1, "total": 3})
             merged_data = await dictionary_merger.merge_pipeline_data(session)
@@ -234,6 +236,7 @@ async def run_task(task_id: UUID) -> None:
             task.completed_at = datetime.now(UTC)
             await session.commit()
             await _emit_event(queue, "status_change", {"status": "done"})
+            app_logger.info("task_completed", extra={"task_id": str(task.id)})
         except Exception:
             task.translated_content = None
             task.log = _sanitize_error(log_handler.get_log()) if log_handler else None
@@ -242,6 +245,7 @@ async def run_task(task_id: UUID) -> None:
             task.completed_at = datetime.now(UTC)
             await session.commit()
             await _emit_event(queue, "status_change", {"status": "failed"})
+            app_logger.exception("task_failed", extra={"task_id": str(task.id)})
         finally:
             if workspace is not None:
                 shutil.rmtree(workspace, ignore_errors=True)
