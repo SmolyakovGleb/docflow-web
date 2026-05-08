@@ -1,0 +1,6 @@
+{
+  "generic": "Что-то пошло не так",
+  "network": "Нет связи с сервером",
+  "github_unavailable": "GitHub недоступен",
+  "session_expired": "Сессия истекла, войдите заново"
+}

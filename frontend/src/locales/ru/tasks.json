@@ -1,0 +1,21 @@
+{
+  "title": "Задачи",
+  "trigger_translation": "Запустить перевод",
+  "search_placeholder": "Поиск по задачам, файлам, проектам…",
+  "tabs": {
+    "all": "Все",
+    "queued": "В очереди",
+    "running": "В работе",
+    "ready_to_publish": "К публикации",
+    "failed": "Ошибки",
+    "published": "Опубликовано"
+  },
+  "status": {
+    "queued": "в очереди",
+    "running": "в работе",
+    "done": "готово",
+    "failed": "ошибка",
+    "published": "опубликовано",
+    "conflict": "конфликт"
+  }
+}

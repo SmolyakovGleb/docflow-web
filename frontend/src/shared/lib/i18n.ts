@@ -1,0 +1,35 @@
+import i18n from 'i18next'
+import LanguageDetector from 'i18next-browser-languagedetector'
+import { initReactI18next } from 'react-i18next'
+
+import authRu from '@/locales/ru/auth.json'
+import commonRu from '@/locales/ru/common.json'
+import errorsRu from '@/locales/ru/errors.json'
+import navRu from '@/locales/ru/nav.json'
+import tasksRu from '@/locales/ru/tasks.json'
+
+void i18n
+  .use(LanguageDetector)
+  .use(initReactI18next)
+  .init({
+    resources: {
+      ru: {
+        common: commonRu,
+        nav: navRu,
+        auth: authRu,
+        tasks: tasksRu,
+        errors: errorsRu,
+      },
+    },
+    ns: ['common', 'nav', 'auth', 'tasks', 'errors'],
+    defaultNS: 'common',
+    fallbackLng: 'ru',
+    supportedLngs: ['ru'],
+    interpolation: { escapeValue: false },
+    detection: {
+      order: ['localStorage', 'navigator'],
+      caches: ['localStorage'],
+    },
+  })
+
+export default i18n

@@ -1,0 +1,2926 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1440" />
+    <title>DocFlow — Задачи</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0f0f0f;
+        --surface: #161616;
+        --surface-hover: #1e1e1e;
+        --border: #262626;
+        --border-soft: #1e1e1e;
+        --text: #ededed;
+        --text-dim: #666;
+        --text-dimmer: #555;
+        --text-path-dim: #444;
+        --accent: #ffffff;
+
+        --status-queued: #888;
+        --status-running: #6db8ff;
+        --status-done: #6dd394;
+        --status-failed: #ff6d6d;
+        --status-published: #b07dff;
+        --status-conflict: #ffb547;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          system-ui,
+          sans-serif;
+        font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        font-size: 14px;
+        line-height: 1.5;
+        letter-spacing: -0.005em;
+      }
+
+      button {
+        font-family: inherit;
+        color: inherit;
+        background: none;
+        border: none;
+        cursor: pointer;
+      }
+      input {
+        font-family: inherit;
+        color: inherit;
+        background: none;
+        border: none;
+        outline: none;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        min-height: 100vh;
+      }
+
+      /* ---------------- Sidebar ---------------- */
+      .sidebar {
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        padding: 22px 14px 18px;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px 26px;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .wordmark-glyph {
+        width: 12px;
+        height: 12px;
+        color: var(--text);
+      }
+
+      .nav {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        border-radius: 5px;
+        color: var(--text-dimmer);
+        font-size: 13.5px;
+        font-weight: 500;
+        cursor: pointer;
+        transition:
+          background 120ms ease,
+          color 120ms ease;
+      }
+      .nav-item:hover {
+        color: #aaa;
+      }
+      .nav-item.active {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text);
+      }
+      .nav-item .count {
+        margin-left: auto;
+        font-size: 12px;
+        color: var(--text-dim);
+        font-variant-numeric: tabular-nums;
+      }
+      .nav-item.active .count {
+        color: #888;
+      }
+      .nav-item svg {
+        width: 15px;
+        height: 15px;
+        flex-shrink: 0;
+      }
+
+      .nav-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 10px 10px 14px;
+      }
+
+      .nav-section-label {
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: #333;
+        text-transform: uppercase;
+        padding: 0 10px 6px;
+        font-weight: 500;
+      }
+      .nav-group + .nav-group {
+        margin-top: 0;
+      }
+
+      .sidebar-footer {
+        margin-top: auto;
+      }
+
+      .user {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .user:hover {
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .avatar {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: #2a2a2a;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text);
+        flex-shrink: 0;
+      }
+      .user-meta {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .user-name {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .user-status {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        color: var(--text-dim);
+        margin-top: 1px;
+      }
+      .gh-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .gh-dot.off {
+        background: #444;
+      }
+
+      /* ---------------- Main ---------------- */
+      .main {
+        padding: 38px 56px 80px;
+        max-width: 1180px;
+      }
+
+      .page-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-bottom: 32px;
+        gap: 24px;
+      }
+      .page-title {
+        font-size: 34px;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        line-height: 1;
+      }
+      .page-subtitle {
+        color: var(--text-dim);
+        font-size: 13.5px;
+        margin-top: 10px;
+      }
+      .page-subtitle strong {
+        color: var(--text);
+        font-weight: 500;
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--border);
+        padding: 7px 11px;
+        border-radius: 6px;
+        width: 280px;
+        transition: border-color 120ms ease;
+      }
+      .search:focus-within {
+        border-color: #3a3a3a;
+      }
+      .search svg {
+        width: 13px;
+        height: 13px;
+        color: var(--text-dim);
+        flex-shrink: 0;
+      }
+      .search input {
+        flex: 1;
+        font-size: 13px;
+        color: var(--text);
+      }
+      .search input::placeholder {
+        color: var(--text-dim);
+      }
+      .search-kbd {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10.5px;
+        color: var(--text-dim);
+        border: 1px solid var(--border);
+        padding: 1px 5px;
+        border-radius: 3px;
+      }
+
+      .btn {
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        padding: 7px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition:
+          background 120ms ease,
+          color 120ms ease;
+      }
+      .btn:hover {
+        background: var(--accent);
+        color: #0f0f0f;
+      }
+      .btn svg {
+        width: 13px;
+        height: 13px;
+      }
+
+      /* ---------------- Tabs ---------------- */
+      .tabs {
+        display: flex;
+        gap: 26px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 0;
+      }
+      .tab {
+        position: relative;
+        padding: 10px 0 12px;
+        font-size: 13.5px;
+        font-weight: 500;
+        color: var(--text-dim);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        transition: color 120ms ease;
+      }
+      .tab:hover {
+        color: #aaa;
+      }
+      .tab.active {
+        color: var(--text);
+      }
+      .tab.active::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -1px;
+        height: 1px;
+        background: var(--accent);
+      }
+      .tab .num {
+        font-size: 11.5px;
+        color: var(--text-dimmer);
+        font-variant-numeric: tabular-nums;
+      }
+      .tab.active .num {
+        color: var(--text-dim);
+      }
+
+      /* ---------------- Task list ---------------- */
+      .task-list {
+        margin-top: 0;
+      }
+
+      .task-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(120px, 0.55fr) auto auto auto;
+        align-items: center;
+        gap: 24px;
+        padding: 16px 14px;
+        border-bottom: 1px solid var(--border-soft);
+        cursor: pointer;
+        transition: background 120ms ease;
+      }
+      .task-row:hover {
+        background: var(--surface-hover);
+      }
+      .task-row:hover .task-arrow {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      .task-path {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
+        line-height: 1.4;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .task-path .path-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .task-path .dir {
+        color: var(--text-path-dim);
+      }
+      .task-path .file {
+        color: var(--text);
+      }
+      .task-path .lang {
+        margin-left: 10px;
+        color: var(--text-dim);
+        font-size: 11.5px;
+        letter-spacing: 0.04em;
+      }
+
+      .task-project {
+        font-size: 12.5px;
+        color: var(--text-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      /* Status pills */
+      .status {
+        font-size: 11px;
+        text-transform: none;
+        font-weight: 500;
+        padding: 3px 9px;
+        border-radius: 4px;
+        letter-spacing: 0.01em;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+        min-width: 96px;
+        justify-content: center;
+      }
+      .status-queued {
+        background: rgba(136, 136, 136, 0.15);
+        color: var(--status-queued);
+        border: 1px solid transparent;
+      }
+      .status-running {
+        background: rgba(109, 184, 255, 0.15);
+        color: var(--status-running);
+        border: 1px solid transparent;
+      }
+      .status-running .pulse {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--status-running);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.3;
+          transform: scale(0.85);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      .status-done {
+        background: rgba(109, 211, 148, 0.15);
+        color: var(--status-done);
+        border: 1px solid transparent;
+      }
+      .status-failed {
+        background: rgba(255, 109, 109, 0.15);
+        color: var(--status-failed);
+        border: 1px solid transparent;
+      }
+      .status-conflict {
+        background: rgba(255, 181, 71, 0.15);
+        color: var(--status-conflict);
+        border: 1px solid transparent;
+      }
+      .status-conflict svg {
+        width: 11px;
+        height: 11px;
+      }
+      .status-published {
+        background: rgba(176, 125, 255, 0.15);
+        color: var(--status-published);
+        border: 1px solid transparent;
+      }
+
+      .task-time {
+        font-size: 12px;
+        color: var(--text-dim);
+        font-variant-numeric: tabular-nums;
+        min-width: 56px;
+        text-align: right;
+      }
+
+      .task-arrow {
+        width: 20px;
+        height: 20px;
+        display: grid;
+        place-items: center;
+        color: var(--text-dim);
+        opacity: 0;
+        transform: translateX(-4px);
+        transition:
+          opacity 140ms ease,
+          transform 140ms ease;
+      }
+      .task-arrow svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* Group label */
+      .group-label {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-dimmer);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 28px 14px 10px;
+      }
+      .group-label:first-child {
+        padding-top: 24px;
+      }
+
+      /* ---------------- Commit groups ---------------- */
+      .commit-group {
+        margin-bottom: 22px;
+      }
+      .commit-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 14px 10px;
+        border-bottom: 1px solid var(--border-soft);
+        margin-bottom: 0;
+      }
+      .commit-header .commit-icon {
+        width: 14px;
+        height: 14px;
+        color: var(--text-dim);
+        flex-shrink: 0;
+      }
+      .commit-header .commit-msg {
+        font-size: 13px;
+        color: var(--text);
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 460px;
+      }
+      .commit-header .commit-sha {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11.5px;
+        color: var(--text-dimmer);
+        background: rgba(255, 255, 255, 0.03);
+        padding: 1px 6px;
+        border-radius: 3px;
+      }
+      .commit-header .commit-meta {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 12px;
+        color: var(--text-dim);
+        font-variant-numeric: tabular-nums;
+      }
+      .commit-header .commit-meta .sep {
+        color: #2e2e2e;
+      }
+      .commit-header .commit-author {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .commit-mini-avatar {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #2a2a2a;
+        display: inline-grid;
+        place-items: center;
+        font-size: 9px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .commit-group .task-row:last-child {
+        border-bottom: none;
+      }
+      .commit-header.manual .commit-icon-wrap {
+        color: var(--text-dim);
+      }
+
+      /* ---------------- Pipeline label (running) ---------------- */
+      .pipeline-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .pipeline-label .pipe-time {
+        color: var(--status-running);
+        opacity: 0.7;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ---------------- Empty States ---------------- */
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 90px 20px 60px;
+      }
+      .empty-icon {
+        width: 48px;
+        height: 48px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        color: var(--text-dim);
+        margin-bottom: 20px;
+      }
+      .empty-icon svg {
+        width: 22px;
+        height: 22px;
+      }
+      .empty-title {
+        font-size: 17px;
+        font-weight: 600;
+        color: var(--text);
+        letter-spacing: -0.01em;
+        margin-bottom: 8px;
+      }
+      .empty-desc {
+        font-size: 13px;
+        color: var(--text-dim);
+        max-width: 380px;
+        line-height: 1.55;
+        margin-bottom: 22px;
+      }
+      .empty-actions {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .empty-foot {
+        font-size: 12px;
+        color: var(--text-dimmer);
+        max-width: 380px;
+        line-height: 1.5;
+      }
+      .btn-primary-fill {
+        background: var(--accent);
+        color: #0f0f0f;
+        border: 1px solid var(--accent);
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+      }
+      .btn-primary-fill:hover {
+        background: #f5f5f5;
+      }
+      .btn-primary-fill svg {
+        width: 13px;
+        height: 13px;
+      }
+
+      /* ---------------- Publish-all button on commit header ---------------- */
+      .publish-all {
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 11.5px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: 14px;
+        transition:
+          border-color 120ms ease,
+          color 120ms ease;
+      }
+      .publish-all:hover {
+        border-color: var(--text);
+        color: var(--text);
+      }
+      .publish-all .count {
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ---------------- Batch checkbox ---------------- */
+      .task-checkbox {
+        width: 14px;
+        height: 14px;
+        border: 1px solid #3a3a3a;
+        border-radius: 3px;
+        flex-shrink: 0;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        background: transparent;
+        transition:
+          background 120ms ease,
+          border-color 120ms ease;
+      }
+      .task-checkbox svg {
+        width: 10px;
+        height: 10px;
+        color: #0f0f0f;
+        opacity: 0;
+        stroke-width: 3;
+      }
+      .task-checkbox.checked {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .task-checkbox.checked svg {
+        opacity: 1;
+      }
+      .row-checkbox-cell {
+        display: none;
+        align-items: center;
+      }
+      body.batch-mode .row-checkbox-cell {
+        display: flex;
+      }
+      body.batch-mode .task-row {
+        grid-template-columns: 24px minmax(0, 1.4fr) minmax(120px, 0.55fr) auto auto auto auto !important;
+      }
+
+      /* Toolbar select button */
+      .toolbar-chip.toolbar-select {
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .toolbar-chip.toolbar-select.active {
+        background: var(--accent);
+        color: #0f0f0f;
+        border-color: var(--accent);
+      }
+      .toolbar-chip.toolbar-select svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      /* ---------------- Floating Action Bar ---------------- */
+      .floating-bar {
+        position: fixed;
+        left: 50%;
+        bottom: 24px;
+        transform: translateX(-50%) translateY(20px);
+        background: rgba(26, 26, 26, 0.92);
+        border: 1px solid #2e2e2e;
+        border-radius: 8px;
+        padding: 10px 14px 10px 18px;
+        display: none;
+        align-items: center;
+        gap: 16px;
+        z-index: 150;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+        font-size: 13px;
+        opacity: 0;
+        transition:
+          opacity 200ms ease,
+          transform 200ms ease;
+      }
+      .floating-bar.visible {
+        display: flex;
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      .floating-bar-count {
+        color: var(--text-dim);
+        font-variant-numeric: tabular-nums;
+      }
+      .floating-bar-count strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .floating-bar-divider {
+        width: 1px;
+        height: 20px;
+        background: #2e2e2e;
+      }
+      .floating-bar-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .fb-btn {
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 6px 12px;
+        border-radius: 5px;
+        font-size: 12.5px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition:
+          border-color 120ms ease,
+          background 120ms ease;
+      }
+      .fb-btn:hover {
+        border-color: #4a4a4a;
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .fb-btn.fb-primary {
+        background: var(--accent);
+        color: #0f0f0f;
+        border-color: var(--accent);
+        font-weight: 600;
+      }
+      .fb-btn.fb-primary:hover {
+        background: #f5f5f5;
+        border-color: #f5f5f5;
+      }
+      .fb-btn .num {
+        background: rgba(255, 255, 255, 0.06);
+        padding: 0 5px;
+        border-radius: 3px;
+        font-variant-numeric: tabular-nums;
+      }
+      .fb-btn.fb-primary .num {
+        background: rgba(0, 0, 0, 0.15);
+      }
+      .fb-close {
+        color: var(--text-dim);
+        padding: 4px;
+        margin-left: 4px;
+        transition: color 120ms ease;
+      }
+      .fb-close:hover {
+        color: var(--text);
+      }
+      .fb-close svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      /* ---------------- New tasks banner ---------------- */
+      .banner-new {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 14px;
+        margin: 12px 14px 0;
+        border-radius: 6px;
+        background: rgba(109, 184, 255, 0.08);
+        border: 1px solid rgba(109, 184, 255, 0.25);
+        font-size: 12.5px;
+        color: var(--text);
+      }
+      .banner-new .bell {
+        width: 14px;
+        height: 14px;
+        color: var(--status-running);
+        flex-shrink: 0;
+        animation: pulse 1.6s ease-in-out infinite;
+      }
+      .banner-new .banner-link {
+        margin-left: auto;
+        color: var(--status-running);
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .banner-new .banner-link:hover {
+        text-decoration: underline;
+      }
+
+      /* ---------------- Footer SHA ---------------- */
+      .footer-sha {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11.5px;
+        color: var(--text);
+        margin-left: 4px;
+      }
+
+      /* ---------------- Task type icon ---------------- */
+      .task-type-icon {
+        width: 13px;
+        height: 13px;
+        color: var(--text-dimmer);
+        flex-shrink: 0;
+      }
+
+      /* ---------------- Skeleton (loading) ---------------- */
+      @keyframes skeletonPulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      .skel {
+        background: var(--surface-hover);
+        border-radius: 4px;
+        animation: skeletonPulse 1.4s ease-in-out infinite;
+      }
+      .skel-group {
+        padding: 14px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .skel-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-bottom: 14px;
+      }
+      .skel-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(120px, 0.55fr) auto auto;
+        gap: 24px;
+        padding: 16px 0;
+        align-items: center;
+        border-top: 1px solid var(--border-soft);
+      }
+
+      /* ---------------- View switcher (demo control) ---------------- */
+      .view-switcher {
+        position: fixed;
+        bottom: 18px;
+        right: 18px;
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px;
+        display: flex;
+        gap: 2px;
+        font-size: 11.5px;
+        z-index: 200;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      }
+      .view-switcher-label {
+        font-size: 10px;
+        color: var(--text-dimmer);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        align-self: center;
+        padding: 0 8px 0 4px;
+      }
+      .view-switcher button {
+        padding: 5px 10px;
+        border-radius: 4px;
+        color: var(--text-dim);
+        font-weight: 500;
+      }
+      .view-switcher button.active {
+        background: #2a2a2a;
+        color: var(--text);
+      }
+
+      /* Footer summary */
+      .list-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 22px 14px 0;
+        color: var(--text-dim);
+        font-size: 12.5px;
+      }
+      .list-footer .dot-sep {
+        margin: 0 10px;
+        color: #333;
+      }
+
+      /* Selection bar (decorative, shows depth) */
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 14px 14px;
+        margin-top: 4px;
+        color: var(--text-dim);
+        font-size: 12.5px;
+      }
+      .toolbar-left {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .toolbar-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-left: auto;
+      }
+      .toolbar-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 9px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        color: #888;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .toolbar-chip:hover {
+        border-color: #3a3a3a;
+        color: var(--text);
+      }
+      .toolbar-chip.open {
+        border-color: #3a3a3a;
+        color: var(--text);
+        background: #1a1a1a;
+      }
+      .toolbar-chip svg {
+        width: 11px;
+        height: 11px;
+      }
+      .toolbar-chip-count {
+        color: var(--text);
+        background: #2a2a2a;
+        padding: 0 5px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ---------------- Stat chips ---------------- */
+      .stat-chips {
+        display: flex;
+        align-items: center;
+        margin-top: 14px;
+      }
+      .stat-chip {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 7px;
+        padding: 0 18px;
+        position: relative;
+      }
+      .stat-chip:first-child {
+        padding-left: 0;
+      }
+      .stat-chip + .stat-chip::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 1px;
+        height: 16px;
+        background: var(--border);
+      }
+      .stat-num {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .stat-num.bright {
+        color: #ffffff;
+      }
+      .stat-num .stat-pulse {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+        animation: pulse 1.4s ease-in-out infinite;
+        display: inline-block;
+      }
+      .stat-label {
+        font-size: 12.5px;
+        color: var(--text-dim);
+      }
+
+      /* ---------------- Webhook indicator ---------------- */
+      .webhook-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        color: var(--text-dimmer);
+        padding-right: 16px;
+        border-right: 1px solid var(--border);
+        margin-right: 0;
+      }
+      .webhook-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.6);
+        animation: webhook-pulse 3s ease-in-out infinite;
+      }
+      .webhook-indicator.inactive {
+        color: #444;
+      }
+      .webhook-indicator.inactive .webhook-dot {
+        background: #333;
+        animation: none;
+      }
+      @keyframes webhook-pulse {
+        0%,
+        100% {
+          opacity: 0.4;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+
+      /* ---------------- Conflict indicator ---------------- */
+      .conflict-icon {
+        width: 14px;
+        height: 14px;
+        color: #555;
+        display: inline-grid;
+        place-items: center;
+        position: relative;
+        cursor: help;
+        transition: color 120ms ease;
+      }
+      .conflict-icon:hover {
+        color: #999;
+      }
+      .conflict-icon svg {
+        width: 14px;
+        height: 14px;
+      }
+      .conflict-icon .tooltip {
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1e1e1e;
+        border: 1px solid #2e2e2e;
+        color: var(--text);
+        font-size: 12px;
+        font-family: 'Inter', sans-serif;
+        padding: 7px 10px;
+        border-radius: 4px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 120ms ease;
+        z-index: 10;
+      }
+      .conflict-icon:hover .tooltip {
+        opacity: 1;
+      }
+      /* Empty cell to keep grid alignment when no conflict */
+      .conflict-slot {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* ---------------- Quick actions ---------------- */
+      .task-row {
+        grid-template-columns: minmax(0, 1.4fr) minmax(120px, 0.55fr) auto auto auto auto !important;
+      }
+      .quick-action {
+        font-size: 13px;
+        color: #888;
+        opacity: 0;
+        transition:
+          opacity 140ms ease,
+          color 120ms ease;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        min-width: 96px;
+        text-align: right;
+        font-family: 'Inter', sans-serif;
+      }
+      .quick-action:hover {
+        color: var(--text);
+      }
+      .task-row:hover .quick-action {
+        opacity: 1;
+      }
+
+      .quick-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        opacity: 0;
+        transition: opacity 140ms ease;
+        min-width: 96px;
+        justify-content: flex-end;
+      }
+      .task-row:hover .quick-actions {
+        opacity: 1;
+      }
+      .quick-actions .quick-action {
+        opacity: 1;
+        min-width: 0;
+        text-align: right;
+      }
+      .quick-actions .qa-divider {
+        width: 1px;
+        height: 12px;
+        background: #333;
+        display: inline-block;
+      }
+
+      .elapsed-time {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: var(--text-dimmer);
+        font-variant-numeric: tabular-nums;
+        opacity: 0;
+        transition: opacity 140ms ease;
+        min-width: 96px;
+        text-align: right;
+      }
+      .task-row:hover .elapsed-time {
+        opacity: 1;
+      }
+      /* When hovering, hide arrow (we already have alt content) */
+      .task-row:hover .task-arrow.replaced {
+        opacity: 0;
+      }
+      .task-row .task-arrow.kept {
+        min-width: 96px;
+        justify-content: flex-end;
+        display: flex;
+        align-items: center;
+      }
+      .task-row:hover .task-arrow.kept {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      /* ---------------- Filter Popovers ---------------- */
+      .popover {
+        position: absolute;
+        top: calc(100% + 6px);
+        background: #161616;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px;
+        min-width: 220px;
+        z-index: 50;
+        display: none;
+      }
+      .popover.open {
+        display: block;
+      }
+      .popover-title {
+        font-size: 11px;
+        color: var(--text-dimmer);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 8px 10px 6px;
+      }
+      .popover-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        font-size: 13px;
+        color: var(--text);
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .popover-item:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .popover-item .check {
+        width: 12px;
+        height: 12px;
+        color: var(--accent);
+        opacity: 0;
+      }
+      .popover-item.selected .check {
+        opacity: 1;
+      }
+      .popover-item .meta {
+        margin-left: auto;
+        color: var(--text-dim);
+        font-size: 11.5px;
+        font-variant-numeric: tabular-nums;
+      }
+      .popover-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 6px 4px;
+      }
+      .popover-search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--border);
+        margin: -6px -6px 6px;
+      }
+      .popover-search svg {
+        width: 12px;
+        height: 12px;
+        color: var(--text-dim);
+      }
+      .popover-search input {
+        flex: 1;
+        font-size: 13px;
+      }
+      .popover-search input::placeholder {
+        color: var(--text-dim);
+      }
+      .toolbar-chip-wrap {
+        position: relative;
+      }
+
+      /* ---------------- Modal: Запустить перевод ---------------- */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.65);
+        display: none;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 12vh;
+        z-index: 100;
+        backdrop-filter: blur(2px);
+      }
+      .modal-backdrop.open {
+        display: flex;
+      }
+      .modal {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        width: 540px;
+        max-width: 90vw;
+        overflow: hidden;
+      }
+      .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 22px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .modal-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+        letter-spacing: -0.01em;
+      }
+      .modal-close {
+        color: var(--text-dim);
+        font-size: 18px;
+        line-height: 1;
+        padding: 4px;
+        transition: color 120ms ease;
+      }
+      .modal-close:hover {
+        color: var(--text);
+      }
+      .modal-body {
+        padding: 18px 22px 6px;
+      }
+      .field {
+        margin-bottom: 18px;
+      }
+      .field-label {
+        display: block;
+        font-size: 12px;
+        color: var(--text-dim);
+        margin-bottom: 7px;
+        letter-spacing: 0.01em;
+      }
+      .field-input {
+        width: 100%;
+        background: #0f0f0f;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 9px 11px;
+        font-size: 13px;
+        color: var(--text);
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .field-input:focus {
+        border-color: #3a3a3a;
+      }
+      .field-select {
+        width: 100%;
+        background: #0f0f0f;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 9px 11px;
+        font-size: 13px;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+      }
+      .field-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .field-hint {
+        font-size: 11.5px;
+        color: var(--text-dimmer);
+        margin-top: 6px;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .modal-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 22px 18px;
+        border-top: 1px solid var(--border);
+        background: #131313;
+      }
+      .modal-footer-hint {
+        font-size: 12px;
+        color: var(--text-dimmer);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .modal-footer-hint kbd {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10.5px;
+        border: 1px solid var(--border);
+        padding: 1px 5px;
+        border-radius: 3px;
+      }
+      .btn-secondary {
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+        padding: 7px 14px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        transition:
+          border-color 120ms ease,
+          color 120ms ease;
+      }
+      .btn-secondary:hover {
+        border-color: #3a3a3a;
+        color: var(--text);
+      }
+    </style>
+  </head>
+  <body data-screen-label="01 Tasks Dashboard">
+    <div class="app">
+      <!-- ============ SIDEBAR ============ -->
+      <aside class="sidebar">
+        <div class="wordmark">
+          <svg
+            class="wordmark-glyph"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.25"
+            stroke-linecap="square"
+          >
+            <path d="M1.5 2.5h6M1.5 6h9M1.5 9.5h6" />
+          </svg>
+          <span>DocFlow</span>
+        </div>
+
+        <nav class="nav">
+          <div class="nav-section-label">РАБОТА</div>
+          <div class="nav-item active">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 4h10M3 8h10M3 12h6" />
+            </svg>
+            <span>Задачи</span>
+          </div>
+          <div class="nav-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="5.5" />
+              <path d="M8 5v3l2 1.5" />
+            </svg>
+            <span>История</span>
+          </div>
+          <div class="nav-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 13V8M7.5 13V4M12 13v-6" />
+            </svg>
+            <span>Аналитика</span>
+          </div>
+
+          <div class="nav-divider"></div>
+
+          <div class="nav-section-label">КОНФИГУРАЦИЯ</div>
+          <div class="nav-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2.5" y="3.5" width="11" height="9" rx="1" />
+              <path d="M2.5 6.5h11" />
+            </svg>
+            <span>Репозитории</span>
+          </div>
+          <div class="nav-item">
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linejoin="round"
+            >
+              <path d="M3 3.5h4.5a1 1 0 0 1 1 1V13a1 1 0 0 0-1-1H3V3.5z" />
+              <path d="M13 3.5H8.5a1 1 0 0 0-1 1V13a1 1 0 0 1 1-1H13V3.5z" />
+            </svg>
+            <span>Словари</span>
+          </div>
+          <div class="nav-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="2" />
+              <path
+                d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"
+              />
+            </svg>
+            <span>Настройки</span>
+          </div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="user">
+            <div class="avatar">AK</div>
+            <div class="user-meta">
+              <div class="user-name">Anna Kuznetsova</div>
+              <div class="user-status">
+                <span class="gh-dot"></span>
+                <span>GitHub подключён</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ============ MAIN ============ -->
+      <main class="main">
+        <header class="page-header">
+          <div>
+            <h1 class="page-title">Задачи</h1>
+            <div class="stat-chips">
+              <div class="stat-chip">
+                <span class="stat-num"><span class="stat-pulse"></span>4</span>
+                <span class="stat-label">в работе</span>
+              </div>
+              <div class="stat-chip">
+                <span class="stat-num">12</span>
+                <span class="stat-label">ждут проверки</span>
+              </div>
+              <div class="stat-chip">
+                <span class="stat-num bright">2</span>
+                <span class="stat-label">ошибки</span>
+              </div>
+              <div class="stat-chip">
+                <span class="stat-num">8</span>
+                <span class="stat-label">опубликовано сегодня</span>
+              </div>
+            </div>
+          </div>
+          <div class="header-actions">
+            <label class="search">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="7" cy="7" r="4.5" />
+                <path d="m13.5 13.5-3-3" />
+              </svg>
+              <input type="text" placeholder="Поиск по задачам, файлам, проектам…" />
+              <span class="search-kbd">⌘K</span>
+            </label>
+            <button class="btn" id="openTrigger">
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              >
+                <path d="M8 12.5V4M5 7l3-3 3 3M3.5 13.5h9" />
+              </svg>
+              Запустить перевод
+            </button>
+          </div>
+        </header>
+
+        <div class="tabs">
+          <div class="tab active">Все <span class="num">247</span></div>
+          <div class="tab">В очереди <span class="num">18</span></div>
+          <div class="tab">В работе <span class="num">4</span></div>
+          <div class="tab">К публикации <span class="num">9</span></div>
+          <div class="tab">Ошибки <span class="num">2</span></div>
+          <div class="tab">Опубликовано <span class="num">211</span></div>
+        </div>
+
+        <div class="banner-new" id="bannerNew">
+          <svg
+            class="bell"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          >
+            <path d="M3.5 11.5h9M5 11.5V7a3 3 0 0 1 6 0v4.5M7 13.5h2" />
+          </svg>
+          <span>Появилось <strong>3</strong> новых задачи</span>
+          <span class="banner-link">Обновить →</span>
+        </div>
+
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <button class="toolbar-chip toolbar-select" id="selectToggle">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="10" height="10" rx="1.5" />
+              </svg>
+              <span id="selectToggleLabel">Выбрать</span>
+            </button>
+            <span class="webhook-indicator">
+              <span class="webhook-dot"></span>
+              <span>webhook активен</span>
+            </span>
+          </div>
+          <div class="toolbar-right">
+            <div class="toolbar-chip-wrap">
+              <button class="toolbar-chip" data-popover="projectPopover">
+                Все проекты
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="m4 6 4 4 4-4" />
+                </svg>
+              </button>
+              <div class="popover" id="projectPopover" style="right: 0; min-width: 260px">
+                <div class="popover-search">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="7" cy="7" r="4.5" />
+                    <path d="m13.5 13.5-3-3" />
+                  </svg>
+                  <input type="text" placeholder="Найти проект…" />
+                </div>
+                <div class="popover-item selected">
+                  <svg
+                    class="check"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M2.5 6.5l2.5 2.5L9.5 3.5" />
+                  </svg>
+                  <span>Все проекты</span>
+                  <span class="meta">247</span>
+                </div>
+                <div class="popover-divider"></div>
+                <div class="popover-item">
+                  <svg
+                    class="check"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M2.5 6.5l2.5 2.5L9.5 3.5" />
+                  </svg>
+                  <span>CRM API · документация</span>
+                  <span class="meta">94</span>
+                </div>
+                <div class="popover-item">
+                  <svg
+                    class="check"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M2.5 6.5l2.5 2.5L9.5 3.5" />
+                  </svg>
+                  <span>Руководства разработчика</span>
+                  <span class="meta">62</span>
+                </div>
+                <div class="popover-item">
+                  <svg
+                    class="check"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M2.5 6.5l2.5 2.5L9.5 3.5" />
+                  </svg>
+                  <span>Tasks API</span>
+                  <span class="meta">38</span>
+                </div>
+                <div class="popover-item">
+                  <svg
+                    class="check"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M2.5 6.5l2.5 2.5L9.5 3.5" />
+                  </svg>
+                  <span>Calendar API</span>
+                  <span class="meta">29</span>
+                </div>
+                <div class="popover-item">
+                  <svg
+                    class="check"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M2.5 6.5l2.5 2.5L9.5 3.5" />
+                  </svg>
+                  <span>Disk API</span>
+                  <span class="meta">17</span>
+                </div>
+                <div class="popover-item">
+                  <svg
+                    class="check"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M2.5 6.5l2.5 2.5L9.5 3.5" />
+                  </svg>
+                  <span>Webhooks</span>
+                  <span class="meta">7</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="task-list" id="taskListView">
+          <!-- Commit group: CRM deals refactor -->
+          <div class="commit-group">
+            <div class="commit-header">
+              <svg
+                class="commit-icon"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <circle cx="8" cy="8" r="2.5" />
+                <path d="M1.5 8h4M10.5 8h4" />
+              </svg>
+              <span class="commit-msg"
+                >refactor(crm): обновлены примеры запросов для deals API</span
+              >
+              <span class="commit-sha">a4f2e1c</span>
+              <div class="commit-meta">
+                <span class="commit-author"
+                  ><span class="commit-mini-avatar">МП</span>Михаил Петров</span
+                >
+                <span class="sep">·</span>
+                <span>3 файла</span>
+                <span class="sep">·</span>
+                <span>5 мин назад</span>
+              </div>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">api-reference/crm/deals/</span
+                  ><span class="file">crm-deal-get.md</span> <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">CRM API · документация</div>
+              <div class="status status-running">
+                <span class="pulse"></span
+                ><span class="pipeline-label"
+                  >Translator <span class="pipe-time">· 12 с</span></span
+                >
+              </div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">только что</div>
+              <div class="elapsed-time">1 мин 23 с</div>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">api-reference/crm/deals/</span
+                  ><span class="file">crm-deal-list.md</span>
+                  <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">CRM API · документация</div>
+              <div class="status status-running">
+                <span class="pulse"></span
+                ><span class="pipeline-label"
+                  >PreTranslator <span class="pipe-time">· 47 с</span></span
+                >
+              </div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">2 мин</div>
+              <div class="elapsed-time">0 мин 47 с</div>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">api-reference/crm/deals/</span
+                  ><span class="file">crm-deal-update.md</span>
+                  <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">CRM API · документация</div>
+              <div class="status status-queued">в очереди</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">2 мин</div>
+              <div class="task-arrow kept">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="m6 4 4 4-4 4" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Commit group: onboarding fix - all done -->
+          <div class="commit-group">
+            <div class="commit-header">
+              <svg
+                class="commit-icon"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <circle cx="8" cy="8" r="2.5" />
+                <path d="M1.5 8h4M10.5 8h4" />
+              </svg>
+              <span class="commit-msg">docs: исправлены опечатки в гайде по первой интеграции</span>
+              <span class="commit-sha">7b3c9d4</span>
+              <div class="commit-meta">
+                <span class="commit-author"
+                  ><span class="commit-mini-avatar">АК</span>Анна Кузнецова</span
+                >
+                <span class="sep">·</span>
+                <span>3 файла</span>
+                <span class="sep">·</span>
+                <span>12 мин назад</span>
+              </div>
+              <button class="publish-all">Опубликовать все · <span class="count">3</span></button>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">guides/onboarding/</span
+                  ><span class="file">first-integration.md</span>
+                  <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">Руководства разработчика</div>
+              <div class="status status-done">готово</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">8 мин</div>
+              <div class="quick-actions">
+                <button class="quick-action">Скачать</button><span class="qa-divider"></span
+                ><button class="quick-action">Опубликовать</button>
+              </div>
+            </div>
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">guides/onboarding/</span
+                  ><span class="file">quickstart.md</span> <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">Руководства разработчика</div>
+              <div class="status status-done">готово</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">9 мин</div>
+              <div class="quick-actions">
+                <button class="quick-action">Скачать</button><span class="qa-divider"></span
+                ><button class="quick-action">Опубликовать</button>
+              </div>
+            </div>
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">guides/onboarding/</span
+                  ><span class="file">terminology.md</span> <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">Руководства разработчика</div>
+              <div class="status status-done">готово</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">10 мин</div>
+              <div class="quick-actions">
+                <button class="quick-action">Скачать</button><span class="qa-divider"></span
+                ><button class="quick-action">Опубликовать</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Commit group: tasks API + webhook -->
+          <div class="commit-group">
+            <div class="commit-header">
+              <svg
+                class="commit-icon"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <circle cx="8" cy="8" r="2.5" />
+                <path d="M1.5 8h4M10.5 8h4" />
+              </svg>
+              <span class="commit-msg"
+                >feat(tasks): новое поле deadline в Task.update + payload spec</span
+              >
+              <span class="commit-sha">e8a1b2f</span>
+              <div class="commit-meta">
+                <span class="commit-author"
+                  ><span class="commit-mini-avatar">ДВ</span>Дмитрий Волков</span
+                >
+                <span class="sep">·</span>
+                <span>2 файла</span>
+                <span class="sep">·</span>
+                <span>26 мин назад</span>
+              </div>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">api-reference/tasks/</span
+                  ><span class="file">task-update.md</span> <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">Tasks API</div>
+              <div class="status status-conflict">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M8 3l6 10H2L8 3z" />
+                  <path d="M8 7v3" stroke-linecap="round" />
+                  <circle cx="8" cy="11.5" r="0.5" fill="currentColor" stroke="none" /></svg
+                >конфликт
+              </div>
+              <span class="conflict-icon"></span>
+              <div class="task-time">14 мин</div>
+              <button class="quick-action">Разрешить</button>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">webhooks/events/</span
+                  ><span class="file">event-payload-spec.md</span>
+                  <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">Webhooks</div>
+              <div class="status status-failed">ошибка</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">26 мин</div>
+              <button class="quick-action">Повторить</button>
+            </div>
+          </div>
+
+          <!-- Commit group: contacts -->
+          <div class="commit-group">
+            <div class="commit-header">
+              <svg
+                class="commit-icon"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <circle cx="8" cy="8" r="2.5" />
+                <path d="M1.5 8h4M10.5 8h4" />
+              </svg>
+              <span class="commit-msg">feat(crm): batch-методы для contacts</span>
+              <span class="commit-sha">2c9f8a0</span>
+              <div class="commit-meta">
+                <span class="commit-author"
+                  ><span class="commit-mini-avatar">МП</span>Михаил Петров</span
+                >
+                <span class="sep">·</span>
+                <span>2 файла</span>
+                <span class="sep">·</span>
+                <span>1 ч назад</span>
+              </div>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">api-reference/crm/contacts/</span
+                  ><span class="file">contact-add.md</span> <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">CRM API · документация</div>
+              <div class="status status-queued">в очереди</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">1 ч</div>
+              <div class="task-arrow kept">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="m6 4 4 4-4 4" />
+                </svg>
+              </div>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">api-reference/crm/contacts/</span
+                  ><span class="file">contact-update.md</span>
+                  <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">CRM API · документация</div>
+              <div class="status status-queued">в очереди</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">1 ч</div>
+              <div class="task-arrow kept">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="m6 4 4 4-4 4" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Manual run group -->
+          <div class="commit-group">
+            <div class="commit-header manual">
+              <svg
+                class="commit-icon"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              >
+                <path d="M8 12.5V4M5 7l3-3 3 3M3.5 13.5h9" />
+              </svg>
+              <span class="commit-msg">Ручной запуск</span>
+              <div class="commit-meta">
+                <span class="commit-author"
+                  ><span class="commit-mini-avatar">АК</span>Анна Кузнецова</span
+                >
+                <span class="sep">·</span>
+                <span>1 файл</span>
+                <span class="sep">·</span>
+                <span>2 ч назад</span>
+              </div>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                >
+                  <path d="M8 12.5V4M5 7l3-3 3 3M3.5 13.5h9" /></svg
+                ><span class="path-text"
+                  ><span class="dir">guides/auth/</span><span class="file">oauth-flow.md</span>
+                  <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">Руководства разработчика</div>
+              <div class="status status-published">опубликовано</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">2 ч</div>
+              <button class="quick-action">Скачать</button>
+            </div>
+          </div>
+
+          <!-- Yesterday group -->
+          <div class="commit-group">
+            <div class="commit-header">
+              <svg
+                class="commit-icon"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <circle cx="8" cy="8" r="2.5" />
+                <path d="M1.5 8h4M10.5 8h4" />
+              </svg>
+              <span class="commit-msg">feat(calendar): events API — get & add</span>
+              <span class="commit-sha">f1b4c7d</span>
+              <div class="commit-meta">
+                <span class="commit-author"
+                  ><span class="commit-mini-avatar">ЕС</span>Елена Соколова</span
+                >
+                <span class="sep">·</span>
+                <span>2 файла</span>
+                <span class="sep">·</span>
+                <span>вчера, 19:42</span>
+              </div>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">api-reference/calendar/</span
+                  ><span class="file">calendar-event-add.md</span>
+                  <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">Calendar API</div>
+              <div class="status status-published">опубликовано</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">18 ч</div>
+              <button class="quick-action">Скачать</button>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">api-reference/calendar/</span
+                  ><span class="file">calendar-event-get.md</span>
+                  <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">Calendar API</div>
+              <div class="status status-published">опубликовано</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">19 ч</div>
+              <button class="quick-action">Скачать</button>
+            </div>
+          </div>
+
+          <div class="commit-group">
+            <div class="commit-header">
+              <svg
+                class="commit-icon"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <circle cx="8" cy="8" r="2.5" />
+                <path d="M1.5 8h4M10.5 8h4" />
+              </svg>
+              <span class="commit-msg">fix(disk): исправлена документация folder.rename</span>
+              <span class="commit-sha">5d8e3a1</span>
+              <div class="commit-meta">
+                <span class="commit-author"
+                  ><span class="commit-mini-avatar">ДВ</span>Дмитрий Волков</span
+                >
+                <span class="sep">·</span>
+                <span>1 файл</span>
+                <span class="sep">·</span>
+                <span>вчера, 16:18</span>
+              </div>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">api-reference/disk/folders/</span
+                  ><span class="file">folder-rename.md</span>
+                  <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">Disk API</div>
+              <div class="status status-failed">ошибка</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">21 ч</div>
+              <button class="quick-action">Повторить</button>
+            </div>
+          </div>
+
+          <div class="commit-group">
+            <div class="commit-header">
+              <svg
+                class="commit-icon"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <circle cx="8" cy="8" r="2.5" />
+                <path d="M1.5 8h4M10.5 8h4" />
+              </svg>
+              <span class="commit-msg">docs: миграционный гайд v2 → v3</span>
+              <span class="commit-sha">9e2f1b3</span>
+              <div class="commit-meta">
+                <span class="commit-author"
+                  ><span class="commit-mini-avatar">АК</span>Анна Кузнецова</span
+                >
+                <span class="sep">·</span>
+                <span>1 файл</span>
+                <span class="sep">·</span>
+                <span>вчера, 14:05</span>
+              </div>
+            </div>
+
+            <div class="task-row">
+              <div class="task-path">
+                <svg
+                  class="task-type-icon"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M1.5 8h4M10.5 8h4" /></svg
+                ><span class="path-text"
+                  ><span class="dir">guides/migration/</span><span class="file">v2-to-v3.md</span>
+                  <span class="lang">RU → EN</span></span
+                >
+              </div>
+              <div class="task-project">Руководства разработчика</div>
+              <div class="status status-published">опубликовано</div>
+              <span class="conflict-slot"></span>
+              <div class="task-time">23 ч</div>
+              <button class="quick-action">Скачать</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty state A: GitHub not connected -->
+        <div class="empty-state" id="emptyStateA" style="display: none">
+          <div class="empty-icon">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.22.66-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02.8-.22 1.65-.33 2.5-.33s1.7.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85V21c0 .27.16.57.67.48A10 10 0 0 0 22 12c0-5.52-4.48-10-10-10z"
+              />
+            </svg>
+          </div>
+          <div class="empty-title">Подключите GitHub чтобы начать</div>
+          <div class="empty-desc">
+            DocFlow отслеживает push в репозиториях и автоматически создаёт задачи на перевод
+            изменённых .md файлов.
+          </div>
+          <div class="empty-actions">
+            <button class="btn-primary-fill">
+              <svg viewBox="0 0 16 16" fill="currentColor">
+                <path
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+                />
+              </svg>
+              Привязать GitHub
+            </button>
+            <button class="btn">Загрузить файл вручную</button>
+          </div>
+          <div class="empty-foot">
+            Или переводите файлы без репозитория — загрузите .md файл напрямую.
+          </div>
+        </div>
+
+        <!-- Empty state B: GitHub connected, no tasks -->
+        <div class="empty-state" id="emptyStateB" style="display: none">
+          <div class="empty-icon">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 4h10M3 8h10M3 12h6" />
+            </svg>
+          </div>
+          <div class="empty-title">Нет задач</div>
+          <div class="empty-desc">
+            Настройте webhook в разделе «Репозитории» или запустите перевод вручную.
+          </div>
+          <div class="empty-actions">
+            <button class="btn-primary-fill">
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+              >
+                <path d="M8 12.5V4M5 7l3-3 3 3M3.5 13.5h9" />
+              </svg>
+              Запустить перевод
+            </button>
+          </div>
+        </div>
+
+        <!-- Empty filtered -->
+        <div class="empty-state" id="emptyStateFiltered" style="display: none">
+          <div class="empty-icon">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M3 6h13M6 12h7M9 18h2M16 16l5 5M21 16l-5 5" />
+            </svg>
+          </div>
+          <div class="empty-title">Нет задач по этому фильтру</div>
+          <div class="empty-desc">Попробуйте изменить условия или сбросить фильтры.</div>
+          <div class="empty-actions">
+            <button class="btn-secondary" id="resetFiltersBtn">Сбросить фильтры</button>
+          </div>
+        </div>
+
+        <!-- Loading skeleton -->
+        <div class="task-list" id="loadingState" style="display: none">
+          <div class="commit-group">
+            <div class="commit-header" style="border-bottom: 1px solid var(--border-soft)">
+              <div class="skel" style="width: 14px; height: 14px; border-radius: 50%"></div>
+              <div class="skel" style="width: 280px; height: 13px"></div>
+              <div class="skel" style="width: 54px; height: 13px"></div>
+              <div class="commit-meta" style="margin-left: auto; gap: 10px">
+                <div class="skel" style="width: 120px; height: 13px"></div>
+                <div class="skel" style="width: 60px; height: 13px"></div>
+              </div>
+            </div>
+
+            <div class="task-row" style="cursor: default">
+              <div class="task-path">
+                <div class="skel" style="width: 13px; height: 13px"></div>
+                <div class="skel" style="width: 300px; height: 14px"></div>
+              </div>
+              <div class="skel" style="width: 140px; height: 12px"></div>
+              <div class="skel" style="width: 96px; height: 22px; border-radius: 4px"></div>
+              <span class="conflict-slot"></span>
+              <div class="skel" style="width: 46px; height: 12px"></div>
+              <div class="skel" style="width: 14px; height: 14px"></div>
+            </div>
+
+            <div class="task-row" style="cursor: default">
+              <div class="task-path">
+                <div class="skel" style="width: 13px; height: 13px"></div>
+                <div class="skel" style="width: 300px; height: 14px"></div>
+              </div>
+              <div class="skel" style="width: 140px; height: 12px"></div>
+              <div class="skel" style="width: 96px; height: 22px; border-radius: 4px"></div>
+              <span class="conflict-slot"></span>
+              <div class="skel" style="width: 46px; height: 12px"></div>
+              <div class="skel" style="width: 14px; height: 14px"></div>
+            </div>
+          </div>
+
+          <div class="commit-group">
+            <div class="commit-header" style="border-bottom: 1px solid var(--border-soft)">
+              <div class="skel" style="width: 14px; height: 14px; border-radius: 50%"></div>
+              <div class="skel" style="width: 280px; height: 13px"></div>
+              <div class="skel" style="width: 54px; height: 13px"></div>
+              <div class="commit-meta" style="margin-left: auto; gap: 10px">
+                <div class="skel" style="width: 120px; height: 13px"></div>
+                <div class="skel" style="width: 60px; height: 13px"></div>
+              </div>
+            </div>
+
+            <div class="task-row" style="cursor: default">
+              <div class="task-path">
+                <div class="skel" style="width: 13px; height: 13px"></div>
+                <div class="skel" style="width: 300px; height: 14px"></div>
+              </div>
+              <div class="skel" style="width: 140px; height: 12px"></div>
+              <div class="skel" style="width: 96px; height: 22px; border-radius: 4px"></div>
+              <span class="conflict-slot"></span>
+              <div class="skel" style="width: 46px; height: 12px"></div>
+              <div class="skel" style="width: 14px; height: 14px"></div>
+            </div>
+
+            <div class="task-row" style="cursor: default">
+              <div class="task-path">
+                <div class="skel" style="width: 13px; height: 13px"></div>
+                <div class="skel" style="width: 300px; height: 14px"></div>
+              </div>
+              <div class="skel" style="width: 140px; height: 12px"></div>
+              <div class="skel" style="width: 96px; height: 22px; border-radius: 4px"></div>
+              <span class="conflict-slot"></span>
+              <div class="skel" style="width: 46px; height: 12px"></div>
+              <div class="skel" style="width: 14px; height: 14px"></div>
+            </div>
+          </div>
+
+          <div class="commit-group">
+            <div class="commit-header" style="border-bottom: 1px solid var(--border-soft)">
+              <div class="skel" style="width: 14px; height: 14px; border-radius: 50%"></div>
+              <div class="skel" style="width: 280px; height: 13px"></div>
+              <div class="skel" style="width: 54px; height: 13px"></div>
+              <div class="commit-meta" style="margin-left: auto; gap: 10px">
+                <div class="skel" style="width: 120px; height: 13px"></div>
+                <div class="skel" style="width: 60px; height: 13px"></div>
+              </div>
+            </div>
+
+            <div class="task-row" style="cursor: default">
+              <div class="task-path">
+                <div class="skel" style="width: 13px; height: 13px"></div>
+                <div class="skel" style="width: 300px; height: 14px"></div>
+              </div>
+              <div class="skel" style="width: 140px; height: 12px"></div>
+              <div class="skel" style="width: 96px; height: 22px; border-radius: 4px"></div>
+              <span class="conflict-slot"></span>
+              <div class="skel" style="width: 46px; height: 12px"></div>
+              <div class="skel" style="width: 14px; height: 14px"></div>
+            </div>
+
+            <div class="task-row" style="cursor: default">
+              <div class="task-path">
+                <div class="skel" style="width: 13px; height: 13px"></div>
+                <div class="skel" style="width: 300px; height: 14px"></div>
+              </div>
+              <div class="skel" style="width: 140px; height: 12px"></div>
+              <div class="skel" style="width: 96px; height: 22px; border-radius: 4px"></div>
+              <span class="conflict-slot"></span>
+              <div class="skel" style="width: 46px; height: 12px"></div>
+              <div class="skel" style="width: 14px; height: 14px"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error -->
+        <div class="empty-state" id="errorState" style="display: none">
+          <div class="empty-icon">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M3 3l18 18M9.5 9.5a5 5 0 0 0-3 1.5M14.5 9.5a5 5 0 0 1 3 1.5M5.5 6.5a10 10 0 0 0-3 3M18.5 6.5a10 10 0 0 1 3 3M12 19h.01"
+              />
+            </svg>
+          </div>
+          <div class="empty-title">Не удалось загрузить задачи</div>
+          <div class="empty-desc">Проверьте соединение и повторите попытку.</div>
+          <div class="empty-actions">
+            <button class="btn-secondary">Повторить</button>
+          </div>
+        </div>
+
+        <div class="list-footer">
+          <span
+            >Пайплайн <span class="footer-sha">a3f2c1d</span><span class="dot-sep">·</span>Последняя
+            синхронизация только что<span class="dot-sep">·</span>Показано 12 из 247 задач</span
+          >
+        </div>
+      </main>
+    </div>
+
+    <!-- ============ MODAL: Запустить перевод ============ -->
+    <div class="modal-backdrop" id="triggerModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="triggerTitle">
+        <div class="modal-header">
+          <div class="modal-title" id="triggerTitle">Запустить перевод</div>
+          <button class="modal-close" id="closeTrigger" aria-label="Закрыть">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label class="field-label">Проект</label>
+            <div class="field-select">
+              <span>CRM API · документация</span>
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                width="12"
+                height="12"
+                style="color: var(--text-dim)"
+              >
+                <path d="m4 6 4 4 4-4" />
+              </svg>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label">Путь к файлу или директории</label>
+            <input
+              class="field-input"
+              type="text"
+              placeholder="api-reference/crm/deals/"
+              value="api-reference/crm/deals/"
+            />
+            <div class="field-hint">↳ найдено 14 файлов · ветка main</div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label">Исходный язык</label>
+              <div class="field-select">
+                <span>RU · русский</span>
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  width="12"
+                  height="12"
+                  style="color: var(--text-dim)"
+                >
+                  <path d="m4 6 4 4 4-4" />
+                </svg>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label">Целевой язык</label>
+              <div class="field-select">
+                <span>EN · английский</span>
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  width="12"
+                  height="12"
+                  style="color: var(--text-dim)"
+                >
+                  <path d="m4 6 4 4 4-4" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <div class="modal-footer-hint"><kbd>↵</kbd> запустить · <kbd>Esc</kbd> отмена</div>
+          <div style="display: flex; gap: 8px">
+            <button class="btn-secondary" id="cancelTrigger">Отмена</button>
+            <button class="btn">Запустить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="floating-bar" id="floatingBar">
+      <span class="floating-bar-count"><strong id="fbCount">0</strong> задач выбрано</span>
+      <span class="floating-bar-divider"></span>
+      <div class="floating-bar-actions">
+        <button class="fb-btn">
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            width="13"
+            height="13"
+          >
+            <path d="M8 2v9M4.5 7.5 8 11l3.5-3.5M3 13.5h10" />
+          </svg>
+          Скачать <span class="num" id="fbDownloadNum">0</span>
+        </button>
+        <button class="fb-btn fb-primary">
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            width="13"
+            height="13"
+          >
+            <path d="M8 13V4M4.5 7.5 8 4l3.5 3.5" />
+          </svg>
+          Опубликовать готовые <span class="num" id="fbPublishNum">0</span>
+        </button>
+      </div>
+      <button class="fb-close" id="fbClose" title="Закрыть">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="m4 4 8 8M12 4l-8 8" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="view-switcher">
+      <span class="view-switcher-label">Демо</span>
+      <button class="active" data-view="list">Список</button>
+      <button data-view="batch">Batch</button>
+      <button data-view="loading">Загрузка</button>
+      <button data-view="emptyFiltered">Фильтр</button>
+      <button data-view="emptyA">Без GitHub</button>
+      <button data-view="emptyB">Без задач</button>
+      <button data-view="error">Ошибка</button>
+    </div>
+
+    <script>
+      // Tab switching (visual only)
+      document.querySelectorAll('.tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'))
+          tab.classList.add('active')
+        })
+      })
+
+      // Nav switching (visual only)
+      document.querySelectorAll('.nav-item').forEach((item) => {
+        item.addEventListener('click', () => {
+          document.querySelectorAll('.nav-item').forEach((n) => n.classList.remove('active'))
+          item.classList.add('active')
+        })
+      })
+
+      // Popover toggling
+      document.querySelectorAll('[data-popover]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation()
+          const id = btn.getAttribute('data-popover')
+          const pop = document.getElementById(id)
+          const isOpen = pop.classList.contains('open')
+          // close all
+          document.querySelectorAll('.popover').forEach((p) => p.classList.remove('open'))
+          document.querySelectorAll('.toolbar-chip').forEach((c) => c.classList.remove('open'))
+          if (!isOpen) {
+            pop.classList.add('open')
+            btn.classList.add('open')
+          }
+        })
+      })
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.popover') && !e.target.closest('[data-popover]')) {
+          document.querySelectorAll('.popover').forEach((p) => p.classList.remove('open'))
+          document.querySelectorAll('.toolbar-chip').forEach((c) => c.classList.remove('open'))
+        }
+      })
+      // Popover item selection (single-select within group)
+      document.querySelector('.banner-link')?.addEventListener('click', () => {
+        document.getElementById('bannerNew').style.display = 'none'
+      })
+
+      document.querySelectorAll('.popover').forEach((pop) => {
+        pop.querySelectorAll('.popover-item').forEach((item) => {
+          item.addEventListener('click', () => {
+            pop.querySelectorAll('.popover-item').forEach((i) => i.classList.remove('selected'))
+            item.classList.add('selected')
+          })
+        })
+      })
+
+      // View switcher
+      const allViews = [
+        'taskListView',
+        'emptyStateA',
+        'emptyStateB',
+        'emptyStateFiltered',
+        'loadingState',
+        'errorState',
+      ]
+      const viewMap = {
+        list: 'taskListView',
+        batch: 'taskListView',
+        loading: 'loadingState',
+        emptyFiltered: 'emptyStateFiltered',
+        emptyA: 'emptyStateA',
+        emptyB: 'emptyStateB',
+        error: 'errorState',
+      }
+      document.querySelectorAll('.view-switcher button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const view = btn.dataset.view
+          document
+            .querySelectorAll('.view-switcher button')
+            .forEach((b) => b.classList.remove('active'))
+          btn.classList.add('active')
+          allViews.forEach((id) => {
+            const el = document.getElementById(id)
+            if (el) el.style.display = 'none'
+          })
+          const target = document.getElementById(viewMap[view])
+          const isListLike = view === 'list' || view === 'batch' || view === 'loading'
+          if (target) target.style.display = isListLike ? '' : 'flex'
+          const footer = document.querySelector('.list-footer')
+          if (footer) footer.style.display = view === 'list' || view === 'batch' ? '' : 'none'
+          const banner = document.getElementById('bannerNew')
+          if (banner) banner.style.display = view === 'list' || view === 'batch' ? '' : 'none'
+          if (view === 'batch') {
+            setBatchMode(true)
+            document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'))
+            const pubTab = [...document.querySelectorAll('.tab')].find((t) =>
+              t.textContent.includes('К публикации'),
+            )
+            if (pubTab) pubTab.classList.add('active')
+            const doneRows = [...document.querySelectorAll('.task-row')].filter((r) =>
+              r.querySelector('.status.status-done'),
+            )
+            doneRows.slice(0, 3).forEach((r) => {
+              const cb = r.querySelector('.task-checkbox')
+              if (cb) cb.classList.add('checked')
+            })
+            updateFloatingBar()
+          } else {
+            setBatchMode(false)
+            document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'))
+            const allTab = document.querySelector('.tab')
+            if (allTab) allTab.classList.add('active')
+          }
+        })
+      })
+
+      // ---------------- Batch select mode ----------------
+      const selectToggle = document.getElementById('selectToggle')
+      const selectToggleLabel = document.getElementById('selectToggleLabel')
+      const floatingBar = document.getElementById('floatingBar')
+      const fbCount = document.getElementById('fbCount')
+      const fbDownloadNum = document.getElementById('fbDownloadNum')
+      const fbPublishNum = document.getElementById('fbPublishNum')
+
+      function ensureCheckboxes() {
+        document.querySelectorAll('.task-row').forEach((row) => {
+          if (row.querySelector('.row-checkbox-cell')) return
+          const cell = document.createElement('div')
+          cell.className = 'row-checkbox-cell'
+          cell.innerHTML =
+            '<div class="task-checkbox"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor"><path d="M2.5 6.5l2.5 2.5L9.5 3.5"/></svg></div>'
+          row.insertBefore(cell, row.firstChild)
+          cell.querySelector('.task-checkbox').addEventListener('click', (e) => {
+            e.stopPropagation()
+            cell.querySelector('.task-checkbox').classList.toggle('checked')
+            updateFloatingBar()
+          })
+        })
+      }
+
+      function updateFloatingBar() {
+        const checked = document.querySelectorAll('.task-checkbox.checked')
+        const total = checked.length
+        // Count "ready to publish" = checked rows with status-done AND no conflict-icon
+        let readyCount = 0
+        checked.forEach((cb) => {
+          const row = cb.closest('.task-row')
+          if (!row) return
+          const isDone = row.querySelector('.status.status-done')
+          const hasConflict = row.querySelector('.conflict-icon')
+          if (isDone && !hasConflict) readyCount++
+        })
+        fbCount.textContent = total
+        fbDownloadNum.textContent = total
+        fbPublishNum.textContent = readyCount
+        if (total > 0) {
+          floatingBar.classList.add('visible')
+        } else {
+          floatingBar.classList.remove('visible')
+        }
+      }
+
+      function setBatchMode(on) {
+        ensureCheckboxes()
+        if (on) {
+          document.body.classList.add('batch-mode')
+          selectToggle.classList.add('active')
+          selectToggleLabel.textContent = 'Снять выбор'
+        } else {
+          document.body.classList.remove('batch-mode')
+          selectToggle.classList.remove('active')
+          selectToggleLabel.textContent = 'Выбрать'
+          document
+            .querySelectorAll('.task-checkbox.checked')
+            .forEach((c) => c.classList.remove('checked'))
+          floatingBar.classList.remove('visible')
+        }
+      }
+
+      selectToggle.addEventListener('click', () => {
+        setBatchMode(!document.body.classList.contains('batch-mode'))
+      })
+
+      document.getElementById('resetFiltersBtn')?.addEventListener('click', () => {
+        document.querySelector('[data-view="list"]').click()
+      })
+
+      document.getElementById('fbClose').addEventListener('click', () => {
+        document
+          .querySelectorAll('.task-checkbox.checked')
+          .forEach((c) => c.classList.remove('checked'))
+        updateFloatingBar()
+      })
+
+      // Modal
+      const modal = document.getElementById('triggerModal')
+      document
+        .getElementById('openTrigger')
+        .addEventListener('click', () => modal.classList.add('open'))
+      document
+        .getElementById('closeTrigger')
+        .addEventListener('click', () => modal.classList.remove('open'))
+      document
+        .getElementById('cancelTrigger')
+        .addEventListener('click', () => modal.classList.remove('open'))
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.remove('open')
+      })
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') modal.classList.remove('open')
+      })
+    </script>
+  </body>
+</html>

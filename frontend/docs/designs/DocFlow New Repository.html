@@ -1,0 +1,1487 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1440" />
+    <title>DocFlow — Новый проект</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0f0f0f;
+        --surface: #161616;
+        --surface-hover: #1e1e1e;
+        --border: #262626;
+        --border-soft: #1e1e1e;
+        --text: #ededed;
+        --text-dim: #888;
+        --text-dimmer: #555;
+        --text-path-dim: #444;
+        --accent: #ffffff;
+        --warn: #d97757;
+        --warn-bg: rgba(217, 119, 87, 0.08);
+        --warn-border: rgba(217, 119, 87, 0.22);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          system-ui,
+          sans-serif;
+        font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
+        -webkit-font-smoothing: antialiased;
+        font-size: 14px;
+        line-height: 1.5;
+        letter-spacing: -0.005em;
+        min-height: 100vh;
+      }
+      button {
+        font-family: inherit;
+        color: inherit;
+        background: none;
+        border: none;
+        cursor: pointer;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      input,
+      select {
+        font-family: inherit;
+      }
+
+      /* ── App layout ── */
+      .app {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        min-height: 100vh;
+      }
+
+      /* ── Sidebar ── */
+      .sidebar {
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        padding: 22px 14px 18px;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px 26px;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .wordmark-glyph {
+        width: 12px;
+        height: 12px;
+        color: var(--text);
+      }
+      .nav {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        border-radius: 5px;
+        color: var(--text-dimmer);
+        font-size: 13.5px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 120ms ease;
+      }
+      .nav-item:hover {
+        color: #aaa;
+      }
+      .nav-item.active {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text);
+      }
+      .nav-item svg {
+        width: 15px;
+        height: 15px;
+        flex-shrink: 0;
+      }
+      .nav-item .count {
+        margin-left: auto;
+        font-size: 12px;
+        color: var(--text-dim);
+        font-variant-numeric: tabular-nums;
+      }
+      .nav-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 10px 10px 14px;
+      }
+      .nav-section-label {
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: #333;
+        text-transform: uppercase;
+        padding: 0 10px 6px;
+        font-weight: 500;
+      }
+      .sidebar-footer {
+        margin-top: auto;
+        padding: 14px 6px 0;
+        border-top: 1px solid var(--border);
+      }
+      .user {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 4px;
+      }
+      .avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: #2a2a2a;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .user-name {
+        font-size: 12.5px;
+        font-weight: 500;
+      }
+      .user-status {
+        font-size: 11px;
+        color: var(--text-dim);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .gh-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #4ade80;
+        box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+      }
+
+      /* ── Main ── */
+      .main {
+        padding: 38px 56px 80px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      /* ── Breadcrumb ── */
+      .breadcrumb {
+        width: 560px;
+        max-width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12.5px;
+        color: var(--text-dimmer);
+        margin-bottom: 28px;
+      }
+      .breadcrumb a {
+        color: var(--text-dim);
+        transition: color 120ms ease;
+      }
+      .breadcrumb a:hover {
+        color: var(--text);
+      }
+      .breadcrumb svg {
+        width: 11px;
+        height: 11px;
+        color: var(--text-path-dim);
+      }
+
+      /* ── Card ── */
+      .form-card {
+        width: 560px;
+        max-width: 100%;
+      }
+      .form-header {
+        margin-bottom: 28px;
+      }
+      .form-title {
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.015em;
+        margin-bottom: 3px;
+      }
+      .form-subtitle {
+        font-size: 13px;
+        color: var(--text-dim);
+      }
+
+      /* ── Section ── */
+      .form-section {
+        margin-bottom: 28px;
+      }
+      .section-label {
+        font-size: 11px;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--text-dimmer);
+        font-weight: 500;
+        margin-bottom: 14px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      /* ── Fields ── */
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 16px;
+      }
+      .field:last-child {
+        margin-bottom: 0;
+      }
+      .field-label {
+        font-size: 11.5px;
+        color: var(--text-dim);
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .field-label .optional {
+        color: var(--text-dimmer);
+        font-weight: 400;
+      }
+      .field-hint {
+        font-size: 11.5px;
+        color: var(--text-dimmer);
+        margin-top: 3px;
+        line-height: 1.5;
+      }
+      .field-row {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 10px;
+        align-items: end;
+      }
+      .field-row-sep {
+        display: flex;
+        align-items: flex-end;
+        padding-bottom: 10px;
+        color: var(--text-dimmer);
+      }
+      .field-row-sep svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      .input {
+        width: 100%;
+        background: #0f0f0f;
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 9px 12px;
+        border-radius: 6px;
+        font-size: 13.5px;
+        transition:
+          border-color 120ms ease,
+          background 120ms ease;
+      }
+      .input:focus {
+        outline: none;
+        border-color: #3a3a3a;
+        background: #131313;
+      }
+      .input::placeholder {
+        color: var(--text-dimmer);
+      }
+      .input.mono {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12.5px;
+      }
+
+      /* ── Combobox ── */
+      .combobox {
+        position: relative;
+      }
+      .combobox-input-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+      .combobox-input-wrap .input {
+        padding-right: 34px;
+      }
+      .combo-icon {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-dimmer);
+        pointer-events: none;
+      }
+      .combo-icon svg {
+        width: 13px;
+        height: 13px;
+        display: block;
+      }
+      .combo-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+        z-index: 50;
+        overflow: hidden;
+        display: none;
+        max-height: 220px;
+        overflow-y: auto;
+      }
+      .combo-dropdown.open {
+        display: block;
+      }
+      .combo-option {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background 120ms ease;
+      }
+      .combo-option:hover,
+      .combo-option.focused {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .combo-option .mono {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: var(--text);
+        flex: 1;
+      }
+      .combo-option .owner {
+        color: var(--text-path-dim);
+      }
+      .combo-option .badge {
+        font-size: 10.5px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        color: var(--text-dimmer);
+        background: #222;
+        border: 1px solid var(--border-soft);
+      }
+      .combo-option .badge.private {
+        color: #7fa8d4;
+        background: rgba(127, 168, 212, 0.08);
+        border-color: rgba(127, 168, 212, 0.18);
+      }
+      .combo-option .badge.archived {
+        color: var(--text-dimmer);
+      }
+      .combo-sep {
+        height: 1px;
+        background: var(--border);
+        margin: 2px 0;
+      }
+      .combo-loading {
+        padding: 14px 12px;
+        color: var(--text-dimmer);
+        font-size: 12.5px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .combo-loading-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--text-dimmer);
+        animation: blink 0.8s ease-in-out infinite;
+      }
+      .combo-loading-dot:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+      .combo-loading-dot:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 0.3;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+
+      /* ── Chip input ── */
+      .chip-field {
+        background: #0f0f0f;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 7px 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        transition: border-color 120ms ease;
+      }
+      .chip-field:focus-within {
+        border-color: #3a3a3a;
+        background: #131313;
+      }
+      .chip {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        background: #222;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 2px 7px 2px 8px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: var(--text);
+      }
+      .chip-remove {
+        color: var(--text-dimmer);
+        display: grid;
+        place-items: center;
+        transition: color 120ms ease;
+        padding: 0 1px;
+      }
+      .chip-remove:hover {
+        color: var(--text);
+      }
+      .chip-remove svg {
+        width: 11px;
+        height: 11px;
+      }
+      .chip-input {
+        background: none;
+        border: none;
+        outline: none;
+        color: var(--text);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        min-width: 120px;
+        padding: 2px 4px;
+        flex: 1;
+      }
+      .chip-input::placeholder {
+        color: var(--text-dimmer);
+      }
+
+      /* ── Footer ── */
+      .form-footer {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 32px;
+        padding-top: 22px;
+        border-top: 1px solid var(--border);
+      }
+      .btn-secondary {
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        padding: 9px 16px;
+        border-radius: 5px;
+        font-size: 13.5px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 120ms ease;
+      }
+      .btn-secondary:hover {
+        border-color: #3a3a3a;
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #0f0f0f;
+        padding: 9px 18px;
+        border-radius: 5px;
+        font-size: 13.5px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        transition: background 120ms ease;
+        position: relative;
+      }
+      .btn-primary:hover {
+        background: #f0f0f0;
+      }
+      .btn-primary:disabled {
+        background: #2a2a2a;
+        color: var(--text-dimmer);
+        cursor: not-allowed;
+      }
+      .btn-primary.loading .btn-label {
+        opacity: 0;
+      }
+      .spinner {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        border: 1.5px solid rgba(0, 0, 0, 0.2);
+        border-top-color: #000;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        display: none;
+      }
+      .btn-primary.loading .spinner {
+        display: block;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* ═══════════════════════════════
+   MODAL
+═══════════════════════════════ */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.72);
+        backdrop-filter: blur(6px);
+        display: grid;
+        place-items: center;
+        z-index: 200;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 200ms ease;
+      }
+      .modal-backdrop.open {
+        opacity: 1;
+        pointer-events: all;
+      }
+      .modal {
+        width: 560px;
+        max-width: calc(100vw - 32px);
+        background: #161616;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7);
+        overflow: hidden;
+        transform: translateY(10px) scale(0.98);
+        transition:
+          transform 200ms ease,
+          opacity 200ms ease;
+        opacity: 0;
+      }
+      .modal-backdrop.open .modal {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+      }
+      .modal-header {
+        padding: 22px 24px 0;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .modal-title {
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .modal-body {
+        padding: 18px 24px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .modal-footer {
+        padding: 0 24px 20px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      /* Warning banner */
+      .warn-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-border);
+        border-radius: 6px;
+      }
+      .warn-banner svg {
+        width: 14px;
+        height: 14px;
+        color: var(--warn);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .warn-banner-text {
+        font-size: 12.5px;
+        color: #e0a89a;
+        line-height: 1.5;
+      }
+      .warn-banner-text strong {
+        color: var(--warn);
+        font-weight: 600;
+      }
+
+      /* Secret field */
+      .secret-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .secret-label {
+        font-size: 11.5px;
+        color: var(--text-dim);
+        font-weight: 500;
+        letter-spacing: 0.01em;
+      }
+      .secret-field {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        background: #0a0a0a;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .secret-value {
+        flex: 1;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12.5px;
+        color: var(--text);
+        padding: 9px 12px;
+        background: none;
+        border: none;
+        outline: none;
+        letter-spacing: 0.03em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .secret-copy {
+        padding: 0 12px;
+        height: 38px;
+        border-left: 1px solid var(--border);
+        color: var(--text-dim);
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 120ms ease;
+      }
+      .secret-copy:hover {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .secret-copy svg {
+        width: 12px;
+        height: 12px;
+      }
+      .secret-copy.copied {
+        color: #4ade80;
+      }
+
+      /* Steps */
+      .steps-section-title {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--text);
+        margin-bottom: 12px;
+      }
+      .steps {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .step {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .step-num {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #222;
+        border: 1px solid var(--border);
+        display: grid;
+        place-items: center;
+        font-size: 10.5px;
+        font-weight: 600;
+        color: var(--text-dim);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .step-text {
+        font-size: 12.5px;
+        color: var(--text-dim);
+        line-height: 1.6;
+      }
+      .step-text code {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11.5px;
+        background: #1f1f1f;
+        border: 1px solid var(--border-soft);
+        padding: 0px 5px;
+        border-radius: 3px;
+        color: var(--text);
+      }
+      .step-text .url-field {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        background: #0a0a0a;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 5px;
+      }
+      .step-text .url-value {
+        flex: 1;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11.5px;
+        padding: 6px 9px;
+        color: var(--text-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .step-text .url-copy {
+        padding: 0 9px;
+        height: 30px;
+        border-left: 1px solid var(--border);
+        color: var(--text-dimmer);
+        font-size: 11.5px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        transition: all 120ms ease;
+      }
+      .step-text .url-copy:hover {
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .step-text .url-copy svg {
+        width: 11px;
+        height: 11px;
+      }
+      .step-text .url-copy.copied {
+        color: #4ade80;
+      }
+
+      /* Toast */
+      .toast {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%) translateY(8px);
+        background: #1e1e1e;
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-size: 12.5px;
+        font-weight: 500;
+        padding: 8px 16px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        z-index: 300;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 200ms ease;
+        white-space: nowrap;
+      }
+      .toast.show {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      .toast svg {
+        width: 13px;
+        height: 13px;
+        color: #4ade80;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <!-- ── Sidebar ── -->
+      <aside class="sidebar">
+        <div class="wordmark">
+          <svg
+            class="wordmark-glyph"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.25"
+            stroke-linecap="square"
+          >
+            <path d="M1.5 2.5h6M1.5 6h9M1.5 9.5h6" />
+          </svg>
+          <span>DocFlow</span>
+        </div>
+        <nav class="nav">
+          <div class="nav-section-label">РАБОТА</div>
+          <div class="nav-item" onclick="location.href = 'DocFlow Dashboard.html'">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 4h10M3 8h10M3 12h6" />
+            </svg>
+            <span>Задачи</span>
+            <span class="count">247</span>
+          </div>
+          <div class="nav-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="5.5" />
+              <path d="M8 5v3l2 1.5" />
+            </svg>
+            <span>История</span>
+          </div>
+          <div class="nav-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 13V8M7.5 13V4M12 13v-6" />
+            </svg>
+            <span>Аналитика</span>
+          </div>
+          <div class="nav-divider"></div>
+          <div class="nav-section-label">КОНФИГУРАЦИЯ</div>
+          <div class="nav-item active" onclick="location.href = 'DocFlow Repositories.html'">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2.5" y="3.5" width="11" height="9" rx="1" />
+              <path d="M2.5 6.5h11" />
+            </svg>
+            <span>Репозитории</span>
+          </div>
+          <div class="nav-item">
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linejoin="round"
+            >
+              <path d="M3 3.5h4.5a1 1 0 0 1 1 1V13a1 1 0 0 0-1-1H3V3.5z" />
+              <path d="M13 3.5H8.5a1 1 0 0 0-1 1V13a1 1 0 0 1 1-1H13V3.5z" />
+            </svg>
+            <span>Словари</span>
+          </div>
+          <div class="nav-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="2" />
+              <path
+                d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"
+              />
+            </svg>
+            <span>Настройки</span>
+          </div>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="user">
+            <div class="avatar">AK</div>
+            <div>
+              <div class="user-name">Anna Kuznetsova</div>
+              <div class="user-status">
+                <span class="gh-dot"></span><span>GitHub подключён</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ── Main ── -->
+      <main class="main">
+        <!-- Breadcrumb -->
+        <div class="breadcrumb">
+          <a href="DocFlow Repositories.html">Репозитории</a>
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          >
+            <path d="M6 12l4-4-4-4" />
+          </svg>
+          <span style="color: var(--text)">Новый проект</span>
+        </div>
+
+        <!-- Form card -->
+        <div class="form-card">
+          <div class="form-header">
+            <h1 class="form-title">Новый проект</h1>
+            <p class="form-subtitle">
+              Настройте пару source → target репозиториев для автопереводa документации
+            </p>
+          </div>
+
+          <form id="mainForm" autocomplete="off">
+            <!-- ОБЩЕЕ -->
+            <div class="form-section">
+              <div class="section-label">Общее</div>
+              <div class="field">
+                <label class="field-label" for="projName">Имя проекта</label>
+                <input
+                  class="input"
+                  id="projName"
+                  type="text"
+                  placeholder="CRM API · документация"
+                  required
+                />
+              </div>
+            </div>
+
+            <!-- РЕПОЗИТОРИИ -->
+            <div class="form-section">
+              <div class="section-label">Репозитории</div>
+
+              <div class="field-row">
+                <!-- Source repo -->
+                <div class="field">
+                  <label class="field-label">Source-репозиторий</label>
+                  <div class="combobox" id="comboSrc">
+                    <div class="combobox-input-wrap">
+                      <input
+                        class="input mono"
+                        id="srcRepoInput"
+                        type="text"
+                        placeholder="owner/repository"
+                        autocomplete="off"
+                      />
+                      <span class="combo-icon"
+                        ><svg
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                          stroke-linecap="round"
+                        >
+                          <path d="M4 6l4 4 4-4" /></svg
+                      ></span>
+                    </div>
+                    <div class="combo-dropdown" id="srcDropdown"></div>
+                  </div>
+                </div>
+
+                <!-- Sep -->
+                <div class="field-row-sep">
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                  >
+                    <path d="M3 8h10M9 4l4 4-4 4" />
+                  </svg>
+                </div>
+
+                <!-- Target repo -->
+                <div class="field">
+                  <label class="field-label">Target-репозиторий</label>
+                  <div class="combobox" id="comboTgt">
+                    <div class="combobox-input-wrap">
+                      <input
+                        class="input mono"
+                        id="tgtRepoInput"
+                        type="text"
+                        placeholder="owner/repository"
+                        autocomplete="off"
+                      />
+                      <span class="combo-icon"
+                        ><svg
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                          stroke-linecap="round"
+                        >
+                          <path d="M4 6l4 4 4-4" /></svg
+                      ></span>
+                    </div>
+                    <div class="combo-dropdown" id="tgtDropdown"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Branches -->
+              <div class="field-row" style="margin-top: 14px">
+                <div class="field">
+                  <label class="field-label">Source-ветка</label>
+                  <input
+                    class="input mono"
+                    id="srcBranch"
+                    type="text"
+                    placeholder="main"
+                    value="main"
+                  />
+                </div>
+                <div class="field-row-sep">
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                  >
+                    <path d="M3 8h10M9 4l4 4-4 4" />
+                  </svg>
+                </div>
+                <div class="field">
+                  <label class="field-label">Target-ветка</label>
+                  <input
+                    class="input mono"
+                    id="tgtBranch"
+                    type="text"
+                    placeholder="main"
+                    value="main"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- ФИЛЬТРЫ -->
+            <div class="form-section">
+              <div class="section-label">Фильтры</div>
+              <div class="field">
+                <label class="field-label">
+                  Исключить файлы
+                  <span class="optional">— необязательно</span>
+                </label>
+                <div class="chip-field" id="excludeChipField">
+                  <!-- chips injected here -->
+                  <input
+                    class="chip-input"
+                    id="excludeInput"
+                    type="text"
+                    placeholder="добавьте паттерн и нажмите Enter"
+                  />
+                </div>
+                <div class="field-hint">
+                  Синтаксис gitignore · по одному паттерну. Например:
+                  <code
+                    style="
+                      font-family: 'JetBrains Mono', monospace;
+                      font-size: 11px;
+                      color: var(--text-dim);
+                    "
+                    >**/*.png</code
+                  >,
+                  <code
+                    style="
+                      font-family: 'JetBrains Mono', monospace;
+                      font-size: 11px;
+                      color: var(--text-dim);
+                    "
+                    >docs/internal/**</code
+                  >
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="form-footer">
+              <button
+                type="button"
+                class="btn-secondary"
+                onclick="location.href = 'DocFlow Repositories.html'"
+              >
+                Отмена
+              </button>
+              <button type="submit" class="btn-primary" id="createBtn">
+                <span class="btn-label">Создать проект</span>
+                <span class="spinner"></span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </main>
+    </div>
+
+    <!-- ═══════════════════════════════
+     WEBHOOK SECRET MODAL
+═══════════════════════════════ -->
+    <div class="modal-backdrop" id="webhookModal" role="dialog" aria-modal="true">
+      <div class="modal" id="modalBox">
+        <div class="modal-header">
+          <div class="modal-title">Сохраните webhook secret</div>
+        </div>
+        <div class="modal-body">
+          <div class="warn-banner">
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            >
+              <path d="M8 3l6 10H2L8 3z" />
+              <path d="M8 7v3" />
+              <circle cx="8" cy="12.5" r="0.5" fill="currentColor" />
+            </svg>
+            <div class="warn-banner-text">
+              <strong>Секрет показывается только один раз.</strong> Скопируйте и сохраните в
+              безопасном месте — после закрытия этого окна он не будет доступен.
+            </div>
+          </div>
+
+          <!-- Secret value -->
+          <div class="secret-group">
+            <div class="secret-label">Webhook secret</div>
+            <div class="secret-field">
+              <input class="secret-value" id="secretValue" type="text" readonly />
+              <button
+                type="button"
+                class="secret-copy"
+                id="copySecretBtn"
+                onclick="copyField('secretValue', 'copySecretBtn', 'toast')"
+              >
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="5.5" y="5.5" width="8" height="8" rx="1" />
+                  <path d="M3.5 10.5H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h6.5a1 1 0 0 1 1 1v.5" />
+                </svg>
+                Скопировать
+              </button>
+            </div>
+          </div>
+
+          <!-- GitHub setup steps -->
+          <div>
+            <div class="steps-section-title">Настройка webhook в GitHub</div>
+            <div class="steps">
+              <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-text">
+                  Откройте <strong style="color: var(--text)">Settings → Webhooks</strong> вашего
+                  source-репозитория и нажмите
+                  <strong style="color: var(--text)">Add webhook</strong>.
+                </div>
+              </div>
+              <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-text">
+                  Payload URL — вставьте:
+                  <div class="url-field">
+                    <span class="url-value" id="webhookUrl"
+                      >https://docflow.app/webhooks/gh/evt</span
+                    >
+                    <button
+                      type="button"
+                      class="url-copy"
+                      id="copyUrlBtn"
+                      onclick="copyField('webhookUrl', 'copyUrlBtn', 'toast2')"
+                    >
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="5.5" y="5.5" width="8" height="8" rx="1" />
+                        <path d="M3.5 10.5H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h6.5a1 1 0 0 1 1 1v.5" />
+                      </svg>
+                      Скопировать
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-text">Content type: <code>application/json</code></div>
+              </div>
+              <div class="step">
+                <div class="step-num">4</div>
+                <div class="step-text">Secret: вставьте секрет из поля выше.</div>
+              </div>
+              <div class="step">
+                <div class="step-num">5</div>
+                <div class="step-text">Which events: <code>Just the push event</code>.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-primary" id="modalDoneBtn" onclick="closeModal()">
+            <span class="btn-label">Готово</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toasts -->
+    <div class="toast" id="toast">
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+      >
+        <path d="m3 8 4 4 7-8" />
+      </svg>
+      <span>Скопировано</span>
+    </div>
+    <div class="toast" id="toast2">
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+      >
+        <path d="m3 8 4 4 7-8" />
+      </svg>
+      <span>URL скопирован</span>
+    </div>
+
+    <script>
+      // ─── Mock repo data ───
+      const REPOS = [
+        { owner: 'bitrix24', repo: 'crm-api-docs', visibility: 'public' },
+        { owner: 'bitrix24', repo: 'crm-api-docs-en', visibility: 'public' },
+        { owner: 'bitrix24', repo: 'dev-guides', visibility: 'public' },
+        { owner: 'bitrix24', repo: 'dev-guides-en', visibility: 'public' },
+        { owner: 'bitrix24', repo: 'tasks-api', visibility: 'private' },
+        { owner: 'bitrix24', repo: 'tasks-api-en', visibility: 'private' },
+        { owner: 'bitrix24', repo: 'calendar-api', visibility: 'public' },
+        { owner: 'bitrix24', repo: 'calendar-api-en', visibility: 'public' },
+        { owner: 'bitrix24', repo: 'disk-api', visibility: 'private' },
+        { owner: 'bitrix24', repo: 'webhook-docs', visibility: 'archived' },
+        { owner: 'bitrix24', repo: 'internal-tools', visibility: 'private' },
+        { owner: 'anna-kuz', repo: 'docflow-sandbox', visibility: 'private' },
+      ]
+
+      const ICON_LOCK = `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3.5" y="7.5" width="9" height="7" rx="1"/><path d="M5.5 7.5V5a2.5 2.5 0 0 1 5 0v2.5"/></svg>`
+      const ICON_GLOBE = `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5C6.5 4 5.5 6 5.5 8s1 4 2.5 5.5M8 2.5C9.5 4 10.5 6 10.5 8s-1 4-2.5 5.5M2.5 8h11"/></svg>`
+      const ICON_ARCHIVE = `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3.5" width="12" height="3"/><path d="M3 6.5v6h10v-6M6 9.5h4"/></svg>`
+
+      function visIcon(v) {
+        return v === 'private' ? ICON_LOCK : v === 'archived' ? ICON_ARCHIVE : ICON_GLOBE
+      }
+      function visBadge(v) {
+        const map = { private: 'private', archived: 'archived', public: '' }
+        if (!v || v === 'public') return ''
+        return `<span class="badge ${map[v]}">${v}</span>`
+      }
+
+      // ─── Combobox factory ───
+      function makeCombo(inputId, dropdownId) {
+        const input = document.getElementById(inputId)
+        const dropdown = document.getElementById(dropdownId)
+        let focusedIdx = -1
+
+        function render(query) {
+          const q = query.toLowerCase()
+          let matches = REPOS.filter((r) => {
+            const full = r.owner + '/' + r.repo
+            return !q || full.includes(q) || r.repo.includes(q)
+          }).slice(0, 10)
+
+          if (matches.length === 0) {
+            dropdown.innerHTML =
+              '<div class="combo-loading" style="color:var(--text-dimmer);">Ничего не найдено</div>'
+          } else {
+            dropdown.innerHTML = matches
+              .map(
+                (r, i) => `
+        <div class="combo-option" data-idx="${i}" data-full="${r.owner}/${r.repo}" role="option">
+          <span>${visIcon(r.visibility)}</span>
+          <span class="mono"><span class="owner">${r.owner}/</span>${r.repo}</span>
+          ${visBadge(r.visibility)}
+        </div>
+      `,
+              )
+              .join('')
+
+            dropdown.querySelectorAll('.combo-option').forEach((opt) => {
+              opt.addEventListener('mousedown', (e) => {
+                e.preventDefault()
+                select(opt.dataset.full)
+              })
+            })
+          }
+
+          dropdown.classList.add('open')
+          focusedIdx = -1
+        }
+
+        function select(value) {
+          input.value = value
+          dropdown.classList.remove('open')
+          focusedIdx = -1
+        }
+
+        function navigate(dir) {
+          const opts = [...dropdown.querySelectorAll('.combo-option')]
+          if (!opts.length) return
+          opts.forEach((o) => o.classList.remove('focused'))
+          focusedIdx = Math.max(0, Math.min(opts.length - 1, focusedIdx + dir))
+          opts[focusedIdx]?.classList.add('focused')
+        }
+
+        input.addEventListener('input', () => render(input.value))
+        input.addEventListener('focus', () => render(input.value))
+        input.addEventListener('blur', () =>
+          setTimeout(() => dropdown.classList.remove('open'), 150),
+        )
+        input.addEventListener('keydown', (e) => {
+          if (!dropdown.classList.contains('open')) return
+          if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            navigate(1)
+          }
+          if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            navigate(-1)
+          }
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            const focused = dropdown.querySelector('.combo-option.focused')
+            if (focused) select(focused.dataset.full)
+          }
+          if (e.key === 'Escape') dropdown.classList.remove('open')
+        })
+      }
+
+      makeCombo('srcRepoInput', 'srcDropdown')
+      makeCombo('tgtRepoInput', 'tgtDropdown')
+
+      // ─── Chip input ───
+      const chips = []
+      const chipField = document.getElementById('excludeChipField')
+      const chipInput = document.getElementById('excludeInput')
+
+      function renderChips() {
+        // Remove existing chips (keep input)
+        chipField.querySelectorAll('.chip').forEach((c) => c.remove())
+        chips.forEach((val, i) => {
+          const el = document.createElement('div')
+          el.className = 'chip'
+          el.innerHTML = `<span>${val}</span><button type="button" class="chip-remove" data-i="${i}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>`
+          chipField.insertBefore(el, chipInput)
+        })
+        chipField.querySelectorAll('.chip-remove').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            chips.splice(Number(btn.dataset.i), 1)
+            renderChips()
+          })
+        })
+      }
+
+      chipInput.addEventListener('keydown', (e) => {
+        const val = chipInput.value.trim()
+        if ((e.key === 'Enter' || e.key === ',') && val) {
+          e.preventDefault()
+          chips.push(val)
+          chipInput.value = ''
+          renderChips()
+        }
+        if (e.key === 'Backspace' && !chipInput.value && chips.length) {
+          chips.pop()
+          renderChips()
+        }
+      })
+      chipField.addEventListener('click', () => chipInput.focus())
+
+      // ─── Copy helper ───
+      function copyField(textElId, btnId, toastId) {
+        const el = document.getElementById(textElId)
+        const btn = document.getElementById(btnId)
+        const toast = document.getElementById(toastId)
+        const val = el.value || el.textContent
+        navigator.clipboard.writeText(val).catch(() => {
+          const ta = document.createElement('textarea')
+          ta.value = val
+          document.body.appendChild(ta)
+          ta.select()
+          document.execCommand('copy')
+          document.body.removeChild(ta)
+        })
+        btn.classList.add('copied')
+        setTimeout(() => btn.classList.remove('copied'), 1600)
+        toast.classList.add('show')
+        setTimeout(() => toast.classList.remove('show'), 2200)
+      }
+
+      // ─── Modal ───
+      function openModal(secret) {
+        document.getElementById('secretValue').value = secret
+        document.getElementById('webhookModal').classList.add('open')
+      }
+      function closeModal() {
+        document.getElementById('webhookModal').classList.remove('open')
+        setTimeout(() => (location.href = 'DocFlow Repositories.html'), 250)
+      }
+
+      // Prevent closing on backdrop click (per spec)
+      document.getElementById('webhookModal').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) {
+          // shake modal
+          const box = document.getElementById('modalBox')
+          box.style.animation = 'shake 0.3s ease'
+          setTimeout(() => (box.style.animation = ''), 310)
+        }
+      })
+
+      // ─── Form submit ───
+      document.getElementById('mainForm').addEventListener('submit', (e) => {
+        e.preventDefault()
+        const btn = document.getElementById('createBtn')
+        btn.classList.add('loading')
+        btn.disabled = true
+        setTimeout(() => {
+          btn.classList.remove('loading')
+          btn.disabled = false
+          const secret =
+            'whsec_' +
+            Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+          openModal(secret)
+        }, 1300)
+      })
+    </script>
+
+    <style>
+      @keyframes shake {
+        0%,
+        100% {
+          transform: translateX(0) scale(1);
+        }
+        20% {
+          transform: translateX(-6px) scale(1);
+        }
+        40% {
+          transform: translateX(6px) scale(1);
+        }
+        60% {
+          transform: translateX(-4px) scale(1);
+        }
+        80% {
+          transform: translateX(4px) scale(1);
+        }
+      }
+    </style>
+  </body>
+</html>

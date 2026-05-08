@@ -1,0 +1,12 @@
+{
+  "work_section": "РАБОТА",
+  "config_section": "КОНФИГУРАЦИЯ",
+  "tasks": "Задачи",
+  "history": "История",
+  "analytics": "Аналитика",
+  "repositories": "Репозитории",
+  "dictionaries": "Словари",
+  "settings": "Настройки",
+  "github_connected": "GitHub подключён",
+  "github_disconnected": "GitHub не подключён"
+}

@@ -2,25 +2,63 @@
 
 ## Стек
 
-| Пакет                                         | Версия | Роль                             |
-| --------------------------------------------- | ------ | -------------------------------- |
-| React                                         | 19     | UI                               |
-| TypeScript                                    | 6      | Типизация                        |
-| Vite                                          | 8      | Сборка                           |
-| react-router-dom                              | 7      | Роутинг                          |
-| @reduxjs/toolkit                              | 2      | State + RTK Query                |
-| react-redux                                   | 9      | React-интеграция Redux           |
-| axios                                         | 1      | HTTP (baseQuery)                 |
-| dayjs                                         | latest | Форматирование дат               |
-| @codemirror/view, state, lang-markdown, merge | 6      | Diff-редактор                    |
-| react-hook-form                               | 7      | Формы                            |
-| @hookform/resolvers                           | 5      | Интеграция react-hook-form + zod |
-| zod                                           | 3      | Валидация схем + вывод типов     |
-| recharts                                      | 2      | Графики (Analytics)              |
-| sonner                                        | 2      | Toast-уведомления                |
-| clsx                                          | 2      | Условные CSS-классы              |
-| @radix-ui/react-dialog                        | 1      | Accessible модалки               |
-| lucide-react                                  | 0.x    | Иконки (tree-shakeable SVG)      |
+### Ядро
+
+| Пакет               | Версия | Роль                     |
+| ------------------- | ------ | ------------------------ |
+| React               | 19     | UI                       |
+| TypeScript          | 6      | Типизация                |
+| Vite                | 8      | Сборка                   |
+| react-router-dom    | 7      | Роутинг                  |
+| @reduxjs/toolkit    | 2      | State + RTK Query        |
+| react-redux         | 9      | React-интеграция Redux   |
+| axios               | 1      | HTTP (baseQuery)         |
+| dayjs               | latest | Форматирование дат       |
+| react-hook-form     | 7      | Формы                    |
+| @hookform/resolvers | 5      | RHF + zod                |
+| zod                 | 4      | Валидация схем + типы    |
+| recharts            | 3      | Графики (Analytics)      |
+| sonner              | 2      | Toast-уведомления        |
+| clsx                | 2      | Условные CSS-классы      |
+| lucide-react        | latest | Иконки (SVG, tree-shake) |
+
+### Diff / редактор
+
+| Пакет                                         | Версия | Роль          |
+| --------------------------------------------- | ------ | ------------- |
+| @codemirror/view, state, lang-markdown, merge | 6      | Diff-редактор |
+
+### Radix UI (accessible примитивы)
+
+| Пакет                         | Где используется                    |
+| ----------------------------- | ----------------------------------- |
+| @radix-ui/react-dialog        | Модалки (Onboarding, Confirm)       |
+| @radix-ui/react-tabs          | TaskDetail (Diff / Logs / Conflict) |
+| @radix-ui/react-dropdown-menu | Меню действий по задаче             |
+| @radix-ui/react-tooltip       | Hover на SHA, статусы, пути         |
+| @radix-ui/react-checkbox      | Batch-select задач                  |
+| @radix-ui/react-select        | Стилизуемые dropdown-фильтры        |
+| @radix-ui/react-popover       | Date picker, фильтры                |
+| @radix-ui/react-progress      | Прогресс-бар пайплайна              |
+
+### Дополнительные UX-библиотеки
+
+| Пакет                       | Назначение                                     |
+| --------------------------- | ---------------------------------------------- |
+| @tanstack/react-virtual     | Виртуализация длинных списков (TaskList, логи) |
+| cmdk                        | Командная палитра (`Cmd+K` навигация)          |
+| react-hotkeys-hook          | Горячие клавиши (`g t` → tasks, `Esc` → close) |
+| react-day-picker            | Date picker (Analytics, History фильтры)       |
+| react-markdown + remark-gfm | Preview-вкладка markdown в TaskDetail          |
+| shiki                       | Подсветка code-блоков в markdown preview       |
+| framer-motion               | Анимации переходов и появления                 |
+| papaparse                   | Экспорт Analytics в CSV                        |
+
+### Observability
+
+| Пакет         | Роль                                |
+| ------------- | ----------------------------------- |
+| @sentry/react | Error tracking, source maps в проде |
 
 CSS-фреймворк не используется — чистый CSS + CSS Modules.
 React Query и Zustand не используются — server state через RTK Query, client state через slices.
@@ -152,9 +190,45 @@ CSS-переменные (`src/app/styles/vars.css`):
 
 Шрифты: Inter — UI, JetBrains Mono — пути, SHA, код, логи.
 
+## Тестирование
+
+| Пакет                       | Назначение                                 |
+| --------------------------- | ------------------------------------------ |
+| vitest                      | Unit / integration runner (нативно с Vite) |
+| jsdom                       | DOM-окружение для vitest                   |
+| @testing-library/react      | Рендер компонентов в тестах                |
+| @testing-library/user-event | Имитация действий пользователя             |
+| @testing-library/jest-dom   | Custom matchers (`toBeInTheDocument`)      |
+| msw                         | Мок API на уровне network (для RTK Query)  |
+| @playwright/test            | E2E-тесты (login → publish flow)           |
+
+Запуск:
+
+```bash
+npm run test           # unit + integration через vitest
+npm run test:watch     # watch mode
+npm run e2e            # playwright (после реализации)
+```
+
 ## Инструменты
 
 - ESLint: TypeScript + react-hooks + unused-imports
 - Prettier
 - Husky + lint-staged: pre-commit форматирование и линтинг
 - TypeScript: strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes
+- rollup-plugin-visualizer: `npm run build` — генерирует `stats.html` с разбивкой бандла
+
+## Observability
+
+`@sentry/react` инициализируется в `app/main.tsx` при `import.meta.env.PROD`:
+
+```ts
+Sentry.init({
+  dsn: import.meta.env.VITE_SENTRY_DSN,
+  environment: import.meta.env.MODE,
+  tracesSampleRate: 0.1,
+})
+```
+
+DSN задаётся через переменную окружения `VITE_SENTRY_DSN` в `.env.production`.
+В dev Sentry выключен.

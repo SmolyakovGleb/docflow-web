@@ -1,0 +1,2343 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1440" />
+    <title>DocFlow — crm-deal-get.md</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0f0f0f;
+        --surface: #161616;
+        --surface-hover: #1e1e1e;
+        --border: #262626;
+        --border-soft: #1e1e1e;
+        --text: #ededed;
+        --text-dim: #888;
+        --text-dimmer: #555;
+        --text-path-dim: #444;
+        --accent: #ffffff;
+        --diff-bg: rgba(255, 255, 255, 0.025);
+        --diff-bg-strong: rgba(255, 255, 255, 0.04);
+        --conflict: #d97757;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          system-ui,
+          sans-serif;
+        font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        font-size: 14px;
+        line-height: 1.5;
+        letter-spacing: -0.005em;
+      }
+
+      button {
+        font-family: inherit;
+        color: inherit;
+        background: none;
+        border: none;
+        cursor: pointer;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        min-height: 100vh;
+      }
+
+      /* ---------------- Sidebar ---------------- */
+      .sidebar {
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        padding: 22px 14px 18px;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px 26px;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .wordmark-glyph {
+        width: 12px;
+        height: 12px;
+        color: var(--text);
+      }
+      .nav {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        border-radius: 5px;
+        color: var(--text-dimmer);
+        font-size: 13.5px;
+        font-weight: 500;
+        cursor: pointer;
+        transition:
+          background 120ms ease,
+          color 120ms ease;
+      }
+      .nav-item:hover {
+        color: #aaa;
+      }
+      .nav-item.active {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text);
+      }
+      .nav-item .count {
+        margin-left: auto;
+        font-size: 12px;
+        color: var(--text-dim);
+        font-variant-numeric: tabular-nums;
+      }
+      .nav-item.active .count {
+        color: #888;
+      }
+      .nav-item svg {
+        width: 15px;
+        height: 15px;
+        flex-shrink: 0;
+      }
+      .nav-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 10px 10px 14px;
+      }
+      .nav-section-label {
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: #333;
+        text-transform: uppercase;
+        padding: 0 10px 6px;
+        font-weight: 500;
+      }
+      .sidebar-footer {
+        margin-top: auto;
+        padding: 14px 6px 0;
+        border-top: 1px solid var(--border);
+      }
+      .user {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 4px;
+      }
+      .avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: #2a2a2a;
+        color: var(--text);
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .user-name {
+        font-size: 12.5px;
+        color: var(--text);
+        font-weight: 500;
+      }
+      .user-status {
+        font-size: 11px;
+        color: var(--text-dim);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .gh-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #4ade80;
+        box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+      }
+
+      /* ---------------- Main ---------------- */
+      .main {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      /* ---------------- Sticky header ---------------- */
+      .detail-header {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        padding: 22px 32px 0;
+      }
+      .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-dim);
+        font-size: 12.5px;
+        margin-bottom: 14px;
+      }
+      .breadcrumb a {
+        color: var(--text-dim);
+        transition: color 120ms ease;
+      }
+      .breadcrumb a:hover {
+        color: var(--text);
+      }
+      .breadcrumb .crumb-sep {
+        color: #333;
+      }
+      .breadcrumb .crumb-path {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+      }
+      .breadcrumb .crumb-path .dir {
+        color: var(--text-path-dim);
+      }
+      .breadcrumb .crumb-path .file {
+        color: var(--text);
+      }
+
+      .detail-title-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 32px;
+        padding-bottom: 18px;
+      }
+      .detail-title {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 22px;
+        font-weight: 500;
+        color: var(--text);
+        letter-spacing: -0.01em;
+        margin-bottom: 8px;
+      }
+      .detail-meta {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        color: var(--text-dim);
+        font-size: 12.5px;
+        flex-wrap: wrap;
+      }
+      .detail-meta > span + span::before {
+        content: '·';
+        margin: 0 10px;
+        color: #333;
+      }
+      .detail-meta .commit-sha {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11.5px;
+        color: var(--text);
+        background: #1c1c1c;
+        padding: 1px 6px;
+        border-radius: 3px;
+      }
+      .detail-meta .author {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text);
+      }
+      .author-mini-avatar {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #2a2a2a;
+        color: var(--text);
+        display: inline-grid;
+        place-items: center;
+        font-size: 9px;
+        font-weight: 600;
+      }
+
+      .detail-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+      }
+
+      /* Status badge */
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 11.5px;
+        font-weight: 500;
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+      }
+      .status-badge .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--text-dim);
+      }
+      .status-badge.done {
+        color: var(--text);
+        border-color: #2e2e2e;
+      }
+      .status-badge.done .dot {
+        background: var(--text);
+      }
+      .status-badge.running {
+        color: #fff;
+        border-color: #2e2e2e;
+      }
+      .status-badge.running .dot {
+        background: #fff;
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      .status-badge.failed .dot {
+        background: var(--conflict);
+      }
+      .status-badge.failed {
+        color: var(--conflict);
+        border-color: rgba(217, 119, 87, 0.3);
+      }
+      .status-badge.conflict .dot {
+        background: var(--conflict);
+      }
+      .status-badge.conflict {
+        color: var(--conflict);
+        border-color: rgba(217, 119, 87, 0.3);
+      }
+      .status-badge.published {
+        color: var(--text-dim);
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.3;
+        }
+      }
+
+      /* Buttons */
+      .btn {
+        border: 1px solid var(--accent);
+        background: var(--accent);
+        color: #0f0f0f;
+        padding: 6px 14px;
+        border-radius: 4px;
+        font-size: 12.5px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 120ms ease;
+      }
+      .btn:hover {
+        background: #f5f5f5;
+      }
+      .btn svg {
+        width: 12px;
+        height: 12px;
+      }
+      .btn-secondary {
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text);
+        padding: 6px 14px;
+        border-radius: 4px;
+        font-size: 12.5px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition:
+          border-color 120ms ease,
+          background 120ms ease;
+      }
+      .btn-secondary:hover {
+        border-color: #3a3a3a;
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .btn-secondary svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      /* Tabs */
+      .detail-tabs {
+        display: flex;
+        gap: 0;
+        margin-top: 4px;
+      }
+      .detail-tab {
+        padding: 10px 0;
+        margin-right: 22px;
+        color: var(--text-dim);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        border-bottom: 1px solid transparent;
+        margin-bottom: -1px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: color 120ms ease;
+      }
+      .detail-tab:hover {
+        color: var(--text);
+      }
+      .detail-tab.active {
+        color: var(--text);
+        border-bottom-color: var(--text);
+      }
+      .detail-tab .tab-count {
+        color: var(--text-dimmer);
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+      }
+      .detail-tab.active .tab-count {
+        color: var(--text-dim);
+      }
+      .detail-tab .tab-conflict-icon {
+        width: 12px;
+        height: 12px;
+        color: var(--conflict);
+      }
+
+      /* ---------------- Diff view ---------------- */
+      .diff-wrap {
+        display: grid;
+        grid-template-columns: 1fr 1px 1fr;
+        flex: 1;
+        min-height: 0;
+      }
+      .diff-col {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        background: var(--bg);
+      }
+      .diff-divider {
+        background: var(--border);
+      }
+      .diff-col-header {
+        padding: 10px 22px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #121212;
+      }
+      .diff-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .diff-pill .lang {
+        color: var(--text);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .diff-pill.editable .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #4ade80;
+        box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+      }
+      .diff-pill.readonly .lock {
+        width: 11px;
+        height: 11px;
+        color: var(--text-dimmer);
+      }
+      .diff-col-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--text-dimmer);
+        font-size: 11.5px;
+      }
+      .diff-icon-btn {
+        color: var(--text-dimmer);
+        padding: 3px;
+        transition: color 120ms ease;
+      }
+      .diff-icon-btn:hover {
+        color: var(--text);
+      }
+      .diff-icon-btn svg {
+        width: 13px;
+        height: 13px;
+        display: block;
+      }
+
+      .diff-body {
+        flex: 1;
+        overflow-y: auto;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12.5px;
+        line-height: 1.7;
+        padding: 16px 0;
+      }
+      .diff-line {
+        display: grid;
+        grid-template-columns: 48px 1fr;
+        padding: 0 22px 0 0;
+      }
+      .diff-line .ln {
+        color: #2e2e2e;
+        text-align: right;
+        padding-right: 14px;
+        user-select: none;
+        font-variant-numeric: tabular-nums;
+      }
+      .diff-line .content {
+        color: #c8c8c8;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .diff-line.changed {
+        background: var(--diff-bg);
+      }
+      .diff-line.changed .ln {
+        color: #4a4a4a;
+      }
+      .diff-line.heading .content {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .diff-line.code .content {
+        color: #b8b8b8;
+      }
+      .diff-line .tok-md {
+        color: #555;
+      }
+      .diff-line .tok-link {
+        color: #999;
+      }
+      .diff-line .tok-code {
+        color: var(--text);
+        background: #1a1a1a;
+        padding: 0 4px;
+        border-radius: 2px;
+      }
+      .diff-line.cursor .content::after {
+        content: '';
+        display: inline-block;
+        width: 1.5px;
+        height: 14px;
+        background: var(--text);
+        vertical-align: middle;
+        margin-left: 1px;
+        animation: blink 1s step-end infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      .diff-footer {
+        padding: 10px 22px;
+        border-top: 1px solid var(--border);
+        color: var(--text-dimmer);
+        font-size: 11.5px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: #121212;
+      }
+      .diff-footer .sep {
+        color: #2a2a2a;
+      }
+      .diff-footer .stat {
+        color: var(--text-dim);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Save floating */
+      .save-bar {
+        position: fixed;
+        bottom: 24px;
+        right: 32px;
+        background: rgba(26, 26, 26, 0.92);
+        border: 1px solid #2e2e2e;
+        border-radius: 8px;
+        padding: 8px 8px 8px 16px;
+        display: none;
+        align-items: center;
+        gap: 14px;
+        z-index: 100;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+        font-size: 12.5px;
+      }
+      .save-bar.visible {
+        display: flex;
+      }
+      .save-bar-text {
+        color: var(--text-dim);
+      }
+      .save-bar-text strong {
+        color: var(--text);
+        font-weight: 500;
+      }
+
+      /* ---------------- Logs view ---------------- */
+      .logs-wrap {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: #0a0a0a;
+      }
+      .logs-toolbar {
+        padding: 12px 32px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #121212;
+        font-size: 12px;
+        color: var(--text-dim);
+      }
+      .logs-runtime {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+      }
+      .logs-runtime .runtime-label {
+        color: var(--text-dim);
+        font-family: 'Inter', sans-serif;
+      }
+      .logs-runtime.running::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--text);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      .logs-tools {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+      }
+
+      .logs-body {
+        flex: 1;
+        overflow-y: auto;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12.5px;
+        line-height: 1.75;
+        padding: 18px 32px 80px;
+      }
+      .log-stage {
+        margin-bottom: 14px;
+      }
+      .log-stage-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text);
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+      .log-stage-header .arrow {
+        color: var(--text-dimmer);
+      }
+      .log-stage-header .name {
+        letter-spacing: 0.01em;
+      }
+      .log-stage-header .timing {
+        margin-left: auto;
+        color: var(--text-dimmer);
+        font-size: 11.5px;
+        font-variant-numeric: tabular-nums;
+      }
+      .log-stage-header .stage-mark {
+        color: var(--text);
+      }
+      .log-stage-header.running .stage-mark {
+        color: var(--text);
+      }
+      .log-stage-header.pending .stage-mark {
+        color: var(--text-dimmer);
+      }
+      .log-stage-header.pending .name {
+        color: var(--text-dimmer);
+      }
+      .log-line {
+        color: #888;
+        padding-left: 22px;
+        white-space: pre;
+      }
+      .log-line .ok {
+        color: #4ade80;
+      }
+      .log-line .num {
+        color: var(--text);
+      }
+      .log-line .dim {
+        color: #555;
+      }
+      .log-line .running-cursor::after {
+        content: '▋';
+        color: var(--text);
+        animation: blink 0.9s step-end infinite;
+        margin-left: 2px;
+      }
+
+      /* ---------------- Conflict view ---------------- */
+      .conflict-wrap {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        flex: 1;
+        min-height: 0;
+        column-gap: 1px;
+        background: var(--border);
+      }
+      .conflict-col {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        background: var(--bg);
+      }
+      .conflict-col-header {
+        padding: 10px 18px;
+        border-bottom: 1px solid var(--border);
+        background: #121212;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .conflict-col-title {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .conflict-col-title .role {
+        color: var(--text);
+      }
+      .conflict-col-author {
+        font-size: 11px;
+        color: var(--text-dimmer);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .conflict-col-author .avatar-tiny {
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        background: #2a2a2a;
+        color: var(--text);
+        display: inline-grid;
+        place-items: center;
+        font-size: 8px;
+        font-weight: 600;
+      }
+      .conflict-body {
+        flex: 1;
+        overflow-y: auto;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        line-height: 1.75;
+        padding: 14px 0 80px;
+      }
+      .cf-line {
+        display: grid;
+        grid-template-columns: 38px 1fr;
+        padding: 0 14px 0 0;
+        position: relative;
+      }
+      .cf-line .ln {
+        color: #2e2e2e;
+        text-align: right;
+        padding-right: 10px;
+        user-select: none;
+      }
+      .cf-line .content {
+        color: #c0c0c0;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .cf-line.diff {
+        background: rgba(217, 119, 87, 0.06);
+        border-left: 2px solid var(--conflict);
+        padding-left: 0;
+      }
+      .cf-line.diff.accepted-ours {
+        background: rgba(74, 222, 128, 0.06);
+        border-left-color: #4ade80;
+      }
+      .cf-line.diff.accepted-theirs {
+        background: rgba(255, 255, 255, 0.04);
+        border-left-color: var(--text);
+      }
+
+      .cf-hunk {
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        margin: 6px 0;
+        background: rgba(217, 119, 87, 0.03);
+        position: relative;
+      }
+      .cf-hunk-actions {
+        position: sticky;
+        top: 0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+        padding: 6px 14px;
+        background: rgba(20, 20, 20, 0.95);
+        border-bottom: 1px dashed rgba(217, 119, 87, 0.2);
+        z-index: 1;
+      }
+      .cf-action {
+        font-size: 10.5px;
+        color: var(--text-dim);
+        border: 1px solid var(--border);
+        padding: 2px 7px;
+        border-radius: 3px;
+        font-family: 'Inter', sans-serif;
+        transition:
+          border-color 120ms,
+          color 120ms;
+      }
+      .cf-action:hover {
+        border-color: var(--text);
+        color: var(--text);
+      }
+      .cf-action.accepted {
+        border-color: rgba(74, 222, 128, 0.4);
+        color: #4ade80;
+        background: rgba(74, 222, 128, 0.06);
+      }
+
+      .conflict-bar {
+        border-top: 1px solid var(--border);
+        background: #121212;
+        padding: 12px 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        bottom: 0;
+        z-index: 30;
+      }
+      .conflict-bar-status {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--text-dim);
+        font-size: 12.5px;
+      }
+      .conflict-bar-status .resolved-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #2e2e2e;
+      }
+      .conflict-bar-status.resolved {
+        color: #4ade80;
+      }
+      .conflict-bar-status.resolved .resolved-dot {
+        background: #4ade80;
+        box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+      }
+      .conflict-bar-progress {
+        color: var(--text-dimmer);
+        font-size: 11.5px;
+        font-variant-numeric: tabular-nums;
+      }
+      .btn:disabled,
+      .btn[disabled] {
+        background: #1e1e1e;
+        border-color: #1e1e1e;
+        color: #555;
+        cursor: not-allowed;
+      }
+
+      /* ---------------- Queued empty state (Diff right pane) ---------------- */
+      .queued-empty {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 40px;
+        color: var(--text-dim);
+        text-align: center;
+      }
+      .queued-empty .clock-icon {
+        width: 32px;
+        height: 32px;
+        color: var(--text-dimmer);
+        opacity: 0.6;
+      }
+      .queued-empty .title {
+        color: var(--text);
+        font-size: 13.5px;
+        font-weight: 500;
+      }
+      .queued-empty .subtitle {
+        font-size: 12.5px;
+        color: var(--text-dim);
+        max-width: 280px;
+        line-height: 1.6;
+      }
+      .queued-empty .countdown {
+        margin-top: 6px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11.5px;
+        color: var(--text);
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ---------------- Published external link ---------------- */
+      .published-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--text-dim);
+        font-size: 12px;
+        padding: 4px 0;
+        transition: color 120ms ease;
+      }
+      .published-link:hover {
+        color: var(--text);
+      }
+      .published-link svg {
+        width: 11px;
+        height: 11px;
+      }
+      .published-link .commit-link {
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--text);
+      }
+
+      /* ---------------- Conflict view v2 (3 read-only top + editor bottom) ---------------- */
+      .conflict-v2 {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+      }
+      .conflict-readonly-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        column-gap: 1px;
+        background: var(--border);
+        flex: 1 1 50%;
+        min-height: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .conflict-readonly-row .conflict-col {
+        background: var(--bg);
+      }
+      .conflict-readonly-row .conflict-body {
+        padding: 12px 0 20px;
+        font-size: 11.5px;
+        line-height: 1.7;
+      }
+
+      .conflict-editor {
+        flex: 1 1 50%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        background: #0a0a0a;
+      }
+      .conflict-editor-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 22px;
+        border-bottom: 1px solid var(--border);
+        background: #121212;
+        gap: 16px;
+      }
+      .conflict-editor-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .conflict-editor-pill .lang {
+        color: var(--text);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .conflict-editor-pill .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #4ade80;
+        box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+      }
+      .source-toggle {
+        display: inline-flex;
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 2px;
+        font-size: 11.5px;
+      }
+      .source-toggle label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 4px;
+        color: var(--text-dim);
+        cursor: pointer;
+        transition:
+          background 120ms ease,
+          color 120ms ease;
+        user-select: none;
+      }
+      .source-toggle input {
+        display: none;
+      }
+      .source-toggle input:checked + span {
+        background: #2a2a2a;
+        color: var(--text);
+        padding: 4px 10px;
+        border-radius: 4px;
+        margin: -4px -10px;
+      }
+      .source-toggle label:hover {
+        color: var(--text);
+      }
+      .source-toggle .src-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--text-dim);
+      }
+      .source-toggle input:checked ~ span .src-dot {
+        background: var(--text);
+      }
+
+      .conflict-editor-body {
+        flex: 1;
+        overflow-y: auto;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12.5px;
+        line-height: 1.75;
+        padding: 14px 0;
+        outline: none;
+      }
+      .conflict-editor-body .ce-line {
+        display: grid;
+        grid-template-columns: 38px 1fr;
+        padding: 0 22px 0 0;
+      }
+      .conflict-editor-body .ce-line .ln {
+        color: #2e2e2e;
+        text-align: right;
+        padding-right: 12px;
+        user-select: none;
+        font-variant-numeric: tabular-nums;
+      }
+      .conflict-editor-body .ce-line.cursor .content::after {
+        content: '';
+        display: inline-block;
+        width: 1.5px;
+        height: 14px;
+        background: var(--text);
+        vertical-align: middle;
+        margin-left: 1px;
+        animation: blink 1s step-end infinite;
+      }
+      .conflict-editor-body .ce-line .content {
+        color: #c8c8c8;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .conflict-editor-body .ce-line.edited {
+        background: rgba(74, 222, 128, 0.05);
+      }
+      .conflict-editor-body .ce-line.edited .ln {
+        color: rgba(74, 222, 128, 0.4);
+      }
+
+      .conflict-editor-bar {
+        border-top: 1px solid var(--border);
+        background: #121212;
+        padding: 12px 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .conflict-editor-bar-text {
+        color: var(--text-dim);
+        font-size: 12.5px;
+      }
+
+      /* ---------------- Modal: retry-conflict dialog ---------------- */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(2px);
+        z-index: 300;
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-backdrop.visible {
+        display: flex;
+      }
+      .modal {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        width: 520px;
+        max-width: calc(100vw - 32px);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+        overflow: hidden;
+      }
+      .modal-header {
+        padding: 18px 22px 0;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .modal-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        background: rgba(217, 119, 87, 0.1);
+        color: var(--conflict);
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .modal-icon svg {
+        width: 16px;
+        height: 16px;
+      }
+      .modal-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+        line-height: 1.4;
+        margin-top: 6px;
+      }
+      .modal-body {
+        padding: 12px 22px 18px;
+        color: var(--text-dim);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .modal-body code {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11.5px;
+        background: #1c1c1c;
+        color: var(--text);
+        padding: 1px 6px;
+        border-radius: 3px;
+      }
+      .modal-body .sha-row {
+        margin-top: 12px;
+        padding: 10px 12px;
+        background: #121212;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11.5px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .modal-body .sha-row .sha-label {
+        color: var(--text-dimmer);
+        margin-right: 8px;
+      }
+      .modal-body .sha-row .sha-old {
+        color: var(--text-dim);
+        text-decoration: line-through;
+      }
+      .modal-body .sha-row .sha-new {
+        color: var(--text);
+      }
+      .modal-footer {
+        padding: 14px 22px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: #121212;
+        border-top: 1px solid var(--border);
+      }
+      .modal-footer .btn,
+      .modal-footer .btn-secondary,
+      .modal-footer .btn-ghost {
+        width: 100%;
+        justify-content: center;
+        padding: 9px 14px;
+        font-size: 13px;
+      }
+      .btn-ghost {
+        background: transparent;
+        color: var(--text-dim);
+        border: 1px solid transparent;
+        padding: 6px 14px;
+        border-radius: 4px;
+        font-size: 12.5px;
+        font-weight: 500;
+        transition: color 120ms ease;
+      }
+      .btn-ghost:hover {
+        color: var(--text);
+      }
+
+      /* ---------------- View switcher ---------------- */
+      .view-switcher {
+        position: fixed;
+        bottom: 18px;
+        right: 18px;
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px;
+        display: flex;
+        gap: 2px;
+        font-size: 11.5px;
+        z-index: 200;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      }
+      .view-switcher-label {
+        font-size: 10px;
+        color: var(--text-dimmer);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        align-self: center;
+        padding: 0 8px 0 4px;
+      }
+      .view-switcher button {
+        padding: 5px 10px;
+        border-radius: 4px;
+        color: var(--text-dim);
+        font-weight: 500;
+      }
+      .view-switcher button.active {
+        background: #2a2a2a;
+        color: var(--text);
+      }
+
+      /* Show/hide views */
+      .view {
+        display: none;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+      }
+      .view.active {
+        display: flex;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <!-- ============ SIDEBAR ============ -->
+      <aside class="sidebar">
+        <div class="wordmark">
+          <svg
+            class="wordmark-glyph"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.25"
+            stroke-linecap="square"
+          >
+            <path d="M1.5 2.5h6M1.5 6h9M1.5 9.5h6" />
+          </svg>
+          <span>DocFlow</span>
+        </div>
+
+        <nav class="nav">
+          <div class="nav-section-label">РАБОТА</div>
+          <div class="nav-item active">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 4h10M3 8h10M3 12h6" />
+            </svg>
+            <span>Задачи</span>
+            <span class="count">247</span>
+          </div>
+          <div class="nav-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="5.5" />
+              <path d="M8 5v3l2 1.5" />
+            </svg>
+            <span>История</span>
+          </div>
+          <div class="nav-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 13V8M7.5 13V4M12 13v-6" />
+            </svg>
+            <span>Аналитика</span>
+          </div>
+
+          <div class="nav-divider"></div>
+
+          <div class="nav-section-label">КОНФИГУРАЦИЯ</div>
+          <div class="nav-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2.5" y="3.5" width="11" height="9" rx="1" />
+              <path d="M2.5 6.5h11" />
+            </svg>
+            <span>Репозитории</span>
+            <span class="count">8</span>
+          </div>
+          <div class="nav-item">
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linejoin="round"
+            >
+              <path d="M3 3.5h4.5a1 1 0 0 1 1 1V13a1 1 0 0 0-1-1H3V3.5z" />
+              <path d="M13 3.5H8.5a1 1 0 0 0-1 1V13a1 1 0 0 1 1-1H13V3.5z" />
+            </svg>
+            <span>Словари</span>
+          </div>
+          <div class="nav-item">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="2" />
+              <path
+                d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"
+              />
+            </svg>
+            <span>Настройки</span>
+          </div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="user">
+            <div class="avatar">AK</div>
+            <div class="user-meta">
+              <div class="user-name">Anna Kuznetsova</div>
+              <div class="user-status">
+                <span class="gh-dot"></span>
+                <span>GitHub подключён</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ============ MAIN ============ -->
+      <main class="main">
+        <header class="detail-header">
+          <div class="breadcrumb">
+            <a href="DocFlow Dashboard.html">Задачи</a>
+            <span class="crumb-sep">›</span>
+            <span class="crumb-path"
+              ><span class="dir">api-reference/crm/deals/</span
+              ><span class="file" id="bcFile">crm-deal-get.md</span></span
+            >
+          </div>
+
+          <div class="detail-title-row">
+            <div>
+              <h1 class="detail-title" id="detailTitle">crm-deal-get.md</h1>
+              <div class="detail-meta">
+                <span>CRM API · документация</span>
+                <span class="commit-sha">a4f2e1c</span>
+                <span class="author"><span class="author-mini-avatar">МП</span>Михаил Петров</span>
+                <span id="detailTimeAgo">5 мин назад</span>
+              </div>
+            </div>
+
+            <div class="detail-actions">
+              <span class="status-badge done" id="statusBadge">
+                <span class="dot"></span>
+                <span id="statusBadgeText">готово</span>
+              </span>
+              <a
+                class="published-link"
+                id="publishedLink"
+                href="#"
+                target="_blank"
+                style="display: none"
+              >
+                <span>Опубликовано <span id="publishedTimeAgo">2 ч назад</span> ·</span>
+                <span class="commit-link" id="publishedCommit">b91d83f</span>
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                >
+                  <path
+                    d="M9 3h4v4M13 3 7.5 8.5M11 9v3.5a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1H7"
+                  />
+                </svg>
+              </a>
+              <div id="actionButtons">
+                <!-- actions injected per status -->
+              </div>
+            </div>
+          </div>
+
+          <div class="detail-tabs">
+            <div class="detail-tab active" data-tab="diff">
+              Diff <span class="tab-count">12 изменений</span>
+            </div>
+            <div class="detail-tab" data-tab="logs">
+              Логи <span class="tab-count">7 этапов</span>
+            </div>
+            <div class="detail-tab" data-tab="conflict" id="conflictTab" style="display: none">
+              <svg
+                class="tab-conflict-icon"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path d="M8 3l6 10H2L8 3z" />
+                <path d="M8 7v3M8 11.5v0.5" />
+              </svg>
+              Конфликт
+            </div>
+          </div>
+        </header>
+
+        <!-- ============ DIFF VIEW ============ -->
+        <section class="view active" id="view-diff">
+          <div class="diff-wrap">
+            <!-- LEFT: RU -->
+            <div class="diff-col">
+              <div class="diff-col-header">
+                <span class="diff-pill readonly">
+                  <svg
+                    class="lock"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <rect x="3" y="7" width="10" height="7" rx="1" />
+                    <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+                  </svg>
+                  <span class="lang">RU</span>
+                  <span>· только чтение</span>
+                </span>
+                <div class="diff-col-actions">
+                  <button class="diff-icon-btn" title="Копировать">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="5" y="5" width="9" height="9" rx="1" />
+                      <path d="M3 11V3a1 1 0 0 1 1-1h7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="diff-body" id="ruBody">
+                <!-- lines -->
+              </div>
+              <div class="diff-footer">
+                <span class="stat">142 строки</span>
+                <span class="sep">·</span>
+                <span class="stat">5 820 символов</span>
+                <span class="sep">·</span>
+                <span>RU · оригинал</span>
+              </div>
+            </div>
+
+            <div class="diff-divider"></div>
+
+            <!-- RIGHT: EN -->
+            <div class="diff-col">
+              <div class="diff-col-header">
+                <span class="diff-pill editable">
+                  <span class="dot"></span>
+                  <span class="lang">EN</span>
+                  <span>· редактируется</span>
+                </span>
+                <div class="diff-col-actions">
+                  <span id="diffSummary">12 изменений · 0 несохранённых</span>
+                  <button
+                    class="btn-secondary"
+                    id="downloadMdBtn"
+                    style="padding: 4px 10px; font-size: 11.5px"
+                  >
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M8 2v9M4.5 7.5 8 11l3.5-3.5M3 13.5h10" />
+                    </svg>
+                    Скачать .md
+                  </button>
+                </div>
+              </div>
+              <div class="diff-body" id="enBody">
+                <!-- lines -->
+              </div>
+              <div class="queued-empty" id="enQueuedEmpty" style="display: none">
+                <svg
+                  class="clock-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3.5 2" />
+                </svg>
+                <div class="title">Перевод в очереди</div>
+                <div class="subtitle">
+                  Задача стартует, как только освободится воркер пайплайна.
+                </div>
+                <div class="countdown">начнётся через ~<span id="queuedCountdown">42</span> с</div>
+              </div>
+              <div class="diff-footer" id="enFooter">
+                <span class="stat">142 строки</span>
+                <span class="sep">·</span>
+                <span class="stat">6 142 символов</span>
+                <span class="sep">·</span>
+                <span>EN · перевод</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ LOGS VIEW ============ -->
+        <section class="view" id="view-logs">
+          <div class="logs-wrap">
+            <div class="logs-toolbar">
+              <span class="logs-runtime" id="logsRuntime">
+                <span class="runtime-label">Время выполнения:</span>
+                <span id="logsRuntimeValue">12.4 с</span>
+              </span>
+              <div class="logs-tools">
+                <button class="diff-icon-btn" title="Скопировать логи">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="5" y="5" width="9" height="9" rx="1" />
+                    <path d="M3 11V3a1 1 0 0 1 1-1h7" />
+                  </svg>
+                </button>
+                <button class="diff-icon-btn" title="Скачать">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M8 2v9M4.5 7.5 8 11l3.5-3.5M3 13.5h10" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="logs-body" id="logsBody">
+              <!-- stages injected -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ CONFLICT VIEW (v2: 3 read-only top + editor bottom) ============ -->
+        <section class="view" id="view-conflict">
+          <div class="conflict-v2">
+            <!-- TOP: 3 read-only columns -->
+            <div class="conflict-readonly-row">
+              <!-- BASE: RU -->
+              <div class="conflict-col">
+                <div class="conflict-col-header">
+                  <div class="conflict-col-title">
+                    <span class="role">База</span>
+                    <span>· RU оригинал</span>
+                  </div>
+                  <div class="conflict-col-author">
+                    <span class="avatar-tiny">МП</span>
+                    <span>Михаил Петров · commit a4f2e1c</span>
+                  </div>
+                </div>
+                <div class="conflict-body" id="cfBase"></div>
+              </div>
+
+              <!-- OURS: наш перевод -->
+              <div class="conflict-col">
+                <div class="conflict-col-header">
+                  <div class="conflict-col-title">
+                    <span class="role">Наш перевод</span>
+                    <span>· EN из пайплайна</span>
+                  </div>
+                  <div class="conflict-col-author">
+                    <span class="avatar-tiny" style="background: #1c1c1c; color: var(--text-dim)"
+                      >AI</span
+                    >
+                    <span>DocFlow AI · 12 мин назад</span>
+                  </div>
+                </div>
+                <div class="conflict-body" id="cfOurs"></div>
+              </div>
+
+              <!-- THEIRS: текущий EN в репозитории -->
+              <div class="conflict-col">
+                <div class="conflict-col-header">
+                  <div class="conflict-col-title">
+                    <span class="role">Текущая версия</span>
+                    <span>· в репозитории</span>
+                  </div>
+                  <div class="conflict-col-author">
+                    <svg
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      style="width: 11px; height: 11px; color: var(--text-dimmer)"
+                    >
+                      <path d="M3.5 2h6l3 3v9h-9V2z" />
+                      <path d="M9.5 2v3h3" />
+                    </svg>
+                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px"
+                      >crm-api-docs-en</span
+                    >
+                  </div>
+                </div>
+                <div class="conflict-body" id="cfTheirs"></div>
+              </div>
+            </div>
+
+            <!-- BOTTOM: editable CodeMirror -->
+            <div class="conflict-editor">
+              <div class="conflict-editor-toolbar">
+                <span class="conflict-editor-pill">
+                  <span class="dot"></span>
+                  <span class="lang">EN</span>
+                  <span>· редактируется</span>
+                </span>
+                <div class="source-toggle" id="sourceToggle">
+                  <label>
+                    <input type="radio" name="source" value="ours" />
+                    <span><span class="src-dot"></span>Наш перевод</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="source" value="theirs" checked />
+                    <span><span class="src-dot"></span>Текущий EN</span>
+                  </label>
+                </div>
+              </div>
+              <div
+                class="conflict-editor-body"
+                id="conflictEditorBody"
+                contenteditable="false"
+              ></div>
+              <div class="conflict-editor-bar">
+                <span class="conflict-editor-bar-text">Внесите правки и опубликуйте</span>
+                <div style="display: flex; gap: 10px">
+                  <button class="btn" id="publishConflictBtn">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M8 13V4M4.5 7.5 8 4l3.5 3.5" />
+                    </svg>
+                    Опубликовать
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Save bar (Diff) -->
+    <div class="save-bar" id="saveBar">
+      <span class="save-bar-text"><strong id="saveCount">3</strong> несохранённых изменений</span>
+      <button class="btn-secondary" id="discardBtn">Отменить</button>
+      <button class="btn" id="saveBtn">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M3 3v10h10V5l-2-2H3z" />
+          <path d="M5 3h6v3H5z" />
+        </svg>
+        Сохранить
+      </button>
+    </div>
+
+    <!-- Retry-conflict modal -->
+    <div class="modal-backdrop" id="retryModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="retryTitle">
+        <div class="modal-header">
+          <div class="modal-icon">
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            >
+              <path d="M8 3l6 10H2L8 3z" />
+              <path d="M8 7v3M8 11.5v0.5" />
+            </svg>
+          </div>
+          <div class="modal-title" id="retryTitle">Source-файл изменился в GitHub</div>
+        </div>
+        <div class="modal-body">
+          Файл <code>api-reference/crm/deals/crm-deal-get.md</code> был изменён в репозитории
+          <code>crm-api-docs</code> после создания задачи.
+          <div class="sha-row">
+            <div>
+              <span class="sha-label">старый SHA:</span><span class="sha-old">a4f2e1c</span>
+            </div>
+            <div><span class="sha-label">новый SHA:</span><span class="sha-new">b91d83f</span></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" id="retryNew">Создать новую задачу с актуальным файлом</button>
+          <button class="btn-secondary" id="retryForce">Перевести старую версию</button>
+          <button class="btn-ghost" id="retryCancel">Отмена</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- View switcher -->
+    <div class="view-switcher">
+      <span class="view-switcher-label">Состояние</span>
+      <button data-state="queued">Queued</button>
+      <button data-state="running">Running</button>
+      <button class="active" data-state="done">Done</button>
+      <button data-state="conflict">Conflict</button>
+      <button data-state="failed">Failed</button>
+      <button data-state="published">Published</button>
+    </div>
+
+    <script>
+      // ===== Sample document content =====
+      const ruLines = [
+        { tag: 'heading', text: '# crm.deal.get' },
+        { tag: 'blank', text: '' },
+        {
+          tag: 'p',
+          text: 'Метод получения карточки сделки по идентификатору. Возвращает полный набор полей сделки, включая пользовательские.',
+          changed: true,
+        },
+        { tag: 'blank', text: '' },
+        { tag: 'heading', text: '## Параметры' },
+        { tag: 'blank', text: '' },
+        { tag: 'table', text: '| Параметр | Тип    | Описание                          |' },
+        { tag: 'table', text: '|----------|--------|-----------------------------------|' },
+        {
+          tag: 'table',
+          text: '| `id`     | int    | Идентификатор сделки. Обязателен. ',
+          changed: true,
+        },
+        { tag: 'table', text: '| `select` | array  | Список полей в выборке.           |' },
+        { tag: 'blank', text: '' },
+        { tag: 'heading', text: '## Пример запроса' },
+        { tag: 'blank', text: '' },
+        { tag: 'code', text: '```http' },
+        { tag: 'code', text: 'POST /rest/crm.deal.get HTTP/1.1' },
+        { tag: 'code', text: 'Content-Type: application/json' },
+        { tag: 'blank', text: '' },
+        { tag: 'code', text: '{ "id": 14829 }', changed: true },
+        { tag: 'code', text: '```' },
+        { tag: 'blank', text: '' },
+        { tag: 'heading', text: '## Ответ' },
+        { tag: 'blank', text: '' },
+        {
+          tag: 'p',
+          text: 'Возвращает объект сделки. В случае ошибки — структуру с полем `error`.',
+          changed: true,
+        },
+        { tag: 'blank', text: '' },
+        {
+          tag: 'p',
+          text: 'Подробнее о пользовательских полях см. [документация по UF](../uf/intro.md).',
+          changed: true,
+        },
+      ]
+      const enLines = [
+        { tag: 'heading', text: '# crm.deal.get' },
+        { tag: 'blank', text: '' },
+        {
+          tag: 'p',
+          text: 'Retrieves a deal record by identifier. Returns the full set of deal fields, including user-defined fields.',
+          changed: true,
+        },
+        { tag: 'blank', text: '' },
+        { tag: 'heading', text: '## Parameters' },
+        { tag: 'blank', text: '' },
+        { tag: 'table', text: '| Parameter | Type   | Description                          |' },
+        { tag: 'table', text: '|-----------|--------|--------------------------------------|' },
+        {
+          tag: 'table',
+          text: '| `id`      | int    | Deal identifier. Required.           |',
+          changed: true,
+        },
+        { tag: 'table', text: '| `select`  | array  | List of fields to include.           |' },
+        { tag: 'blank', text: '' },
+        { tag: 'heading', text: '## Request example' },
+        { tag: 'blank', text: '' },
+        { tag: 'code', text: '```http' },
+        { tag: 'code', text: 'POST /rest/crm.deal.get HTTP/1.1' },
+        { tag: 'code', text: 'Content-Type: application/json' },
+        { tag: 'blank', text: '' },
+        { tag: 'code', text: '{ "id": 14829 }', changed: true },
+        { tag: 'code', text: '```' },
+        { tag: 'blank', text: '' },
+        { tag: 'heading', text: '## Response' },
+        { tag: 'blank', text: '' },
+        {
+          tag: 'p',
+          text: 'Returns a deal object. On error — a structure with the `error` field.',
+          changed: true,
+        },
+        { tag: 'blank', text: '' },
+        {
+          tag: 'p',
+          text: 'For more on user-defined fields, see the [UF reference](../uf/intro.md).',
+          changed: true,
+        },
+      ]
+
+      function escapeHtml(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      }
+      function tokenize(text, tag) {
+        let s = escapeHtml(text)
+        if (tag === 'heading') return s.replace(/^(#+)/, '<span class="tok-md">$1</span>')
+        if (tag === 'code' || tag === 'table') {
+          return s.replace(/`([^`]+)`/g, '<span class="tok-code">`$1`</span>')
+        }
+        s = s.replace(/`([^`]+)`/g, '<span class="tok-code">`$1`</span>')
+        s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<span class="tok-link">[$1]($2)</span>')
+        return s
+      }
+      function renderLines(target, lines, opts = {}) {
+        const html = lines
+          .map((l, i) => {
+            const cls = ['diff-line']
+            if (l.tag === 'heading') cls.push('heading')
+            if (l.tag === 'code' || l.tag === 'table') cls.push('code')
+            if (l.changed) cls.push('changed')
+            if (opts.cursorAt === i) cls.push('cursor')
+            return `<div class="${cls.join(' ')}"><span class="ln">${i + 1}</span><span class="content">${tokenize(l.text, l.tag) || '&nbsp;'}</span></div>`
+          })
+          .join('')
+        target.innerHTML = html
+      }
+      renderLines(document.getElementById('ruBody'), ruLines)
+      renderLines(document.getElementById('enBody'), enLines)
+
+      // ===== Logs =====
+      const stagesDone = [
+        {
+          name: 'Parser',
+          state: 'done',
+          timing: '0.4 с',
+          lines: [
+            'Размер: 5 820 символов',
+            'Блоков кода: <span class="num">3</span> · таблиц: <span class="num">1</span> · ссылок: <span class="num">2</span>',
+            'AST: <span class="num">142</span> узла',
+          ],
+        },
+        {
+          name: 'PreTranslator',
+          state: 'done',
+          timing: '1.1 с',
+          lines: [
+            'Сегментирование по h2/h3',
+            'Извлечён глоссарий проекта · <span class="num">38</span> терминов',
+            'Защищены: code-блоки, ссылки, frontmatter',
+          ],
+        },
+        {
+          name: 'CodeTranslator',
+          state: 'done',
+          timing: '0.8 с',
+          lines: [
+            'Найдено комментариев в коде: <span class="num">2</span>',
+            'Переведено: <span class="num">2 / 2</span> · <span class="ok">✓</span>',
+          ],
+        },
+        {
+          name: 'Translator',
+          state: 'done',
+          timing: '12.2 с',
+          lines: [
+            'Разбит на <span class="num">3</span> части',
+            'Chunk 1/3 · <span class="num">1 847</span> символов ... <span class="ok">готово</span> <span class="dim">(4.2 с)</span>',
+            'Chunk 2/3 · <span class="num">2 104</span> символов ... <span class="ok">готово</span> <span class="dim">(3.9 с)</span>',
+            'Chunk 3/3 · <span class="num">1 869</span> символов ... <span class="ok">готово</span> <span class="dim">(4.1 с)</span>',
+          ],
+        },
+        {
+          name: 'Fixers',
+          state: 'done',
+          timing: '0.6 с',
+          lines: [
+            'Применены fixers: <span class="num">md-tables</span>, <span class="num">md-links</span>, <span class="num">en-articles</span>',
+            'Исправлений: <span class="num">7</span>',
+          ],
+        },
+        {
+          name: 'Validator',
+          state: 'done',
+          timing: '0.3 с',
+          lines: [
+            '<span class="ok">✓</span> структура · <span class="ok">✓</span> ссылки <span class="dim">(2/2)</span> · <span class="ok">✓</span> анкоры · <span class="ok">✓</span> code-blocks',
+          ],
+        },
+        {
+          name: 'Writer',
+          state: 'done',
+          timing: '0.1 с',
+          lines: [
+            'Записан в <span class="num">api-reference/crm/deals/crm-deal-get.md</span>',
+            'Diff: <span class="num">+24 / −18</span>',
+          ],
+        },
+      ]
+
+      const stagesRunning = [
+        stagesDone[0],
+        stagesDone[1],
+        stagesDone[2],
+        {
+          name: 'Translator',
+          state: 'running',
+          timing: 'выполняется...',
+          lines: [
+            'Разбит на <span class="num">3</span> части',
+            'Chunk 1/3 · <span class="num">1 847</span> символов ... <span class="ok">готово</span> <span class="dim">(4.2 с)</span>',
+            '<span class="running-cursor">Chunk 2/3 · <span class="num">2 104</span> символов ... </span>',
+          ],
+        },
+        { name: 'Fixers', state: 'pending', timing: '', lines: ['ожидание...'] },
+        { name: 'Validator', state: 'pending', timing: '', lines: ['ожидание...'] },
+        { name: 'Writer', state: 'pending', timing: '', lines: ['ожидание...'] },
+      ]
+
+      function renderLogs(stages) {
+        const body = document.getElementById('logsBody')
+        body.innerHTML = stages
+          .map(
+            (s) => `
+      <div class="log-stage">
+        <div class="log-stage-header ${s.state}">
+          <span class="arrow">▸</span>
+          <span class="stage-mark">${s.state === 'done' ? '✓' : s.state === 'running' ? '◯' : '·'}</span>
+          <span class="name">${s.name}</span>
+          <span class="timing">${s.timing}</span>
+        </div>
+        ${s.lines.map((l) => `<div class="log-line">${l}</div>`).join('')}
+      </div>
+    `,
+          )
+          .join('')
+      }
+
+      // ===== Conflict 3-way =====
+      // Each line index that's part of a hunk gets the same hunkId
+      const cfBase = [
+        '## Response',
+        '',
+        'Возвращает объект сделки. В случае ошибки — структуру',
+        'с полем `error`.',
+        '',
+        'Подробнее о пользовательских полях см.',
+        '[документация по UF](../uf/intro.md).',
+        '',
+        '## Ограничения',
+        '',
+        '- Запрос лимитируется 50 RPS на портал.',
+        '- Поле `STAGE_HISTORY` доступно только в B2B-тарифе.',
+      ]
+      const cfOurs = [
+        { text: '## Response', hunk: null },
+        { text: '', hunk: null },
+        { text: 'Returns a deal object. On error — a structure', hunk: 'h1' },
+        { text: 'with the `error` field.', hunk: 'h1' },
+        { text: '', hunk: null },
+        { text: 'For more on user-defined fields, see the', hunk: null },
+        { text: '[UF reference](../uf/intro.md).', hunk: null },
+        { text: '', hunk: null },
+        { text: '## Limitations', hunk: 'h2' },
+        { text: '', hunk: null },
+        { text: '- Requests are rate-limited at 50 RPS per portal.', hunk: 'h3' },
+        { text: '- The `STAGE_HISTORY` field is available only on B2B plans.', hunk: 'h3' },
+      ]
+      const cfTheirs = [
+        { text: '## Response', hunk: null },
+        { text: '', hunk: null },
+        { text: 'Returns the deal record. On failure — an object', hunk: 'h1' },
+        { text: 'containing the `error` key.', hunk: 'h1' },
+        { text: '', hunk: null },
+        { text: 'For more on user-defined fields, see the', hunk: null },
+        { text: '[UF reference](../uf/intro.md).', hunk: null },
+        { text: '', hunk: null },
+        { text: '## Restrictions', hunk: 'h2' },
+        { text: '', hunk: null },
+        { text: '- Rate-limited to 50 requests per second per portal.', hunk: 'h3' },
+        { text: '- `STAGE_HISTORY` is enterprise-only.', hunk: 'h3' },
+      ]
+
+      function renderConflictCol(target, lines, isMiddle) {
+        const html = lines
+          .map((l, i) => {
+            const text = typeof l === 'string' ? l : l.text
+            const hunk = typeof l === 'string' ? null : l.hunk
+            const cls = ['cf-line']
+            if (hunk) cls.push('diff', `hunk-${hunk}`)
+            return `<div class="${cls.join(' ')}" data-hunk="${hunk || ''}"><span class="ln">${i + 1}</span><span class="content">${escapeHtml(text) || '&nbsp;'}</span></div>`
+          })
+          .join('')
+        target.innerHTML = html
+      }
+      function renderConflict() {
+        renderConflictCol(document.getElementById('cfBase'), cfBase, false)
+        renderConflictCol(document.getElementById('cfOurs'), cfOurs, true)
+        renderConflictCol(document.getElementById('cfTheirs'), cfTheirs, false)
+      }
+      renderConflict()
+
+      // ===== Conflict editor (bottom pane) =====
+      function renderConflictEditor(source) {
+        const lines = source === 'ours' ? cfOurs : cfTheirs
+        const body = document.getElementById('conflictEditorBody')
+        body.innerHTML = lines
+          .map((l, i) => {
+            const text = typeof l === 'string' ? l : l.text
+            return `<div class="ce-line"><span class="ln">${i + 1}</span><span class="content">${escapeHtml(text) || '&nbsp;'}</span></div>`
+          })
+          .join('')
+      }
+      renderConflictEditor('theirs')
+      document.querySelectorAll('#sourceToggle input[name="source"]').forEach((r) => {
+        r.addEventListener('change', () => {
+          if (r.checked) renderConflictEditor(r.value)
+        })
+      })
+      // Click inside the editor toggles a fake cursor on a line
+      document.getElementById('conflictEditorBody').addEventListener('click', (e) => {
+        document
+          .querySelectorAll('#conflictEditorBody .ce-line')
+          .forEach((l) => l.classList.remove('cursor'))
+        const line = e.target.closest('.ce-line')
+        if (line) line.classList.add('cursor')
+      })
+
+      // ===== Status configurations =====
+      const ICON_DOWNLOAD = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v9M4.5 7.5 8 11l3.5-3.5M3 13.5h10"/></svg>`
+      const ICON_PUBLISH = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 13V4M4.5 7.5 8 4l3.5 3.5"/></svg>`
+      const ICON_RETRY = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg>`
+      const ICON_CANCEL = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="8" height="8" rx="1"/></svg>`
+      const ICON_OPEN_GITHUB = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 3h4v4M13 3 7.5 8.5M11 9v3.5a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1H7"/></svg>`
+
+      const states = {
+        queued: {
+          tab: 'diff',
+          badge: { cls: '', text: 'в очереди' },
+          file: 'crm-deal-list.md',
+          title: 'crm-deal-list.md',
+          time: '34 с назад',
+          actions: `<button class="btn-secondary">${ICON_CANCEL}Отменить</button>`,
+          logs: stagesDone,
+          runtime: '—',
+          runtimeRunning: false,
+          showConflictTab: false,
+          showPublishedLink: false,
+          diffMode: 'queued',
+        },
+        running: {
+          tab: 'logs',
+          badge: { cls: 'running', text: 'в работе' },
+          file: 'task-update.md',
+          title: 'task-update.md',
+          time: '12 с назад',
+          actions: `<button class="btn-secondary">${ICON_CANCEL}Отмена</button>`,
+          logs: stagesRunning,
+          runtime: 'выполняется...',
+          runtimeRunning: true,
+          showConflictTab: false,
+          showPublishedLink: false,
+          diffMode: 'normal',
+        },
+        done: {
+          tab: 'diff',
+          badge: { cls: 'done', text: 'готово' },
+          file: 'crm-deal-get.md',
+          title: 'crm-deal-get.md',
+          time: '5 мин назад',
+          actions: `<button class="btn-secondary">${ICON_DOWNLOAD}Скачать .md</button><button class="btn">${ICON_PUBLISH}Опубликовать</button>`,
+          logs: stagesDone,
+          runtime: '12.4 с',
+          runtimeRunning: false,
+          showConflictTab: false,
+          showPublishedLink: false,
+          diffMode: 'normal',
+        },
+        conflict: {
+          tab: 'conflict',
+          badge: { cls: 'conflict', text: 'конфликт' },
+          file: 'crm-deal-get.md',
+          title: 'crm-deal-get.md',
+          time: '12 мин назад',
+          actions: `<button class="btn-secondary">${ICON_DOWNLOAD}Скачать .md</button>`,
+          logs: stagesDone,
+          runtime: '12.4 с',
+          runtimeRunning: false,
+          showConflictTab: true,
+          showPublishedLink: false,
+          diffMode: 'normal',
+        },
+        failed: {
+          tab: 'logs',
+          badge: { cls: 'failed', text: 'ошибка' },
+          file: 'oauth-flow.md',
+          title: 'oauth-flow.md',
+          time: '2 мин назад',
+          actions: `<button class="btn" id="retryBtn">${ICON_RETRY}Повторить</button>`,
+          logs: stagesDone,
+          runtime: '8.1 с (прервано)',
+          runtimeRunning: false,
+          showConflictTab: false,
+          showPublishedLink: false,
+          diffMode: 'normal',
+        },
+        published: {
+          tab: 'diff',
+          badge: { cls: 'published', text: 'опубликовано' },
+          file: 'crm-deal-get.md',
+          title: 'crm-deal-get.md',
+          time: '2 ч назад',
+          actions: `<button class="btn-secondary">${ICON_DOWNLOAD}Скачать .md</button>`,
+          logs: stagesDone,
+          runtime: '12.4 с',
+          runtimeRunning: false,
+          showConflictTab: false,
+          showPublishedLink: true,
+          diffMode: 'normal',
+        },
+      }
+
+      let currentState = 'done'
+      let dirty = false
+
+      function setDirty(v) {
+        dirty = v
+        document.getElementById('saveBar').classList.toggle('visible', v)
+      }
+
+      // beforeunload warning when dirty
+      window.addEventListener('beforeunload', (e) => {
+        if (dirty) {
+          e.preventDefault()
+          e.returnValue = 'Есть несохранённые изменения. Уйти со страницы?'
+          return e.returnValue
+        }
+      })
+
+      function applyState(key) {
+        currentState = key
+        const s = states[key]
+        document.getElementById('detailTitle').textContent = s.title
+        document.getElementById('bcFile').textContent = s.file
+        document.getElementById('detailTimeAgo').textContent = s.time
+        const badge = document.getElementById('statusBadge')
+        badge.className = 'status-badge ' + s.badge.cls
+        document.getElementById('statusBadgeText').textContent = s.badge.text
+        document.getElementById('actionButtons').innerHTML = s.actions
+        document.getElementById('actionButtons').style.display = 'flex'
+        document.getElementById('actionButtons').style.gap = '10px'
+        document.getElementById('conflictTab').style.display = s.showConflictTab
+          ? 'inline-flex'
+          : 'none'
+        document.getElementById('publishedLink').style.display = s.showPublishedLink
+          ? 'inline-flex'
+          : 'none'
+        renderLogs(s.logs)
+        document.getElementById('logsRuntimeValue').textContent = s.runtime
+        document.getElementById('logsRuntime').classList.toggle('running', s.runtimeRunning)
+
+        // Diff queued empty state
+        const enBody = document.getElementById('enBody')
+        const enEmpty = document.getElementById('enQueuedEmpty')
+        const enFooter = document.getElementById('enFooter')
+        if (s.diffMode === 'queued') {
+          enBody.style.display = 'none'
+          enEmpty.style.display = 'flex'
+          enFooter.style.display = 'none'
+          startQueuedCountdown()
+        } else {
+          enBody.style.display = ''
+          enEmpty.style.display = 'none'
+          enFooter.style.display = ''
+          stopQueuedCountdown()
+        }
+
+        setActiveTab(s.tab)
+        setDirty(false)
+
+        // Wire retry button (failed state) — open modal
+        const retryBtn = document.getElementById('retryBtn')
+        if (retryBtn)
+          retryBtn.addEventListener('click', () => {
+            document.getElementById('retryModal').classList.add('visible')
+          })
+      }
+
+      // Queued countdown
+      let queuedTimer = null
+      function startQueuedCountdown() {
+        stopQueuedCountdown()
+        let n = 42
+        const el = document.getElementById('queuedCountdown')
+        el.textContent = n
+        queuedTimer = setInterval(() => {
+          n = Math.max(0, n - 1)
+          el.textContent = n
+          if (n === 0) stopQueuedCountdown()
+        }, 1000)
+      }
+      function stopQueuedCountdown() {
+        if (queuedTimer) {
+          clearInterval(queuedTimer)
+          queuedTimer = null
+        }
+      }
+
+      function setActiveTab(tab) {
+        document.querySelectorAll('.detail-tab').forEach((t) => {
+          t.classList.toggle('active', t.dataset.tab === tab)
+        })
+        document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'))
+        const target = document.getElementById('view-' + tab)
+        if (target) target.classList.add('active')
+      }
+
+      document.querySelectorAll('.detail-tab').forEach((t) => {
+        t.addEventListener('click', () => setActiveTab(t.dataset.tab))
+      })
+
+      document.querySelectorAll('.view-switcher button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document
+            .querySelectorAll('.view-switcher button')
+            .forEach((b) => b.classList.remove('active'))
+          btn.classList.add('active')
+          applyState(btn.dataset.state)
+        })
+      })
+
+      document.querySelectorAll('.nav-item').forEach((n) => {
+        n.addEventListener('click', () => {
+          document.querySelectorAll('.nav-item').forEach((x) => x.classList.remove('active'))
+          n.classList.add('active')
+        })
+      })
+
+      // Demo: simulate edits → save bar appears
+      let edits = 0
+      const enBody = document.getElementById('enBody')
+      enBody.addEventListener('click', (e) => {
+        document.querySelectorAll('#enBody .diff-line').forEach((l) => l.classList.remove('cursor'))
+        const line = e.target.closest('.diff-line')
+        if (line) line.classList.add('cursor')
+      })
+      document.addEventListener('keydown', (e) => {
+        const diffActive = document.getElementById('view-diff').classList.contains('active')
+        if (!diffActive) return
+        if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
+          edits = Math.min(edits + 1, 9)
+          document.getElementById('saveCount').textContent = edits
+          document.getElementById('diffSummary').textContent =
+            `12 изменений · ${edits} несохранённых`
+          setDirty(true)
+        }
+        if (e.key === 'Escape') {
+          edits = 0
+          document.getElementById('diffSummary').textContent = '12 изменений · 0 несохранённых'
+          setDirty(false)
+        }
+      })
+      document.getElementById('discardBtn').addEventListener('click', () => {
+        edits = 0
+        document.getElementById('diffSummary').textContent = '12 изменений · 0 несохранённых'
+        setDirty(false)
+      })
+      document.getElementById('saveBtn').addEventListener('click', () => {
+        edits = 0
+        document.getElementById('diffSummary').textContent = '12 изменений · 0 несохранённых'
+        setDirty(false)
+      })
+
+      // Retry modal handlers
+      document.getElementById('retryCancel').addEventListener('click', () => {
+        document.getElementById('retryModal').classList.remove('visible')
+      })
+      document.getElementById('retryNew').addEventListener('click', () => {
+        document.getElementById('retryModal').classList.remove('visible')
+      })
+      document.getElementById('retryForce').addEventListener('click', () => {
+        document.getElementById('retryModal').classList.remove('visible')
+      })
+      document.getElementById('retryModal').addEventListener('click', (e) => {
+        if (e.target.id === 'retryModal')
+          document.getElementById('retryModal').classList.remove('visible')
+      })
+
+      // Init
+      applyState('done')
+    </script>
+  </body>
+</html>

@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DocFlow — Вход</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0f0f0f;
+        --surface: #161616;
+        --surface-hover: #1e1e1e;
+        --border: #262626;
+        --border-soft: #1e1e1e;
+        --text: #ededed;
+        --text-dim: #888;
+        --text-dimmer: #555;
+        --accent: #ffffff;
+        --status-failed: #d97757;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          system-ui,
+          sans-serif;
+        font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        font-size: 14px;
+        line-height: 1.5;
+        letter-spacing: -0.005em;
+        min-height: 100vh;
+      }
+
+      button {
+        font-family: inherit;
+        color: inherit;
+        background: none;
+        border: none;
+        cursor: pointer;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      input {
+        font-family: inherit;
+      }
+
+      /* ---------------- Page layout ---------------- */
+      .page {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 24px;
+        gap: 24px;
+        /* subtle radial backdrop so card has depth */
+        background:
+          radial-gradient(
+            ellipse 800px 500px at 50% 0%,
+            rgba(255, 255, 255, 0.018),
+            transparent 70%
+          ),
+          radial-gradient(
+            ellipse 600px 400px at 50% 100%,
+            rgba(255, 255, 255, 0.015),
+            transparent 70%
+          );
+      }
+
+      /* ---------------- Card ---------------- */
+      .card {
+        width: 380px;
+        max-width: 100%;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 32px 32px 28px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+      }
+
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--text);
+        margin-bottom: 28px;
+      }
+      .wordmark-glyph {
+        width: 13px;
+        height: 13px;
+        color: var(--text);
+      }
+
+      .card-title {
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--text);
+        letter-spacing: -0.015em;
+        margin-bottom: 4px;
+      }
+      .card-subtitle {
+        color: var(--text-dim);
+        font-size: 13px;
+        margin-bottom: 24px;
+      }
+
+      /* ---------------- Error banner ---------------- */
+      .error-banner {
+        display: none;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+        margin-bottom: 18px;
+        background: rgba(217, 119, 87, 0.08);
+        border: 1px solid rgba(217, 119, 87, 0.25);
+        border-radius: 6px;
+        color: var(--status-failed);
+        font-size: 12.5px;
+        line-height: 1.5;
+      }
+      .error-banner.visible {
+        display: flex;
+      }
+      .error-banner svg {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+      .error-banner strong {
+        color: var(--status-failed);
+        font-weight: 600;
+      }
+      .error-banner .err-text {
+        color: #e0a89a;
+      }
+
+      /* ---------------- Form ---------------- */
+      .form {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .field-label {
+        font-size: 11.5px;
+        color: var(--text-dim);
+        font-weight: 500;
+        letter-spacing: 0.01em;
+      }
+      .field-label .optional {
+        color: var(--text-dimmer);
+        font-weight: 400;
+        margin-left: 4px;
+      }
+
+      .input-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+      .input {
+        width: 100%;
+        background: #0f0f0f;
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 9px 12px;
+        border-radius: 6px;
+        font-size: 13.5px;
+        transition:
+          border-color 120ms ease,
+          background 120ms ease;
+      }
+      .input:focus {
+        outline: none;
+        border-color: #3a3a3a;
+        background: #131313;
+      }
+      .input::placeholder {
+        color: var(--text-dimmer);
+      }
+      .input.has-toggle {
+        padding-right: 36px;
+      }
+      .input.error {
+        border-color: rgba(217, 119, 87, 0.4);
+      }
+
+      .input-toggle {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-dimmer);
+        padding: 4px;
+        border-radius: 4px;
+        display: grid;
+        place-items: center;
+        transition: color 120ms ease;
+      }
+      .input-toggle:hover {
+        color: var(--text);
+      }
+      .input-toggle svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      .field-hint {
+        font-size: 11.5px;
+        color: var(--text-dimmer);
+        margin-top: 2px;
+      }
+
+      /* ---------------- Submit ---------------- */
+      .btn {
+        width: 100%;
+        background: var(--accent);
+        color: #0f0f0f;
+        padding: 10px 14px;
+        border-radius: 6px;
+        font-size: 13.5px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition:
+          background 120ms ease,
+          opacity 120ms ease;
+        margin-top: 8px;
+      }
+      .btn:hover {
+        background: #f5f5f5;
+      }
+      .btn:disabled,
+      .btn.loading {
+        background: #2a2a2a;
+        color: var(--text-dim);
+        cursor: not-allowed;
+      }
+      .btn.loading .btn-label {
+        opacity: 0;
+      }
+      .spinner {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        border: 1.5px solid rgba(255, 255, 255, 0.2);
+        border-top-color: var(--text);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        display: none;
+      }
+      .btn.loading .spinner {
+        display: block;
+      }
+      .btn {
+        position: relative;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* ---------------- Footer link ---------------- */
+      .card-footer {
+        margin-top: 22px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+        text-align: center;
+        font-size: 12.5px;
+        color: var(--text-dim);
+      }
+      .card-footer a {
+        color: var(--text);
+        font-weight: 500;
+        transition: color 120ms ease;
+      }
+      .card-footer a:hover {
+        color: #fff;
+        text-decoration: underline;
+        text-decoration-color: rgba(255, 255, 255, 0.3);
+        text-underline-offset: 3px;
+      }
+
+      /* ---------------- Below-card meta ---------------- */
+      .below-card {
+        color: var(--text-dimmer);
+        font-size: 11.5px;
+        text-align: center;
+        line-height: 1.6;
+        max-width: 380px;
+      }
+      .below-card a {
+        color: var(--text-dim);
+      }
+      .below-card a:hover {
+        color: var(--text);
+      }
+
+      /* ---------------- View switcher ---------------- */
+      .view-switcher {
+        position: fixed;
+        bottom: 18px;
+        right: 18px;
+        background: #1a1a1a;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 4px;
+        display: flex;
+        gap: 2px;
+        font-size: 11.5px;
+        z-index: 200;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      }
+      .view-switcher-label {
+        font-size: 10px;
+        color: var(--text-dimmer);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        align-self: center;
+        padding: 0 8px 0 4px;
+      }
+      .view-switcher button {
+        padding: 5px 10px;
+        border-radius: 4px;
+        color: var(--text-dim);
+        font-weight: 500;
+      }
+      .view-switcher button.active {
+        background: #2a2a2a;
+        color: var(--text);
+      }
+
+      /* ---------------- View visibility ---------------- */
+      .view {
+        display: none;
+      }
+      .view.active {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <!-- ============ LOGIN ============ -->
+      <section class="view active" id="view-login" data-screen-label="01 Login">
+        <div class="card">
+          <div class="wordmark">
+            <svg
+              class="wordmark-glyph"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.25"
+              stroke-linecap="square"
+            >
+              <path d="M1.5 2.5h6M1.5 6h9M1.5 9.5h6" />
+            </svg>
+            <span>DocFlow</span>
+          </div>
+
+          <h2 class="card-title">Вход</h2>
+          <p class="card-subtitle">Войдите в свой аккаунт DocFlow</p>
+
+          <div class="error-banner" id="loginError">
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            >
+              <path d="M8 3l6 10H2L8 3z" />
+              <path d="M8 7v3M8 11.5v0.5" />
+            </svg>
+            <span class="err-text"
+              ><strong id="loginErrorTitle">Неверный email или пароль.</strong>
+              <span id="loginErrorBody">Проверьте данные и попробуйте ещё раз.</span></span
+            >
+          </div>
+
+          <form class="form" id="loginForm" autocomplete="on">
+            <div class="field">
+              <label class="field-label" for="loginEmail">Email</label>
+              <div class="input-wrap">
+                <input
+                  class="input"
+                  id="loginEmail"
+                  type="email"
+                  placeholder="anna@company.ru"
+                  autocomplete="email"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="loginPassword">Пароль</label>
+              <div class="input-wrap">
+                <input
+                  class="input has-toggle"
+                  id="loginPassword"
+                  type="password"
+                  placeholder="••••••••••"
+                  autocomplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  class="input-toggle"
+                  data-toggle-pw="loginPassword"
+                  aria-label="Показать пароль"
+                >
+                  <svg
+                    class="eye"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" />
+                    <circle cx="8" cy="8" r="2" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" class="btn" id="loginSubmit">
+              <span class="btn-label">Войти</span>
+              <span class="spinner"></span>
+            </button>
+          </form>
+
+          <div class="card-footer">
+            Нет аккаунта? <a href="#" data-go="register">Зарегистрироваться</a>
+          </div>
+        </div>
+
+        <div class="below-card">
+          Используя DocFlow, вы соглашаетесь с <a href="#">условиями</a> и
+          <a href="#">политикой конфиденциальности</a>.
+        </div>
+      </section>
+
+      <!-- ============ REGISTER ============ -->
+      <section class="view" id="view-register" data-screen-label="02 Register">
+        <div class="card">
+          <div class="wordmark">
+            <svg
+              class="wordmark-glyph"
+              viewBox="0 0 12 12"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.25"
+              stroke-linecap="square"
+            >
+              <path d="M1.5 2.5h6M1.5 6h9M1.5 9.5h6" />
+            </svg>
+            <span>DocFlow</span>
+          </div>
+
+          <h2 class="card-title">Регистрация</h2>
+          <p class="card-subtitle">Создайте аккаунт за 30 секунд</p>
+
+          <div class="error-banner" id="registerError">
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            >
+              <path d="M8 3l6 10H2L8 3z" />
+              <path d="M8 7v3M8 11.5v0.5" />
+            </svg>
+            <span class="err-text"
+              ><strong>Email уже занят.</strong> Попробуйте войти или использовать другой
+              адрес.</span
+            >
+          </div>
+
+          <form class="form" id="registerForm" autocomplete="on">
+            <div class="field">
+              <label class="field-label" for="regEmail">Email</label>
+              <div class="input-wrap">
+                <input
+                  class="input"
+                  id="regEmail"
+                  type="email"
+                  placeholder="anna@company.ru"
+                  autocomplete="email"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="regName"
+                >Отображаемое имя <span class="optional">— необязательно</span></label
+              >
+              <div class="input-wrap">
+                <input
+                  class="input"
+                  id="regName"
+                  type="text"
+                  placeholder="Анна Кузнецова"
+                  autocomplete="name"
+                />
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="regPassword">Пароль</label>
+              <div class="input-wrap">
+                <input
+                  class="input has-toggle"
+                  id="regPassword"
+                  type="password"
+                  placeholder="не менее 8 символов"
+                  autocomplete="new-password"
+                  required
+                  minlength="8"
+                />
+                <button
+                  type="button"
+                  class="input-toggle"
+                  data-toggle-pw="regPassword"
+                  aria-label="Показать пароль"
+                >
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" />
+                    <circle cx="8" cy="8" r="2" />
+                  </svg>
+                </button>
+              </div>
+              <div class="field-hint">Минимум 8 символов · хотя бы одна цифра</div>
+            </div>
+
+            <button type="submit" class="btn" id="registerSubmit">
+              <span class="btn-label">Зарегистрироваться</span>
+              <span class="spinner"></span>
+            </button>
+          </form>
+
+          <div class="card-footer">Уже есть аккаунт? <a href="#" data-go="login">Войти</a></div>
+        </div>
+
+        <div class="below-card">
+          Регистрируясь, вы соглашаетесь с <a href="#">условиями</a> и
+          <a href="#">политикой конфиденциальности</a>.
+        </div>
+      </section>
+    </div>
+
+    <!-- View switcher (demo) -->
+    <div class="view-switcher">
+      <span class="view-switcher-label">Демо</span>
+      <button class="active" data-go="login">Login</button>
+      <button data-go="register">Register</button>
+      <button data-state="login-error">Login · ошибка</button>
+      <button data-state="login-loading">Login · loading</button>
+    </div>
+
+    <script>
+      // ===== View switching =====
+      function showView(name) {
+        document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'))
+        document.getElementById('view-' + name).classList.add('active')
+        document.querySelectorAll('.view-switcher button').forEach((b) => {
+          b.classList.toggle('active', b.dataset.go === name)
+        })
+        // Reset states
+        document.getElementById('loginError').classList.remove('visible')
+        document.getElementById('registerError').classList.remove('visible')
+        document.getElementById('loginSubmit').classList.remove('loading')
+        document.getElementById('registerSubmit').classList.remove('loading')
+      }
+
+      document.querySelectorAll('[data-go]').forEach((el) => {
+        el.addEventListener('click', (e) => {
+          e.preventDefault()
+          showView(el.dataset.go)
+        })
+      })
+
+      // ===== Demo states =====
+      document.querySelectorAll('.view-switcher button[data-state]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document
+            .querySelectorAll('.view-switcher button')
+            .forEach((b) => b.classList.remove('active'))
+          btn.classList.add('active')
+          const state = btn.dataset.state
+
+          if (state === 'login-error') {
+            showView('login')
+            btn.classList.add('active')
+            document.getElementById('loginError').classList.add('visible')
+            document.getElementById('loginPassword').classList.add('error')
+          }
+          if (state === 'login-loading') {
+            showView('login')
+            btn.classList.add('active')
+            document.getElementById('loginSubmit').classList.add('loading')
+          }
+        })
+      })
+
+      // ===== Password visibility toggle =====
+      document.querySelectorAll('.input-toggle').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const target = document.getElementById(btn.dataset.togglePw)
+          if (!target) return
+          const isPassword = target.type === 'password'
+          target.type = isPassword ? 'text' : 'password'
+          // Swap eye icon
+          btn.innerHTML = isPassword
+            ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2l12 12M6 6.5a2 2 0 0 0 3.5 1.5M9.5 9.5l-3-3M3 5C2 6 1.5 8 1.5 8s2.5 4.5 6.5 4.5c1.2 0 2.2-.3 3.1-.8M7 3.6A6.7 6.7 0 0 1 8 3.5c4 0 6.5 4.5 6.5 4.5s-.5 1-1.5 2"/></svg>'
+            : '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>'
+        })
+      })
+
+      // ===== Form submit (demo: shows loading then error) =====
+      document.getElementById('loginForm').addEventListener('submit', (e) => {
+        e.preventDefault()
+        const btn = document.getElementById('loginSubmit')
+        const err = document.getElementById('loginError')
+        err.classList.remove('visible')
+        btn.classList.add('loading')
+        setTimeout(() => {
+          btn.classList.remove('loading')
+          err.classList.add('visible')
+          document.getElementById('loginPassword').classList.add('error')
+        }, 1200)
+      })
+
+      document.getElementById('registerForm').addEventListener('submit', (e) => {
+        e.preventDefault()
+        const btn = document.getElementById('registerSubmit')
+        btn.classList.add('loading')
+        setTimeout(() => {
+          btn.classList.remove('loading')
+          window.location.href = 'DocFlow Repositories.html'
+        }, 1200)
+      })
+    </script>
+  </body>
+</html>
