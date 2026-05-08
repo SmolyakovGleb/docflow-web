@@ -134,7 +134,7 @@ async def register(
 
     await session.refresh(user)
 
-    set_session_cookie(response, create_jwt(user.id))
+    set_session_cookie(response, create_jwt(user.id, user.token_version))
     return to_user_read(user)
 
 
@@ -168,7 +168,7 @@ async def login(
     await session.commit()
     await session.refresh(user)
 
-    set_session_cookie(response, create_jwt(user.id))
+    set_session_cookie(response, create_jwt(user.id, user.token_version))
     return to_user_read(user)
 
 
@@ -217,12 +217,28 @@ async def github_connect(_: CurrentUser) -> RedirectResponse:
     },
 )
 async def github_callback(
-    code: str,
     state: str,
     session: DbSession,
     current_user: CurrentUser,
     request: Request,
+    code: str | None = None,
+    error: str | None = None,
 ) -> Response:
+    if error:
+        settings = get_settings()
+        response = RedirectResponse(
+            url=f"{settings.frontend_base_url.rstrip('/')}/settings?github_error={error}",
+            status_code=status.HTTP_302_FOUND,
+        )
+        clear_github_oauth_state_cookie(response)
+        return response
+
+    if not code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing OAuth code",
+        )
+
     github_oauth_state = request.cookies.get(GITHUB_OAUTH_STATE_COOKIE_NAME)
     if not github_oauth_state or github_oauth_state != state:
         response = JSONResponse(
@@ -270,10 +286,14 @@ async def github_callback(
         200: {"description": "Пароль изменён"},
         400: {"description": "Текущий пароль неверный"},
         401: {"description": "Нет активной сессии"},
+        429: {"description": "Превышен лимит запросов"},
     },
 )
+@limiter.limit("5/minute")
 async def change_password(
+    request: Request,
     payload: ChangePasswordRequest,
+    response: Response,
     session: DbSession,
     current_user: CurrentUser,
 ) -> dict[str, bool]:
@@ -284,7 +304,10 @@ async def change_password(
         )
 
     current_user.password_hash = await hash_password_async(payload.new_password)
+    current_user.token_version += 1
     await session.commit()
+
+    set_session_cookie(response, create_jwt(current_user.id, current_user.token_version))
     return {"ok": True}
 
 
@@ -297,7 +320,13 @@ async def change_password(
         401: {"description": "Нет активной сессии"},
     },
 )
-async def logout(response: Response, _: CurrentUser) -> dict[str, bool]:
+async def logout(
+    response: Response,
+    session: DbSession,
+    current_user: CurrentUser,
+) -> dict[str, bool]:
+    current_user.token_version += 1
+    await session.commit()
     clear_session_cookie(response)
     return {"ok": True}
 

@@ -34,8 +34,6 @@ from app.services.tasks import (
     reset_task_for_retry,
     update_task_content,
 )
-from app.services.github import GitHubAPIError
-
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
@@ -295,8 +293,6 @@ async def publish_task_route(
                 },
             },
         )
-    except GitHubAPIError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
 
     return TaskPublishResponse.model_validate(result)
 

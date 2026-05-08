@@ -95,7 +95,9 @@ async def auth_client(client: AsyncClient, test_user):
 async def test_project(db_session: AsyncSession, test_user):
     """Создаёт тестовый проект. Доступен после Этапа 1+5."""
     from app.models.project import Project
+    from app.services.auth import encrypt_webhook_secret
 
+    plaintext_secret = secrets.token_hex(32)
     project = Project(
         user_id=test_user.id,
         name="Test Project",
@@ -103,9 +105,10 @@ async def test_project(db_session: AsyncSession, test_user):
         source_branch="main",
         target_repo="test-org/target-repo",
         target_branch="main",
-        webhook_secret=secrets.token_hex(32),
+        webhook_secret=encrypt_webhook_secret(plaintext_secret),
     )
     db_session.add(project)
     await db_session.commit()
     await db_session.refresh(project)
+    project.plaintext_webhook_secret = plaintext_secret
     return project

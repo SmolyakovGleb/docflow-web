@@ -170,6 +170,29 @@ async def test_change_password_wrong_current_password(auth_client):
     assert response.json() == {"detail": "Current password is incorrect"}
 
 
+async def test_logout_invalidates_old_token(auth_client, client, test_user):
+    cookies_before_logout = dict(auth_client.cookies)
+    await auth_client.post("/auth/logout")
+
+    response = await client.get("/auth/me", cookies=cookies_before_logout)
+    assert response.status_code == 401
+
+
+async def test_change_password_invalidates_old_token(auth_client, client, test_user):
+    old_cookies = dict(auth_client.cookies)
+    response = await auth_client.post(
+        "/auth/change-password",
+        json={
+            "current_password": "testpassword",
+            "new_password": "newstrongpassword",
+        },
+    )
+    assert response.status_code == 200
+
+    response = await client.get("/auth/me", cookies=old_cookies)
+    assert response.status_code == 401
+
+
 async def test_rate_limit_login(client, test_user):
     last_response = None
 

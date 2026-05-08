@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Annotated, Any
 from uuid import UUID
@@ -14,8 +15,8 @@ from app.models.project import Project
 from app.models.task import Task
 from app.models.user import User
 from app.services import pipeline_runner
-from app.services.auth import decrypt_github_access_token
-from app.services.github import GitHubAPIError, GitHubClient
+from app.services.auth import decrypt_github_access_token, decrypt_webhook_secret
+from app.services.github import GitHubClient
 from app.services.tasks import _apply_exclude_patterns
 from app.services.webhook import is_valid_github_signature
 
@@ -85,10 +86,13 @@ async def github_webhook(
     session: DbSession,
 ) -> dict[str, Any]:
     raw_body = await request.body()
+    if len(raw_body) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Payload too large")
     project = await _get_project_or_404(session, project_id)
 
     signature = request.headers.get("X-Hub-Signature-256")
-    if not is_valid_github_signature(project.webhook_secret, raw_body, signature):
+    plaintext_secret = decrypt_webhook_secret(project.webhook_secret)
+    if not is_valid_github_signature(plaintext_secret, raw_body, signature):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid webhook signature",
@@ -171,7 +175,6 @@ async def github_webhook(
         )
 
     github_client = GitHubClient(decrypt_github_access_token(owner.github_access_token))
-    tasks_to_create: list[Task] = []
     commit_message = None
     head_commit = payload.get("head_commit")
     if isinstance(head_commit, dict):
@@ -179,33 +182,36 @@ async def github_webhook(
         if isinstance(message, str):
             commit_message = message
 
-    try:
-        for file_path in files_to_process:
-            original_content, source_file_sha = await github_client.get_file_content(
-                project.source_repo,
-                file_path,
-                project.source_branch,
-            )
-            target_file_sha = await github_client.get_file_sha(
-                project.target_repo,
-                file_path,
-                project.target_branch,
-            )
-            tasks_to_create.append(
-                Task(
-                    project_id=project.id,
-                    file_path=file_path,
-                    github_ref=str(payload["ref"]),
-                    github_sha=payload.get("after"),
-                    commit_message=commit_message,
-                    source_file_sha=source_file_sha,
-                    target_file_sha=target_file_sha,
-                    original_content=original_content,
-                    status="queued",
-                )
-            )
-    except GitHubAPIError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
+    async def _fetch_file_metadata(file_path: str):
+        source_task = github_client.get_file_content(
+            project.source_repo, file_path, project.source_branch
+        )
+        target_task = github_client.get_file_sha(
+            project.target_repo, file_path, project.target_branch
+        )
+        (original_content, source_file_sha), target_file_sha = await asyncio.gather(
+            source_task, target_task
+        )
+        return file_path, original_content, source_file_sha, target_file_sha
+
+    fetched = await asyncio.gather(
+        *[_fetch_file_metadata(fp) for fp in files_to_process]
+    )
+
+    tasks_to_create: list[Task] = [
+        Task(
+            project_id=project.id,
+            file_path=file_path,
+            github_ref=str(payload["ref"]),
+            github_sha=payload.get("after"),
+            commit_message=commit_message,
+            source_file_sha=source_file_sha,
+            target_file_sha=target_file_sha,
+            original_content=original_content,
+            status="queued",
+        )
+        for file_path, original_content, source_file_sha, target_file_sha in fetched
+    ]
 
     session.add_all(tasks_to_create)
     await session.commit()

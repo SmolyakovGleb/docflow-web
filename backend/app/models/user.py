@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, Index, func, text
+from sqlalchemy import BigInteger, DateTime, Index, Integer, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -23,6 +23,7 @@ class User(Base):
     github_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     github_login: Mapped[str | None]
     github_access_token: Mapped[str | None]
+    token_version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

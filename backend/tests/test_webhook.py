@@ -25,7 +25,7 @@ async def test_webhook_ping_event(client, test_project):
     payload = {"zen": "Keep it logically awesome."}
     body = json.dumps(payload).encode("utf-8")
     signature = hmac.new(
-        test_project.webhook_secret.encode("utf-8"),
+        test_project.plaintext_webhook_secret.encode("utf-8"),
         body,
         hashlib.sha256,
     ).hexdigest()
@@ -72,7 +72,7 @@ async def test_webhook_creates_tasks(client, db_session, test_project, test_user
             }
         ],
     }
-    body, headers = sign_payload(test_project.webhook_secret, payload)
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
 
     response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
 
@@ -135,7 +135,7 @@ async def test_webhook_wrong_branch(client, test_project):
         "head_commit": {"message": "Update docs"},
         "commits": [{"added": ["docs/index.md"], "modified": []}],
     }
-    body, headers = sign_payload(test_project.webhook_secret, payload)
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
 
     response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
 
@@ -150,7 +150,7 @@ async def test_webhook_non_md_files(client, test_project):
         "head_commit": {"message": "Update docs"},
         "commits": [{"added": ["docs/image.png"], "modified": ["docs/readme.txt"]}],
     }
-    body, headers = sign_payload(test_project.webhook_secret, payload)
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
 
     response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
 
@@ -192,7 +192,7 @@ async def test_webhook_deduplication_queued(client, db_session, test_project, te
         "head_commit": {"message": "Update docs"},
         "commits": [{"added": ["docs/index.md"], "modified": []}],
     }
-    body, headers = sign_payload(test_project.webhook_secret, payload)
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
 
     response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
 
@@ -238,7 +238,7 @@ async def test_webhook_deduplication_running(client, db_session, test_project, t
         "head_commit": {"message": "Update docs"},
         "commits": [{"added": ["docs/index.md"], "modified": []}],
     }
-    body, headers = sign_payload(test_project.webhook_secret, payload)
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
 
     response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
 
@@ -275,7 +275,7 @@ async def test_webhook_exclude_patterns(client, db_session, test_project, test_u
         "head_commit": {"message": "Update docs"},
         "commits": [{"added": ["docs/private/secret.md"], "modified": []}],
     }
-    body, headers = sign_payload(test_project.webhook_secret, payload)
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
 
     response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
 
@@ -325,7 +325,7 @@ async def test_webhook_multiple_files(client, db_session, test_project, test_use
             }
         ],
     }
-    body, headers = sign_payload(test_project.webhook_secret, payload)
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
 
     response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
 
@@ -347,7 +347,7 @@ async def test_webhook_requires_github_link(client, db_session, test_project, te
         "head_commit": {"message": "Update docs"},
         "commits": [{"added": ["docs/index.md"], "modified": []}],
     }
-    body, headers = sign_payload(test_project.webhook_secret, payload)
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
 
     response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
 
@@ -394,7 +394,7 @@ async def test_webhook_is_atomic_if_github_download_fails(
             }
         ],
     }
-    body, headers = sign_payload(test_project.webhook_secret, payload)
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
 
     response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
 

@@ -15,6 +15,7 @@ from uuid import UUID
 
 from starlette.concurrency import run_in_threadpool
 
+from app.core.config import get_settings
 from app.db.session import get_session_factory
 from app.models.task import Task
 from app.services import dictionary_merger
@@ -22,6 +23,29 @@ from app.services import dictionary_merger
 PIPELINE_ROOT = Path(__file__).resolve().parents[3] / "pipeline"
 TASK_EVENT_QUEUES: dict[UUID, asyncio.Queue[dict[str, Any] | None]] = {}
 PIPELINE_RUN_LOCK = asyncio.Lock()
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+MAX_TASK_EVENT_QUEUES = 200
+
+
+def _evict_oldest_queues_if_needed() -> None:
+    while len(TASK_EVENT_QUEUES) >= MAX_TASK_EVENT_QUEUES:
+        oldest_id = next(iter(TASK_EVENT_QUEUES))
+        evicted = TASK_EVENT_QUEUES.pop(oldest_id, None)
+        if evicted is not None:
+            evicted.put_nowait(None)
+
+
+def _sanitize_error(error_text: str) -> str:
+    settings = get_settings()
+    secrets_to_mask: list[str] = []
+    if settings.api_key:
+        secrets_to_mask.append(settings.api_key)
+    if settings.session_secret:
+        secrets_to_mask.append(settings.session_secret)
+    for secret in secrets_to_mask:
+        if secret and len(secret) >= 8:
+            error_text = error_text.replace(secret, "***REDACTED***")
+    return error_text
 
 
 class QueueLogHandler(logging.Handler):
@@ -101,6 +125,25 @@ def _load_pipeline_modules():
     return pipeline_module, pre_translator_config
 
 
+def _patched_pipeline_dirs(output_dir: Path, pre_translator_dir: Path):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _ctx():
+        pipeline_module, pre_translator_config = _load_pipeline_modules()
+        original_output_dir = pipeline_module.OUTPUT_DIR
+        original_pre_translator_dir = pre_translator_config._DEFAULT_DATA_DIR
+        pipeline_module.OUTPUT_DIR = output_dir
+        pre_translator_config._DEFAULT_DATA_DIR = pre_translator_dir
+        try:
+            yield pipeline_module
+        finally:
+            pipeline_module.OUTPUT_DIR = original_output_dir
+            pre_translator_config._DEFAULT_DATA_DIR = original_pre_translator_dir
+
+    return _ctx()
+
+
 def _run_pipeline_sync(
     *,
     input_file: Path,
@@ -109,13 +152,7 @@ def _run_pipeline_sync(
     merged_data: dictionary_merger.MergedPipelineData,
     logger: logging.Logger,
 ) -> Path:
-    pipeline_module, pre_translator_config = _load_pipeline_modules()
-    original_output_dir = pipeline_module.OUTPUT_DIR
-    original_pre_translator_dir = pre_translator_config._DEFAULT_DATA_DIR
-
-    try:
-        pipeline_module.OUTPUT_DIR = output_dir
-        pre_translator_config._DEFAULT_DATA_DIR = pre_translator_dir
+    with _patched_pipeline_dirs(output_dir, pre_translator_dir) as pipeline_module:
         pipeline_module.run(
             str(input_file),
             False,
@@ -125,10 +162,6 @@ def _run_pipeline_sync(
             merged_data.glossary,
             False,
         )
-    finally:
-        pipeline_module.OUTPUT_DIR = original_output_dir
-        pre_translator_config._DEFAULT_DATA_DIR = original_pre_translator_dir
-
     return output_dir / input_file.name
 
 
@@ -163,6 +196,7 @@ async def run_task(task_id: UUID) -> None:
             return
 
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+        _evict_oldest_queues_if_needed()
         TASK_EVENT_QUEUES[task.id] = queue
         log_handler: QueueLogHandler | None = None
         workspace: Path | None = None
@@ -202,8 +236,8 @@ async def run_task(task_id: UUID) -> None:
             await _emit_event(queue, "status_change", {"status": "done"})
         except Exception:
             task.translated_content = None
-            task.log = log_handler.get_log() if log_handler else None
-            task.error = traceback.format_exc()
+            task.log = _sanitize_error(log_handler.get_log()) if log_handler else None
+            task.error = _sanitize_error(traceback.format_exc())
             task.status = "failed"
             task.completed_at = datetime.now(UTC)
             await session.commit()
@@ -212,4 +246,6 @@ async def run_task(task_id: UUID) -> None:
             if workspace is not None:
                 shutil.rmtree(workspace, ignore_errors=True)
             await queue.put(None)
-            asyncio.create_task(_cleanup_queue_after(task.id, delay=3600.0))
+            _t = asyncio.create_task(_cleanup_queue_after(task.id, delay=3600.0))
+            _BACKGROUND_TASKS.add(_t)
+            _t.add_done_callback(_BACKGROUND_TASKS.discard)

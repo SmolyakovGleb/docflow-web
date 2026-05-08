@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ARRAY, DateTime, ForeignKey, Index, Text, func
+from sqlalchemy import ARRAY, DateTime, ForeignKey, Index, Integer, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import get_settings
@@ -22,11 +22,12 @@ class Project(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     name: Mapped[str]
     source_repo: Mapped[str]
-    source_branch: Mapped[str] = mapped_column(server_default="main")
+    source_branch: Mapped[str] = mapped_column(default="main", server_default="main")
     target_repo: Mapped[str]
-    target_branch: Mapped[str] = mapped_column(server_default="main")
+    target_branch: Mapped[str] = mapped_column(default="main", server_default="main")
     webhook_secret: Mapped[str]
-    exclude_patterns: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
+    exclude_patterns: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, server_default="{}")
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="projects")

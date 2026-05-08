@@ -32,17 +32,18 @@ def test_verify_password_wrong():
 def test_create_and_decode_jwt():
     user_id = uuid.uuid4()
 
-    token = create_jwt(user_id)
+    token = create_jwt(user_id, token_version=1)
     payload = decode_jwt(token)
 
     assert payload["sub"] == str(user_id)
+    assert payload["tv"] == 1
 
 
 def test_decode_expired_jwt():
     user_id = uuid.uuid4()
 
     with freeze_time("2026-01-01T00:00:00Z"):
-        token = create_jwt(user_id)
+        token = create_jwt(user_id, token_version=1)
 
     with freeze_time("2026-02-02T00:00:00Z"):
         with pytest.raises(ExpiredSignatureError):

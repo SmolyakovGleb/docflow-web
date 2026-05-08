@@ -383,12 +383,29 @@ async def create_manual_task_from_upload(
 
 def parse_manual_repo_payload(payload: dict[str, Any]) -> ManualTaskFromRepo:
     try:
-        return ManualTaskFromRepo.model_validate(payload)
+        parsed = ManualTaskFromRepo.model_validate(payload)
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=exc.errors(include_url=False),
         ) from exc
+
+    for file_path in parsed.file_paths:
+        _ensure_safe_relative_path(file_path, field="file_paths[*]")
+    return parsed
+
+
+def _ensure_safe_relative_path(path: str, *, field: str) -> None:
+    if not path or path.startswith("/") or "\\" in path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{field} must be a forward-slash relative path",
+        )
+    if any(part in {"", "..", "."} for part in path.split("/")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{field} must not contain '.' or '..' segments",
+        )
 
 
 def parse_upload_payload(
@@ -408,6 +425,7 @@ def parse_upload_payload(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only .md files are allowed",
         )
+    _ensure_safe_relative_path(target_path, field="target_path")
 
     try:
         parsed_project_id = uuid.UUID(project_id)
@@ -441,6 +459,7 @@ async def reset_task_for_retry(
     force: bool,
 ) -> Task:
     ensure_task_retryable(task)
+    expected_status = task.status
 
     if not is_manual_upload_task(task):
         access_token = ensure_github_access(current_user)
@@ -459,12 +478,26 @@ async def reset_task_for_retry(
                 new_sha=current_sha,
             )
 
-    task.translated_content = None
-    task.log = None
-    task.error = None
-    task.completed_at = None
-    task.status = "queued"
+    from sqlalchemy import update as sql_update
+
+    result = await session.execute(
+        sql_update(Task)
+        .where(Task.id == task.id, Task.status == expected_status)
+        .values(
+            translated_content=None,
+            log=None,
+            error=None,
+            completed_at=None,
+            status="queued",
+        )
+    )
+    if result.rowcount == 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Task status changed concurrently; refresh and retry",
+        )
     await session.commit()
+    await session.refresh(task)
     return task
 
 

@@ -4,15 +4,15 @@ import secrets
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.project import ProjectCreate, ProjectCreateResponse, ProjectRead, ProjectUpdate
-from app.services.auth import get_current_user
+from app.services.auth import encrypt_webhook_secret, get_current_user
 from app.services.projects import ensure_github_linked, get_project_or_404
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -56,9 +56,10 @@ async def create_project(
     payload: ProjectCreate,
     session: DbSession,
     current_user: CurrentUser,
-) -> Project:
+) -> ProjectCreateResponse:
     ensure_github_linked(current_user)
 
+    plaintext_secret = secrets.token_hex(32)
     project = Project(
         user_id=current_user.id,
         name=payload.name,
@@ -66,13 +67,16 @@ async def create_project(
         source_branch=payload.source_branch,
         target_repo=payload.target_repo,
         target_branch=payload.target_branch,
-        webhook_secret=secrets.token_hex(32),
+        webhook_secret=encrypt_webhook_secret(plaintext_secret),
         exclude_patterns=payload.exclude_patterns,
     )
     session.add(project)
     await session.commit()
     await session.refresh(project)
-    return project
+
+    response = ProjectCreateResponse.model_validate(project)
+    response.webhook_secret = plaintext_secret
+    return response
 
 
 @router.get(
@@ -105,11 +109,24 @@ async def update_project(
     current_user: CurrentUser,
 ) -> Project:
     project = await get_project_or_404(session, project_id, current_user)
+    expected_version = project.version
+    changes = payload.model_dump(exclude_unset=True)
 
-    for field_name, value in payload.model_dump(exclude_unset=True).items():
-        setattr(project, field_name, value)
+    if not changes:
+        return project
 
+    result = await session.execute(
+        update(Project)
+        .where(Project.id == project.id, Project.version == expected_version)
+        .values(**changes, version=expected_version + 1)
+    )
+    if result.rowcount == 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Project was modified concurrently; refresh and retry",
+        )
     await session.commit()
+    await session.refresh(project)
     return project
 
 

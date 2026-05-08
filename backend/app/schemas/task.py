@@ -40,7 +40,7 @@ class TaskDetail(TaskSummary):
 class TaskUpdate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    translated_content: str
+    translated_content: str = Field(..., max_length=2_097_152)
 
 
 class TaskListResponse(BaseModel):

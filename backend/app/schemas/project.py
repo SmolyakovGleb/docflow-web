@@ -42,6 +42,7 @@ class ProjectRead(BaseModel):
     target_branch: str
     exclude_patterns: list[str]
     webhook_url: str
+    version: int
     created_at: datetime
 
 
@@ -53,15 +54,6 @@ class ProjectUpdate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     name: str | None = None
-    source_repo: str | None = None
     source_branch: str | None = None
-    target_repo: str | None = None
     target_branch: str | None = None
     exclude_patterns: list[str] | None = None
-
-    @field_validator("source_repo", "target_repo")
-    @classmethod
-    def validate_repo_fields(cls, value: str | None) -> str | None:
-        if value is None:
-            return value
-        return _validate_repo_name(value)

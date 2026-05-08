@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import base64
-import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -9,13 +7,13 @@ from typing import Annotated
 
 import bcrypt
 import httpx
-from cryptography.fernet import Fernet
 from fastapi import Cookie, Depends, HTTPException, status
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.core.config import get_settings
+from app.core.encryption import decrypt_value, encrypt_value
 from app.db.session import get_db_session
 from app.models.user import User
 
@@ -67,22 +65,24 @@ def _require_github_oauth_settings() -> tuple[str, str, str]:
     return settings.github_client_id, settings.github_client_secret, settings.github_callback_url
 
 
-def _get_fernet() -> Fernet:
-    settings = get_settings()
-    key_bytes = hashlib.sha256(settings.session_secret.encode("utf-8")).digest()
-    return Fernet(base64.urlsafe_b64encode(key_bytes))
-
-
 def generate_github_oauth_state() -> str:
     return secrets.token_urlsafe(16)
 
 
 def encrypt_github_access_token(access_token: str) -> str:
-    return _get_fernet().encrypt(access_token.encode("utf-8")).decode("utf-8")
+    return encrypt_value(access_token)
 
 
 def decrypt_github_access_token(encrypted_token: str) -> str:
-    return _get_fernet().decrypt(encrypted_token.encode("utf-8")).decode("utf-8")
+    return decrypt_value(encrypted_token)
+
+
+def encrypt_webhook_secret(secret: str) -> str:
+    return encrypt_value(secret)
+
+
+def decrypt_webhook_secret(encrypted_secret: str) -> str:
+    return decrypt_value(encrypted_secret)
 
 
 def get_github_oauth_url(state: str) -> str:
@@ -156,11 +156,12 @@ async def get_github_user(access_token: str) -> dict[str, int | str]:
     }
 
 
-def create_jwt(user_id: uuid.UUID | str) -> str:
+def create_jwt(user_id: uuid.UUID | str, token_version: int) -> str:
     settings = get_settings()
     expires_at = datetime.now(timezone.utc) + timedelta(days=SESSION_LIFETIME_DAYS)
     payload = {
         "sub": str(user_id),
+        "tv": token_version,
         "exp": expires_at,
     }
     return jwt.encode(payload, settings.session_secret, algorithm=ALGORITHM)
@@ -181,6 +182,7 @@ async def get_current_user(
     try:
         payload = decode_jwt(session_token)
         user_id = uuid.UUID(payload["sub"])
+        token_version = int(payload["tv"])
     except (JWTError, KeyError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -188,7 +190,7 @@ async def get_current_user(
         ) from exc
 
     user = await session.get(User, user_id)
-    if user is None:
+    if user is None or user.token_version != token_version:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     return user

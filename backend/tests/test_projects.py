@@ -40,7 +40,9 @@ async def test_create_project(auth_client, db_session, test_user):
     project = await db_session.scalar(select(Project).where(Project.id == payload["id"]))
     assert project is not None
     assert project.user_id == test_user.id
-    assert project.webhook_secret == payload["webhook_secret"]
+    from app.services.auth import decrypt_webhook_secret
+    assert decrypt_webhook_secret(project.webhook_secret) == payload["webhook_secret"]
+    assert project.webhook_secret != payload["webhook_secret"]
 
 
 async def test_create_project_requires_github_link(auth_client):
@@ -229,14 +231,15 @@ async def test_delete_project_not_found(auth_client, db_session):
     assert response.json() == {"detail": "Project not found"}
 
 
-async def test_patch_project_invalid_repo(auth_client, test_project):
+async def test_patch_project_source_repo_ignored(auth_client, test_project):
+    original_source_repo = test_project.source_repo
     response = await auth_client.patch(
         f"/projects/{test_project.id}",
-        json={"source_repo": "invalid-no-slash"},
+        json={"source_repo": "evil/new-repo"},
     )
 
-    assert response.status_code == 422
-    assert response.json()["detail"][0]["loc"] == ["body", "source_repo"]
+    assert response.status_code == 200
+    assert response.json()["source_repo"] == original_source_repo
 
 
 async def test_patch_project_empty_body(auth_client, db_session, test_project):
@@ -252,13 +255,14 @@ async def test_patch_project_empty_body(auth_client, db_session, test_project):
 
 
 async def test_patch_project_updates_fields(auth_client, db_session, test_project):
+    original_source_repo = test_project.source_repo
+    original_target_repo = test_project.target_repo
+
     response = await auth_client.patch(
         f"/projects/{test_project.id}",
         json={
             "name": "Renamed Project",
-            "source_repo": "team/new-source",
             "source_branch": "develop",
-            "target_repo": "team/new-target",
             "target_branch": "release",
             "exclude_patterns": ["**/drafts/**"],
         },
@@ -267,16 +271,50 @@ async def test_patch_project_updates_fields(auth_client, db_session, test_projec
     assert response.status_code == 200
     payload = response.json()
     assert payload["name"] == "Renamed Project"
-    assert payload["source_repo"] == "team/new-source"
+    assert payload["source_repo"] == original_source_repo
     assert payload["source_branch"] == "develop"
-    assert payload["target_repo"] == "team/new-target"
+    assert payload["target_repo"] == original_target_repo
     assert payload["target_branch"] == "release"
     assert payload["exclude_patterns"] == ["**/drafts/**"]
 
     await db_session.refresh(test_project)
     assert test_project.name == "Renamed Project"
-    assert test_project.source_repo == "team/new-source"
-    assert test_project.target_repo == "team/new-target"
+    assert test_project.source_repo == original_source_repo
+    assert test_project.target_repo == original_target_repo
+
+
+async def test_patch_project_increments_version(auth_client, db_session, test_project):
+    initial_version = test_project.version
+    response = await auth_client.patch(
+        f"/projects/{test_project.id}",
+        json={"name": "v-bump"},
+    )
+    assert response.status_code == 200
+    assert response.json()["version"] == initial_version + 1
+
+
+async def test_patch_project_optimistic_lock_conflict(
+    auth_client, db_session, test_project, engine
+):
+    from sqlalchemy import update
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from app.models.project import Project
+
+    other_session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with other_session_factory() as other_session:
+        await other_session.execute(
+            update(Project)
+            .where(Project.id == test_project.id)
+            .values(version=Project.version + 1)
+        )
+        await other_session.commit()
+
+    response = await auth_client.patch(
+        f"/projects/{test_project.id}",
+        json={"name": "stale-write"},
+    )
+    assert response.status_code == 409
 
 
 async def test_delete_project(auth_client, db_session, test_project):
