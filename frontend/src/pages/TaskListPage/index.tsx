@@ -1,3 +1,7 @@
+import { useTranslation } from 'react-i18next'
+
 export default function TaskListPage() {
-  return <div>TaskListPage</div>
+  const { t } = useTranslation('tasks')
+
+  return <div>{t('title')}</div>
 }

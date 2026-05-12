@@ -1,12 +1,15 @@
-import { DevShowcasePage } from '../pages/DevShowcasePage'
-import { MinViewportGuard } from '../shared/ui/MinViewportGuard/MinViewportGuard'
-import { ToastViewport } from '../shared/ui/Toast/setup'
+import { AppRouter } from './router'
+import { AuthBootstrap } from './auth/AuthBootstrap'
+import { ToastViewport } from '@/shared/ui/Toast/setup'
+import { MinViewportGuard } from '@/shared/ui/MinViewportGuard/MinViewportGuard'
 
 function App() {
   return (
     <MinViewportGuard>
       <ToastViewport />
-      <DevShowcasePage />
+      <AuthBootstrap>
+        <AppRouter />
+      </AuthBootstrap>
     </MinViewportGuard>
   )
 }

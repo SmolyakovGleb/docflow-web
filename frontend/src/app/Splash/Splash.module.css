@@ -1,0 +1,59 @@
+.page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.card {
+  width: min(380px, 100%);
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.04), transparent 50%), var(--surface);
+  box-shadow: var(--shadow-dialog);
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+  color: var(--text);
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.glyph {
+  display: grid;
+  gap: 3px;
+  width: 14px;
+}
+
+.glyph span {
+  display: block;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--text);
+}
+
+.glyph span:nth-child(1) {
+  width: 14px;
+}
+
+.glyph span:nth-child(2) {
+  width: 11px;
+}
+
+.glyph span:nth-child(3) {
+  width: 8px;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+}

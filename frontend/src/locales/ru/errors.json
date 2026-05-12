@@ -2,5 +2,7 @@
   "generic": "Что-то пошло не так",
   "network": "Нет связи с сервером",
   "github_unavailable": "GitHub недоступен",
-  "session_expired": "Сессия истекла, войдите заново"
+  "session_expired": "Сессия истекла, войдите заново",
+  "github_already_linked": "Этот GitHub-аккаунт уже привязан к другому пользователю",
+  "github_not_linked": "GitHub-аккаунт ещё не привязан"
 }
