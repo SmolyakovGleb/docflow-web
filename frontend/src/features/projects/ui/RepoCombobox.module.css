@@ -1,0 +1,37 @@
+.root {
+  position: relative;
+}
+
+.dropdown {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  overflow: auto;
+  max-height: 240px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card);
+  padding: 6px;
+}
+
+.option,
+.empty {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+}
+
+.option:hover {
+  background: var(--surface-hover);
+}
+
+.empty {
+  color: var(--text-dim);
+}

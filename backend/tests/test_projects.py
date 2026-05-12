@@ -355,3 +355,46 @@ async def test_delete_project_keeps_tasks_with_null_project_id(
 
     await db_session.refresh(task)
     assert task.project_id is None
+
+
+async def test_regenerate_webhook_secret(auth_client, db_session, test_project):
+    from app.services.auth import decrypt_webhook_secret
+
+    previous_secret = decrypt_webhook_secret(test_project.webhook_secret)
+
+    response = await auth_client.post(f"/projects/{test_project.id}/regenerate-webhook-secret")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["webhook_secret"]
+    assert payload["webhook_secret"] != previous_secret
+
+    await db_session.refresh(test_project)
+    assert decrypt_webhook_secret(test_project.webhook_secret) == payload["webhook_secret"]
+
+
+async def test_regenerate_webhook_secret_not_found(auth_client, db_session):
+    other_user = User(
+        email="other3@example.com",
+        password_hash="hash",
+        display_name="Other User",
+    )
+    db_session.add(other_user)
+    await db_session.flush()
+
+    other_project = Project(
+        user_id=other_user.id,
+        name="Other Project",
+        source_repo="team/source",
+        source_branch="main",
+        target_repo="team/target",
+        target_branch="main",
+        webhook_secret=secrets.token_hex(32),
+    )
+    db_session.add(other_project)
+    await db_session.commit()
+
+    response = await auth_client.post(f"/projects/{other_project.id}/regenerate-webhook-secret")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Project not found"}

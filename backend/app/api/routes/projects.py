@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db_session
 from app.models.project import Project
 from app.models.user import User
-from app.schemas.project import ProjectCreate, ProjectCreateResponse, ProjectRead, ProjectUpdate
+from app.schemas.project import (
+    ProjectCreate,
+    ProjectCreateResponse,
+    ProjectRead,
+    ProjectUpdate,
+    ProjectWebhookSecretResponse,
+)
 from app.services.auth import encrypt_webhook_secret, get_current_user
 from app.services.projects import ensure_github_linked, get_project_or_404
 
@@ -153,3 +159,31 @@ async def delete_project(
     await session.commit()
     logger.info("project_deleted", extra={"project_id": str(project_id)})
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/{project_id}/regenerate-webhook-secret",
+    response_model=ProjectWebhookSecretResponse,
+    summary="Regenerate project webhook secret",
+    description=(
+        "Генерирует новый `webhook_secret` для проекта и возвращает plaintext "
+        "только в ответе этого endpoint."
+    ),
+    responses={
+        200: {"description": "Новый webhook secret сгенерирован"},
+        404: {"description": "Project not found"},
+    },
+)
+async def regenerate_webhook_secret(
+    project_id: UUID,
+    session: DbSession,
+    current_user: CurrentUser,
+) -> ProjectWebhookSecretResponse:
+    project = await get_project_or_404(session, project_id, current_user)
+
+    plaintext_secret = secrets.token_hex(32)
+    project.webhook_secret = encrypt_webhook_secret(plaintext_secret)
+    await session.commit()
+
+    logger.info("project_webhook_secret_regenerated", extra={"project_id": str(project_id)})
+    return ProjectWebhookSecretResponse(webhook_secret=plaintext_secret)

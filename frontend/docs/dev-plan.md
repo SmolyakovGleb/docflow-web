@@ -376,15 +376,36 @@
 winget install Cloudpub.Cloudpub
 # или скачать exe с cloudpub.ru
 
-# Запуск туннеля на бэкенд-порт
-cloudpub http 8000
+# Привязка CLI к аккаунту
+clo set token <ваш_cloudpub_token>
+
+# Запуск туннеля на backend-порт
+clo publish http 8000 --name docflow-webhook
 # → выдаёт URL вида: https://abc123.cloudpub.ru
 ```
 
-После запуска: скопировать выданный URL в поле **Webhook URL** при создании проекта на GitHub:
+Важно: tunnel пробрасывается напрямую в FastAPI на `:8000`, без Vite proxy. Поэтому внешний URL должен использовать **backend-маршруты без `/api`**.
+
+После запуска:
+
+1. Скопировать выданный URL.
+2. Обновить `APP_BASE_URL` в root `.env`:
+
+```env
+APP_BASE_URL=https://abc123.cloudpub.ru
+```
+
+3. Перезапустить backend, чтобы `project.webhook_url` начал строиться с tunnel-доменом.
+4. При желании зафиксировать URL во `frontend/.env.development.local`:
+
+```env
+VITE_TUNNEL_URL=https://abc123.cloudpub.ru
+```
+
+5. Использовать webhook URL и secret в GitHub:
 
 ```
-Payload URL: https://abc123.cloudpub.ru/api/webhook/{project_id}
+Payload URL: https://abc123.cloudpub.ru/webhook/{project_id}
 Content type: application/json
 Secret: <webhook_secret из модалки>
 Events: Just the push event
@@ -398,20 +419,30 @@ Events: Just the push event
 # В корне проекта
 docker compose up backend db
 # В отдельном терминале
-cloudpub http 8000
+clo publish http 8000 --name docflow-webhook
 ```
 
 Nginx в docker-compose не нужен для разработки — туннель пробрасывает прямо на FastAPI-порт.
 
 ### Переменная окружения
 
-В `frontend/.env.development` (уже создан на этапе 1) можно зафиксировать текущий туннельный URL для удобства:
+Для локальной настройки удобно использовать два файла:
+
+- root `.env.local` — хранит `CLOUDPUB_TOKEN` (не читается приложением, только helper-скриптами)
+- `frontend/.env.development.local` — хранит `VITE_TUNNEL_URL` для dev-подсказок и README
 
 ```env
+# .env.local
+CLOUDPUB_TOKEN=your_cloudpub_token
+```
+
+```env
+# frontend/.env.development.local
 VITE_TUNNEL_URL=https://abc123.cloudpub.ru
 ```
 
-Используется только в devtools / readme, не в коде приложения. Туннельный URL меняется при каждом перезапуске на бесплатном плане — обновлять вручную.
+`APP_BASE_URL` остаётся в root `.env`, потому что именно его читает backend-конфиг для генерации `project.webhook_url`.
+`VITE_TUNNEL_URL` используется только в devtools / readme, не в коде приложения. Tunnel URL может меняться при перезапуске на бесплатном плане — обновлять вручную.
 
 ### Эмуляция без туннеля (альтернатива)
 
@@ -429,7 +460,7 @@ print(payload)
 "
 
 # Отправить
-curl -X POST http://localhost:8000/api/webhook/{project_id} \
+curl -X POST http://localhost:8000/webhook/{project_id} \
   -H 'Content-Type: application/json' \
   -H 'X-Hub-Signature-256: sha256=<sig>' \
   -d '<payload>'
@@ -438,7 +469,7 @@ curl -X POST http://localhost:8000/api/webhook/{project_id} \
 ### Проверка
 
 1. Туннель запущен, URL открывается в браузере
-2. `GET https://abc123.cloudpub.ru/api/health` → `{"status": "ok"}`
+2. `GET https://abc123.cloudpub.ru/health` → `{"status": "ok"}`
 3. Создать проект → вставить туннельный URL в GitHub Webhook Settings → push любой файл → задача появилась в `/tasks`
 
 ---

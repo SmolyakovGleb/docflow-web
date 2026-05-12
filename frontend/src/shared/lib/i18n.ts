@@ -6,6 +6,7 @@ import authRu from '@/locales/ru/auth.json'
 import commonRu from '@/locales/ru/common.json'
 import errorsRu from '@/locales/ru/errors.json'
 import navRu from '@/locales/ru/nav.json'
+import repositoriesRu from '@/locales/ru/repositories.json'
 import tasksRu from '@/locales/ru/tasks.json'
 
 void i18n
@@ -19,9 +20,10 @@ void i18n
         auth: authRu,
         tasks: tasksRu,
         errors: errorsRu,
+        repositories: repositoriesRu,
       },
     },
-    ns: ['common', 'nav', 'auth', 'tasks', 'errors'],
+    ns: ['common', 'nav', 'auth', 'tasks', 'errors', 'repositories'],
     defaultNS: 'common',
     lng: 'ru',
     fallbackLng: 'ru',

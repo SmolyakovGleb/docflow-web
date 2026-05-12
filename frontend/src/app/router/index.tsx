@@ -2,6 +2,8 @@ import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
 import RepositoriesPage from '@/pages/RepositoriesPage'
+import NewRepositoryPage from '@/pages/NewRepositoryPage'
+import RepositoryDetailPage from '@/pages/RepositoryDetailPage'
 import TaskDetailPage from '@/pages/TaskDetailPage'
 import TaskListPage from '@/pages/TaskListPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
@@ -62,6 +64,14 @@ const router = createBrowserRouter([
       {
         path: '/repositories',
         element: <RepositoriesPage />,
+      },
+      {
+        path: '/repositories/new',
+        element: <NewRepositoryPage />,
+      },
+      {
+        path: '/repositories/:projectId',
+        element: <RepositoryDetailPage />,
       },
       {
         path: '/analytics',
