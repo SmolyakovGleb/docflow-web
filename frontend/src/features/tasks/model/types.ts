@@ -1,4 +1,4 @@
-export type TaskStatus = 'queued' | 'running' | 'done' | 'failed' | 'published'
+export type TaskStatus = 'queued' | 'running' | 'done' | 'failed' | 'published' | 'conflict'
 
 export interface TaskSummary {
   id: string

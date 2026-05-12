@@ -1,0 +1,64 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid transparent;
+}
+
+.iconSlot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pulseDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+.queued {
+  color: var(--status-queued);
+  background: var(--status-queued-bg);
+  border-color: rgba(155, 169, 187, 0.2);
+}
+
+.running {
+  color: var(--status-running);
+  background: var(--status-running-bg);
+  border-color: rgba(109, 184, 255, 0.22);
+}
+
+.done {
+  color: var(--status-done);
+  background: var(--status-done-bg);
+  border-color: rgba(105, 211, 160, 0.22);
+}
+
+.failed {
+  color: var(--status-failed);
+  background: var(--status-failed-bg);
+  border-color: rgba(255, 123, 111, 0.22);
+}
+
+.published {
+  color: var(--status-published);
+  background: var(--status-published-bg);
+  border-color: rgba(195, 147, 255, 0.22);
+}
+
+.conflict {
+  color: var(--status-conflict);
+  background: var(--status-conflict-bg);
+  border-color: rgba(255, 179, 92, 0.22);
+}

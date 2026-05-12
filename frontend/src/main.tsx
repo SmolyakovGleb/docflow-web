@@ -5,7 +5,8 @@ import * as Sentry from '@sentry/react'
 import { store } from './shared/store'
 import './shared/lib/i18n'
 import './app/styles/vars.css'
-import App from './App'
+import './app/styles/globals.css'
+import App from './app/App'
 
 if (import.meta.env.PROD && import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({

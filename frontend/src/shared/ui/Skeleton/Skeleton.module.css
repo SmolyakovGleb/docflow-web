@@ -1,0 +1,22 @@
+.root {
+  display: inline-block;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.13) 50%,
+    rgba(255, 255, 255, 0.06) 100%
+  );
+  background-size: 200% 100%;
+  animation:
+    shimmer 1.4s linear infinite,
+    skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+.line,
+.rect {
+  border-radius: var(--radius-xs);
+}
+
+.circle {
+  border-radius: var(--radius-full);
+}

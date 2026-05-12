@@ -1,0 +1,28 @@
+.docflow-toast {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(21, 26, 32, 0.96);
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+}
+
+.docflow-toast-title {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.docflow-toast-description {
+  color: var(--text-dim);
+}
+
+.docflow-toast-action {
+  border-radius: var(--radius-xs);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.docflow-toast-cancel {
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-dim);
+}

@@ -1,85 +1,77 @@
 :root {
-  /* ==== Surfaces ==== */
-  --bg: #0f0f0f;
-  --surface: #161616;
-  --surface-hover: #1e1e1e;
-  --border: #262626;
-  --border-soft: #1e1e1e;
-
-  /* ==== Text ==== */
-  --text: #ededed;
-  --text-dim: #666;
-  --text-dimmer: #555;
-  --text-path-dim: #444;
-  --accent: #ffffff;
-
-  /* ==== Status ==== */
-  --status-queued: #888;
-  --status-running: #6db8ff;
-  --status-done: #6dd394;
-  --status-failed: #ff6d6d;
-  --status-published: #b07dff;
-  --status-conflict: #ffb547;
-
-  /* TaskDetail */
-  --diff-bg: rgba(255, 255, 255, 0.025);
-  --diff-bg-strong: rgba(255, 255, 255, 0.04);
-
-  /* ==== Type ==== */
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 
-  /* ==== Layout ==== */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0f0f0f;
+  --bg-accent: #141414;
+  --surface: #161616;
+  --surface-elevated: #1c1c1c;
+  --surface-hover: #1e1e1e;
+  --surface-active: #252525;
+  --surface-danger: rgba(228, 86, 73, 0.14);
+
+  --border: #262626;
+  --border-strong: #333333;
+  --border-soft: #1e1e1e;
+  --focus-ring: rgba(255, 255, 255, 0.07);
+
+  --text: #ededed;
+  --text-muted: #aaaaaa;
+  --text-dim: #666666;
+  --text-faint: #555555;
+  --text-on-accent: #0f0f0f;
+
+  --accent: #ffffff;
+  --accent-strong: #78bfff;
+  --accent-soft: rgba(120, 191, 255, 0.12);
+  --danger: #e45649;
+  --danger-soft: rgba(228, 86, 73, 0.18);
+
+  --status-queued: #888888;
+  --status-queued-bg: rgba(136, 136, 136, 0.14);
+  --status-running: #6db8ff;
+  --status-running-bg: rgba(109, 184, 255, 0.14);
+  --status-done: #6dd394;
+  --status-done-bg: rgba(109, 211, 148, 0.14);
+  --status-failed: #ff6d6d;
+  --status-failed-bg: rgba(255, 109, 109, 0.14);
+  --status-published: #b07dff;
+  --status-published-bg: rgba(176, 125, 255, 0.14);
+  --status-conflict: #ffb547;
+  --status-conflict-bg: rgba(255, 181, 71, 0.16);
+
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 24px;
+
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+
+  --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.24);
+  --shadow-dialog: 0 36px 80px rgba(0, 0, 0, 0.44);
+  --shadow-focus: 0 0 0 4px var(--focus-ring);
+
+  --transition-fast: 140ms ease;
+  --transition-base: 180ms ease;
+
   --sidebar-width: 220px;
   --content-max: 1180px;
   --content-pad-x: 56px;
   --content-pad-top: 38px;
   --content-pad-bottom: 80px;
+  --viewport-guard-width: 1280px;
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html,
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-size: 14px;
-  line-height: 1.5;
-  letter-spacing: -0.005em;
-}
-
-button {
-  font-family: inherit;
-  color: inherit;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-
-input,
-textarea,
-select {
-  font-family: inherit;
-  color: inherit;
-  background: none;
-  border: none;
-  outline: none;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-/* Pulse animation reused in many places */
 @keyframes pulse-dot {
   0%,
   100% {

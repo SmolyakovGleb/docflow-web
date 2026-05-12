@@ -350,6 +350,96 @@
 
 ---
 
+## Этап 5а — Туннель для webhook-тестирования
+
+Настройка публичного URL для локального бэкенда. Нужна чтобы GitHub мог слать реальные push-события на localhost во время разработки этапов 6–7.
+
+### Когда нужно
+
+Без туннеля можно обойтись на этапах 1–5: весь CRUD проверяется через `localhost:8000` напрямую. Туннель нужен в момент, когда хочется проверить полный флоу: **реальный push в GitHub → webhook → задача появилась в TaskList**.
+
+Можно отложить до начала этапа 6, если webhook-флоу планируется тестировать через `curl`-эмуляцию. Но лучше настроить заранее — вместе с созданием первого проекта на этапе 5.
+
+### Инструмент
+
+**Cloudpub** (`cloudpub.ru`) — российский аналог ngrok, поддерживает постоянный поддомен без токена на бесплатном плане.
+
+Альтернативы: `ngrok` (требует auth), `localtunnel` (нестабилен), `bore` (Go, open-source, self-hosted).
+
+### Настройка
+
+```bash
+# Установка (Windows)
+winget install Cloudpub.Cloudpub
+# или скачать exe с cloudpub.ru
+
+# Запуск туннеля на бэкенд-порт
+cloudpub http 8000
+# → выдаёт URL вида: https://abc123.cloudpub.ru
+```
+
+После запуска: скопировать выданный URL в поле **Webhook URL** при создании проекта на GitHub:
+
+```
+Payload URL: https://abc123.cloudpub.ru/api/webhook/{project_id}
+Content type: application/json
+Secret: <webhook_secret из модалки>
+Events: Just the push event
+```
+
+### Локальный docker-compose
+
+Когда туннель активен, бэкенд всё равно запускается через `docker compose up`:
+
+```bash
+# В корне проекта
+docker compose up backend db
+# В отдельном терминале
+cloudpub http 8000
+```
+
+Nginx в docker-compose не нужен для разработки — туннель пробрасывает прямо на FastAPI-порт.
+
+### Переменная окружения
+
+В `frontend/.env.development` (уже создан на этапе 1) можно зафиксировать текущий туннельный URL для удобства:
+
+```env
+VITE_TUNNEL_URL=https://abc123.cloudpub.ru
+```
+
+Используется только в devtools / readme, не в коде приложения. Туннельный URL меняется при каждом перезапуске на бесплатном плане — обновлять вручную.
+
+### Эмуляция без туннеля (альтернатива)
+
+Если туннель не нужен прямо сейчас, webhook можно отправить вручную:
+
+```bash
+# Сгенерировать подпись
+python -c "
+import hmac, hashlib, json
+secret = 'your_webhook_secret'
+payload = json.dumps({'ref': 'refs/heads/main', 'commits': [{'id': 'abc1234', 'message': 'test', 'author': {'name': 'Test', 'login': 'test'}, 'added': [], 'removed': [], 'modified': ['docs/test.md']}], 'repository': {'full_name': 'owner/repo'}})
+sig = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+print(f'sha256={sig}')
+print(payload)
+"
+
+# Отправить
+curl -X POST http://localhost:8000/api/webhook/{project_id} \
+  -H 'Content-Type: application/json' \
+  -H 'X-Hub-Signature-256: sha256=<sig>' \
+  -d '<payload>'
+```
+
+### Проверка
+
+1. Туннель запущен, URL открывается в браузере
+2. `GET https://abc123.cloudpub.ru/api/health` → `{"status": "ok"}`
+3. Создать проект → вставить туннельный URL в GitHub Webhook Settings → push любой файл → задача появилась в `/tasks`
+
+---
+
 ## Этап 6 — Dashboard (TaskList)
 
 Главный экран продукта. Самый большой по объёму.
@@ -867,23 +957,25 @@ Read-only просмотр словарей.
 ## Порядок этапов
 
 ```
-1  Базовая инфраструктура (design tokens, shared UI)
-2  RTK Query + Auth bootstrap + Protected routes
-3  Auth pages (Login + Register)
-4  Layout + Sidebar
-5  Repositories (list + create + WebhookSecretModal)
-6  Dashboard (TaskList)
-7  TaskDetail (Diff + Logs + Conflict)
-8  History
-9  Analytics
-10 Dictionaries
-11 Settings
-12 Onboarding + Cmdk + 404 + ErrorBoundary
-13 Финальная сборка
+1   Базовая инфраструктура (design tokens, shared UI)
+2   RTK Query + Auth bootstrap + Protected routes
+3   Auth pages (Login + Register)
+4   Layout + Sidebar
+5   Repositories (list + create + WebhookSecretModal)
+5а  Туннель для webhook-тестирования (Cloudpub)       ← настроить перед этапом 6
+6   Dashboard (TaskList)
+7   TaskDetail (Diff + Logs + Conflict)
+8   History
+9   Analytics
+10  Dictionaries
+11  Settings
+12  Onboarding + Cmdk + 404 + ErrorBoundary
+13  Финальная сборка
 ```
 
 Этапы 1–4 — фундамент, без UI-фич, но обязательны.
-Этапы 5–7 — основной MVP-флоу: проект → задача → детали → публикация.
+Этапы 5–5а — подготовка: создание проекта + туннель для реального webhook.
+Этапы 6–7 — основной MVP-флоу: задача → детали → публикация.
 Этапы 8–11 — вспомогательные экраны.
 Этап 12 — cross-cutting features.
 Этап 13 — polish.

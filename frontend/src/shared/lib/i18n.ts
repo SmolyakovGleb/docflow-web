@@ -23,6 +23,7 @@ void i18n
     },
     ns: ['common', 'nav', 'auth', 'tasks', 'errors'],
     defaultNS: 'common',
+    lng: 'ru',
     fallbackLng: 'ru',
     supportedLngs: ['ru'],
     interpolation: { escapeValue: false },

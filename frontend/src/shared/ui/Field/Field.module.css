@@ -1,0 +1,34 @@
+.root {
+  display: grid;
+  gap: 8px;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.label {
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.required {
+  color: var(--danger);
+}
+
+.hint,
+.error {
+  font-size: var(--font-size-sm);
+}
+
+.hint {
+  color: var(--text-dim);
+}
+
+.error {
+  color: var(--status-failed);
+}
