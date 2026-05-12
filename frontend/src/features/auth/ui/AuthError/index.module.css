@@ -1,0 +1,18 @@
+.root {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding: 10px 12px;
+  border: 1px solid rgba(217, 119, 87, 0.25);
+  border-radius: 6px;
+  background: rgba(217, 119, 87, 0.08);
+  color: var(--status-failed);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.root svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}

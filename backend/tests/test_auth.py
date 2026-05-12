@@ -8,7 +8,7 @@ async def test_register_success(client):
         "/auth/register",
         json={
             "email": "new@example.com",
-            "password": "strongpassword",
+            "password": "strongpassword1",
             "display_name": "New User",
         },
     )
@@ -24,13 +24,26 @@ async def test_register_duplicate_email(client, test_user):
         "/auth/register",
         json={
             "email": test_user.email,
-            "password": "strongpassword",
+            "password": "strongpassword1",
             "display_name": "Another User",
         },
     )
 
     assert response.status_code == 400
     assert response.json() == {"detail": "Email already registered"}
+
+
+async def test_register_rejects_password_without_digit(client):
+    response = await client.post(
+        "/auth/register",
+        json={
+          "email": "weak@example.com",
+          "password": "strongpassword",
+          "display_name": "Weak Password User",
+        },
+    )
+
+    assert response.status_code == 422
 
 
 async def test_login_success(client, test_user):
@@ -114,7 +127,7 @@ async def test_change_password_success(auth_client, client, test_user):
         "/auth/change-password",
         json={
             "current_password": "testpassword",
-            "new_password": "newstrongpassword",
+            "new_password": "newstrongpassword1",
         },
     )
 
@@ -125,7 +138,7 @@ async def test_change_password_success(auth_client, client, test_user):
         "/auth/login",
         json={
             "email": test_user.email,
-            "password": "newstrongpassword",
+            "password": "newstrongpassword1",
         },
     )
     assert login_response.status_code == 200
@@ -138,7 +151,7 @@ async def test_change_password_does_not_update_last_login_at(auth_client, db_ses
         "/auth/change-password",
         json={
             "current_password": "testpassword",
-            "new_password": "newstrongpassword",
+            "new_password": "newstrongpassword1",
         },
     )
 
@@ -151,7 +164,7 @@ async def test_change_password_does_not_update_last_login_at(auth_client, db_ses
 async def test_change_password_unauthenticated(client):
     response = await client.post(
         "/auth/change-password",
-        json={"current_password": "testpassword", "new_password": "newpassword"},
+        json={"current_password": "testpassword", "new_password": "newpassword1"},
     )
 
     assert response.status_code == 401
@@ -162,12 +175,24 @@ async def test_change_password_wrong_current_password(auth_client):
         "/auth/change-password",
         json={
             "current_password": "wrongpassword",
-            "new_password": "newstrongpassword",
+            "new_password": "newstrongpassword1",
         },
     )
 
     assert response.status_code == 400
     assert response.json() == {"detail": "Current password is incorrect"}
+
+
+async def test_change_password_rejects_new_password_without_digit(auth_client):
+    response = await auth_client.post(
+        "/auth/change-password",
+        json={
+            "current_password": "testpassword",
+            "new_password": "newstrongpassword",
+        },
+    )
+
+    assert response.status_code == 422
 
 
 async def test_logout_invalidates_old_token(auth_client, client, test_user):
@@ -184,7 +209,7 @@ async def test_change_password_invalidates_old_token(auth_client, client, test_u
         "/auth/change-password",
         json={
             "current_password": "testpassword",
-            "new_password": "newstrongpassword",
+            "new_password": "newstrongpassword1",
         },
     )
     assert response.status_code == 200
@@ -217,7 +242,7 @@ async def test_rate_limit_register(client):
             "/auth/register",
             json={
                 "email": f"user-{index}@example.com",
-                "password": "strongpassword",
+                "password": "strongpassword1",
                 "display_name": "Rate Limited User",
             },
         )

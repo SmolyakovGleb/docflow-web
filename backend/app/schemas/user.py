@@ -4,12 +4,19 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+PASSWORD_REQUIRES_DIGIT_PATTERN = r".*\d.*"
+
 
 class UserRegister(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     email: EmailStr
-    password: str = Field(..., min_length=8, max_length=72)
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=72,
+        pattern=PASSWORD_REQUIRES_DIGIT_PATTERN,
+    )
     display_name: str | None = None
 
 
@@ -34,4 +41,9 @@ class ChangePasswordRequest(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     current_password: str = Field(..., min_length=1, max_length=72)
-    new_password: str = Field(..., min_length=8, max_length=72)
+    new_password: str = Field(
+        ...,
+        min_length=8,
+        max_length=72,
+        pattern=PASSWORD_REQUIRES_DIGIT_PATTERN,
+    )

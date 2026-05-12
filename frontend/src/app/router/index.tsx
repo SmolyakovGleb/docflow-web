@@ -8,7 +8,9 @@ import AnalyticsPage from '@/pages/AnalyticsPage'
 import DictionariesPage from '@/pages/DictionariesPage'
 import HistoryPage from '@/pages/HistoryPage'
 import SettingsPage from '@/pages/SettingsPage'
+import PageInDevelopmentPage from '@/pages/PageInDevelopmentPage'
 import { DevShowcasePage } from '@/pages/DevShowcasePage'
+import i18n from '@/shared/lib/i18n'
 import { ProtectedRoute } from '../auth/ProtectedRoute'
 import { PublicRoute } from '../auth/PublicRoute'
 
@@ -32,6 +34,14 @@ const router = createBrowserRouter([
         <RegisterPage />
       </PublicRoute>
     ),
+  },
+  {
+    path: '/terms',
+    element: <PageInDevelopmentPage title={i18n.t('common:terms_title')} />,
+  },
+  {
+    path: '/privacy',
+    element: <PageInDevelopmentPage title={i18n.t('common:privacy_title')} />,
   },
   {
     path: '/tasks',

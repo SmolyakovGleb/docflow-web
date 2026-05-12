@@ -1,0 +1,13 @@
+.form {
+  display: grid;
+  gap: 14px;
+}
+
+.optional {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.submit {
+  margin-top: 8px;
+}

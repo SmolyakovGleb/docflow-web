@@ -1,3 +1,4 @@
+import type { AxiosBaseQueryError } from '@/shared/api/axiosBaseQuery'
 import i18n from '@/shared/lib/i18n'
 
 const BACKEND_TO_KEY: Record<string, string> = {
@@ -16,4 +17,35 @@ export function translateBackendError(detail: string): string {
   }
 
   return i18n.t(key)
+}
+
+function extractErrorDetail(data: unknown): string | null {
+  if (!data || typeof data !== 'object' || !('detail' in data)) {
+    return null
+  }
+
+  return typeof data.detail === 'string' ? data.detail : null
+}
+
+export function translateApiError(error: unknown): string {
+  if (!error || typeof error !== 'object') {
+    return i18n.t('errors:generic')
+  }
+
+  const apiError = error as AxiosBaseQueryError
+
+  if (apiError.status === 429) {
+    return i18n.t('auth:errors.rate_limited')
+  }
+
+  if (typeof apiError.status === 'undefined') {
+    return i18n.t('errors:network')
+  }
+
+  const detail = extractErrorDetail(apiError.data)
+  if (detail) {
+    return translateBackendError(detail)
+  }
+
+  return i18n.t('errors:generic')
 }

@@ -154,18 +154,20 @@
 - `src/features/auth/ui/PasswordInput.tsx` — `Input` + toggle visibility (`lucide:eye` / `eye-off`)
 - `src/features/auth/ui/AuthError.tsx` — error-banner над формой
 - `src/features/auth/lib/schemas.ts` — `loginSchema`, `registerSchema` (zod)
-- `src/pages/LoginPage.tsx` — оборачивает `<AuthLayout><LoginForm /></AuthLayout>`
-- `src/pages/RegisterPage.tsx` — то же с `<RegisterForm />`
+- `src/pages/LoginPage/index.tsx` — оборачивает `<AuthLayout><LoginForm /></AuthLayout>`
+- `src/pages/RegisterPage/index.tsx` — то же с `<RegisterForm />`
 
 ### Детали реализации
 
 - Форма Login: `email` (EmailStr на бэке), `password` (min 1)
-- Форма Register: `email`, `password` (min 8), `display_name` (опционально)
+- Форма Register: `email`, `password` (min 8, минимум одна цифра), `display_name` (опционально)
 - Submit → `useLoginMutation()` / `useRegisterMutation()`
 - На 200 → `dispatch(setUser(res))` + `navigate('/tasks')`
+- На 201 от `POST /auth/register` → считать пользователя уже авторизованным, делать `dispatch(setUser(res))` + `navigate('/tasks')`
 - На 400 (email taken) / 401 (invalid creds) / 429 (rate limit) → `<AuthError>` с переведённым сообщением
 - Кнопка submit с `loading` спиннером, отключение во время mutation
 - Ссылка переключения: на `/register` показывается «Нет аккаунта? Зарегистрироваться»; на `/login` — «Уже есть аккаунт? Войти»
+- Под карточкой показывать ссылки на `/terms` и `/privacy`; до готовности реального контента эти маршруты ведут на общую заглушку «страница ещё в разработке»
 - Стилистика по `frontend/docs/designs/DocFlow Auth.html`
 
 ### Локализация
@@ -175,6 +177,7 @@
 - `auth.submit_login`, `auth.submit_register`
 - `auth.have_account`, `auth.no_account`
 - `auth.errors.invalid_credentials`, `auth.errors.email_taken`, `auth.errors.rate_limited`
+- `auth.password_hint`, `auth.errors.password_digit_required`
 
 ### Состояния UI
 
@@ -925,6 +928,36 @@ Read-only просмотр словарей.
 
 ---
 
+## Этап 12a — Служебные заглушки для неготовых страниц
+
+Маршруты уже могут быть нужны в UI, но сам контент ещё не готов. Для них вводим единый безопасный шаблон-заглушку.
+
+### Файлы
+
+- `src/pages/PageInDevelopmentPage/index.tsx`
+- `src/pages/PageInDevelopmentPage/PageInDevelopmentPage.module.css`
+- `src/app/router/index.tsx`
+
+### Детали реализации
+
+- Общая заглушка с заголовком, кратким пояснением и кнопкой возврата
+- Первые маршруты: `/terms`, `/privacy`
+- Паттерн должен переиспользоваться и для других служебных страниц MVP, если на них уже ссылается интерфейс
+
+### Локализация
+
+- `common.page_in_development_title`
+- `common.page_in_development_description`
+- `common.terms_title`
+- `common.privacy_title`
+
+### Проверка
+
+1. Переход на `/terms` и `/privacy` не приводит на пустой экран или 404
+2. Пользователь понимает, что страница ещё не готова, и может вернуться назад
+
+---
+
 ## Этап 13 — Финальная сборка
 
 ### Что делаем
@@ -970,6 +1003,7 @@ Read-only просмотр словарей.
 10  Dictionaries
 11  Settings
 12  Onboarding + Cmdk + 404 + ErrorBoundary
+12a Заглушки для служебных страниц
 13  Финальная сборка
 ```
 
