@@ -50,6 +50,12 @@ class ProjectCreateResponse(ProjectRead):
     webhook_secret: str
 
 
+class ProjectWebhookSecretResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    webhook_secret: str
+
+
 class ProjectUpdate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

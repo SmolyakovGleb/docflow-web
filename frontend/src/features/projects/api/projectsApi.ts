@@ -1,0 +1,95 @@
+import { baseApi } from '@/shared/api/baseApi'
+import type {
+  GithubRepo,
+  Project,
+  ProjectCreatePayload,
+  ProjectCreateResponse,
+  ProjectTaskListResponse,
+  ProjectUpdatePayload,
+  ProjectWebhookSecretResponse,
+} from '../model/types'
+
+export const projectsApi = baseApi.injectEndpoints({
+  endpoints: (builder) => ({
+    getProjects: builder.query<Project[], void>({
+      query: () => ({
+        url: '/projects',
+      }),
+      providesTags: ['Project'],
+    }),
+    getProject: builder.query<Project, string>({
+      query: (projectId) => ({
+        url: `/projects/${projectId}`,
+      }),
+      providesTags: (_result, _error, projectId) => [{ type: 'Project', id: projectId }],
+    }),
+    getProjectTasks: builder.query<ProjectTaskListResponse, string>({
+      query: (projectId) => ({
+        url: '/tasks',
+        params: {
+          project_id: projectId,
+          limit: 5,
+          offset: 0,
+        },
+      }),
+    }),
+    getGithubRepos: builder.query<GithubRepo[], void>({
+      query: () => ({
+        url: '/me/github-repos',
+      }),
+    }),
+    createProject: builder.mutation<ProjectCreateResponse, ProjectCreatePayload>({
+      query: (data) => ({
+        url: '/projects',
+        method: 'POST',
+        data,
+      }),
+      invalidatesTags: ['Project'],
+    }),
+    updateProject: builder.mutation<
+      Project,
+      {
+        projectId: string
+        data: ProjectUpdatePayload
+      }
+    >({
+      query: ({ projectId, data }) => ({
+        url: `/projects/${projectId}`,
+        method: 'PATCH',
+        data,
+      }),
+      invalidatesTags: (_result, _error, { projectId }) => [
+        'Project',
+        { type: 'Project', id: projectId },
+      ],
+    }),
+    deleteProject: builder.mutation<void, string>({
+      query: (projectId) => ({
+        url: `/projects/${projectId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Project'],
+    }),
+    regenerateSecret: builder.mutation<ProjectWebhookSecretResponse, string>({
+      query: (projectId) => ({
+        url: `/projects/${projectId}/regenerate-webhook-secret`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_result, _error, projectId) => [
+        'Project',
+        { type: 'Project', id: projectId },
+      ],
+    }),
+  }),
+})
+
+export const {
+  useCreateProjectMutation,
+  useDeleteProjectMutation,
+  useGetGithubReposQuery,
+  useGetProjectQuery,
+  useGetProjectTasksQuery,
+  useGetProjectsQuery,
+  useRegenerateSecretMutation,
+  useUpdateProjectMutation,
+} = projectsApi

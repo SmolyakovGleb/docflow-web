@@ -1,0 +1,46 @@
+.root {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.root:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-focus);
+}
+
+.error {
+  border-color: var(--danger);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius-full);
+  background: var(--surface-hover);
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: var(--font-size-xs);
+}
+
+.remove {
+  color: var(--text-dim);
+}
+
+.input {
+  flex: 1;
+  min-width: 220px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+.input::placeholder {
+  color: var(--text-faint);
+}

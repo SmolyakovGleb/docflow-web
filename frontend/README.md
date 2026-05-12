@@ -72,6 +72,49 @@ npm run dev      # localhost:5173
 
 Backend: `localhost:8000`. Vite проксирует `/api/*` → `localhost:8000/*`.
 
+## Webhook tunnel (CloudPub)
+
+Для реального GitHub webhook в dev используется CloudPub tunnel прямо на backend-порт `8000`, без `/api`-префикса.
+
+1. Установить CLI:
+
+```bash
+winget install Cloudpub.Cloudpub
+```
+
+2. Положить токен в root `.env.local`:
+
+```env
+CLOUDPUB_TOKEN=your_cloudpub_token
+```
+
+3. Запустить backend и tunnel:
+
+```powershell
+docker compose up backend db
+./scripts/start-cloudpub-tunnel.ps1
+```
+
+4. Когда CloudPub покажет публичный URL, обновить:
+
+```env
+# /.env
+APP_BASE_URL=https://abc123.cloudpub.ru
+```
+
+```env
+# /frontend/.env.development.local
+VITE_TUNNEL_URL=https://abc123.cloudpub.ru
+```
+
+5. Перезапустить backend и использовать webhook URL вида:
+
+```text
+https://abc123.cloudpub.ru/webhook/{project_id}
+```
+
+Более подробный сценарий: `docs/cloudpub-webhook-testing.md`.
+
 ## Архитектура — Feature Colocation
 
 ```

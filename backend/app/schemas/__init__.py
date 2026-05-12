@@ -10,7 +10,13 @@ from app.schemas.notification import (
     NotificationChannelRead,
     NotificationChannelUpdate,
 )
-from app.schemas.project import ProjectCreate, ProjectRead, ProjectUpdate
+from app.schemas.project import (
+    ProjectCreate,
+    ProjectCreateResponse,
+    ProjectRead,
+    ProjectUpdate,
+    ProjectWebhookSecretResponse,
+)
 from app.schemas.publication import HistoryPublicationRead, HistoryResponse, PublicationRead
 from app.schemas.task import (
     ConflictDetail,
@@ -40,8 +46,10 @@ __all__ = [
     "NotificationChannelRead",
     "NotificationChannelUpdate",
     "ProjectCreate",
+    "ProjectCreateResponse",
     "ProjectRead",
     "ProjectUpdate",
+    "ProjectWebhookSecretResponse",
     "PublicationRead",
     "RetryRequest",
     "SkippedFile",
