@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.publication import PublicationRead
 
-TaskStatus = Literal["queued", "running", "done", "failed", "published"]
+TaskStatus = Literal["queued", "running", "done", "failed", "published", "conflict"]
 SkippedReason = Literal["already_queued", "pipeline_running", "excluded_by_pattern"]
 
 
@@ -38,6 +38,9 @@ class TaskDetail(TaskSummary):
     target_file_sha: str | None = Field(None, description="Target repository blob SHA")
     original_content: str = Field(..., description="Original source content")
     translated_content: str | None = Field(None, description="Translated content")
+    conflict_base: str | None = Field(None, description="Original content snapshot for publish conflict")
+    conflict_ours: str | None = Field(None, description="Local translated content snapshot for publish conflict")
+    conflict_theirs: str | None = Field(None, description="Remote target content snapshot for publish conflict")
     error: str | None = Field(None, description="Pipeline traceback for failed tasks")
     publications: list[PublicationRead] = Field(default_factory=list, description="Task publications")
 

@@ -219,6 +219,9 @@ async def run_task(task_id: UUID) -> None:
         try:
             task.status = "running"
             task.current_stage = "prepare"
+            task.conflict_base = None
+            task.conflict_ours = None
+            task.conflict_theirs = None
             await session.commit()
             app_logger.info("task_started", extra={"task_id": str(task.id)})
 

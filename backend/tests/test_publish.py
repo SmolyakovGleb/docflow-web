@@ -29,6 +29,9 @@ async def create_task(
     translated_content: str | None = "# Target",
     target_file_sha: str | None = "target-sha",
     original_content: str = "# Source",
+    conflict_base: str | None = None,
+    conflict_ours: str | None = None,
+    conflict_theirs: str | None = None,
 ) -> Task:
     task = Task(
         user_id=project.user_id,
@@ -42,6 +45,9 @@ async def create_task(
         original_content=original_content,
         translated_content=translated_content,
         status=status,
+        conflict_base=conflict_base,
+        conflict_ours=conflict_ours,
+        conflict_theirs=conflict_theirs,
     )
     db_session.add(task)
     await db_session.commit()
@@ -102,7 +108,7 @@ async def test_publish_not_done_status(auth_client, db_session, test_project, te
     response = await auth_client.post(f"/tasks/{task.id}/publish")
 
     assert response.status_code == 400
-    assert response.json() == {"detail": "Task must be in 'done' status to publish"}
+    assert response.json() == {"detail": "Task must be in 'done' or 'conflict' status to publish"}
     github_client_cls.assert_not_called()
     notify.assert_not_awaited()
 
@@ -131,10 +137,50 @@ async def test_publish_conflict_detected(auth_client, db_session, test_project, 
     }
 
     await db_session.refresh(task)
-    assert task.status == "done"
+    assert task.status == "conflict"
+    assert task.conflict_base == "# Source"
+    assert task.conflict_ours == "# Target"
+    assert task.conflict_theirs == "# Theirs"
     assert await db_session.scalar(select(Publication).where(Publication.task_id == task.id)) is None
     github_client.create_or_update_file.assert_not_awaited()
     notify.assert_not_awaited()
+
+
+async def test_publish_conflict_task_success_clears_snapshot(
+    auth_client,
+    db_session,
+    test_project,
+    test_user,
+    mocker,
+):
+    await link_github(test_user, db_session)
+    task = await create_task(
+        db_session,
+        test_project,
+        status="conflict",
+        translated_content="# Resolved",
+        conflict_base="# Base",
+        conflict_ours="# Ours",
+        conflict_theirs="# Theirs",
+    )
+
+    github_client = mocker.Mock()
+    github_client.get_file_sha = mocker.AsyncMock(return_value="target-sha")
+    github_client.create_or_update_file = mocker.AsyncMock(return_value="commit-sha")
+    mocker.patch("app.services.tasks.GitHubClient", return_value=github_client)
+    notify = mocker.patch("app.services.tasks.bitrix_notify.notify", new=mocker.AsyncMock())
+
+    response = await auth_client.post(f"/tasks/{task.id}/publish")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "published"
+
+    await db_session.refresh(task)
+    assert task.status == "published"
+    assert task.conflict_base is None
+    assert task.conflict_ours is None
+    assert task.conflict_theirs is None
+    notify.assert_awaited_once()
 
 
 async def test_publish_new_file(auth_client, db_session, test_project, test_user, mocker):

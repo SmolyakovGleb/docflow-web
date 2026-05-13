@@ -36,6 +36,11 @@ async def create_task(
     commit_author_name: str | None = None,
     commit_author_login: str | None = None,
     current_stage: str | None = None,
+    target_file_sha: str | None = "target-sha",
+    original_content: str = "# Source",
+    conflict_base: str | None = None,
+    conflict_ours: str | None = None,
+    conflict_theirs: str | None = None,
 ) -> Task:
     task = Task(
         user_id=project.user_id,
@@ -47,14 +52,17 @@ async def create_task(
         commit_author_name=commit_author_name,
         commit_author_login=commit_author_login,
         source_file_sha=source_file_sha,
-        target_file_sha="target-sha",
-        original_content="# Source",
+        target_file_sha=target_file_sha,
+        original_content=original_content,
         translated_content=translated_content,
         status=status,
         current_stage=current_stage,
         log=log,
         error=error,
         completed_at=completed_at,
+        conflict_base=conflict_base,
+        conflict_ours=conflict_ours,
+        conflict_theirs=conflict_theirs,
     )
     db_session.add(task)
     await db_session.commit()
@@ -164,7 +172,30 @@ async def test_get_task_detail_success(auth_client, db_session, test_project):
     assert payload["id"] == str(task.id)
     assert payload["original_content"] == "# Source"
     assert payload["translated_content"] == "# Target"
+    assert payload["conflict_base"] is None
+    assert payload["conflict_ours"] is None
+    assert payload["conflict_theirs"] is None
     assert payload["publications"] == []
+
+
+async def test_get_task_detail_conflict_snapshot(auth_client, db_session, test_project):
+    task = await create_task(
+        db_session,
+        test_project,
+        status="conflict",
+        conflict_base="# Base",
+        conflict_ours="# Ours",
+        conflict_theirs="# Theirs",
+    )
+
+    response = await auth_client.get(f"/tasks/{task.id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "conflict"
+    assert payload["conflict_base"] == "# Base"
+    assert payload["conflict_ours"] == "# Ours"
+    assert payload["conflict_theirs"] == "# Theirs"
 
 
 async def test_get_task_log_returns_text(auth_client, db_session, test_project):
@@ -410,6 +441,9 @@ async def test_retry_task_success(auth_client, db_session, test_project, test_us
         log="old log",
         error="old error",
         completed_at=datetime(2026, 5, 7, 12, 0, tzinfo=UTC),
+        conflict_base="# Base",
+        conflict_ours="# Ours",
+        conflict_theirs="# Theirs",
     )
 
     github_client = mocker.Mock()
@@ -431,6 +465,9 @@ async def test_retry_task_success(auth_client, db_session, test_project, test_us
     assert task.log is None
     assert task.error is None
     assert task.completed_at is None
+    assert task.conflict_base is None
+    assert task.conflict_ours is None
+    assert task.conflict_theirs is None
     run_task.assert_awaited_once()
 
 

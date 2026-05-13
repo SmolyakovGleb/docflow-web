@@ -128,7 +128,10 @@ async def get_task_log(task_id: UUID, session: DbSession, current_user: CurrentU
     "/{task_id}",
     response_model=TaskDetail,
     summary="Обновить перевод",
-    description="Сохраняет отредактированный перевод. Допускается только для статусов `done` и `failed`.",
+    description=(
+        "Сохраняет отредактированный перевод. "
+        "Допускается только для статусов `done`, `failed` и `conflict`."
+    ),
     responses={
         200: {"description": "Задача обновлена"},
         400: {"description": "Нельзя редактировать задачу со статусом `running` или `queued`"},
@@ -258,7 +261,7 @@ async def retry_task(
     summary="Опубликовать перевод",
     description=(
         "Публикует `translated_content` в target-репозиторий через GitHub API. "
-        "Доступно только для `status=done`.\n\n"
+        "Доступно только для `status=done` и `status=conflict`.\n\n"
         "**Алгоритм:**\n"
         "1. Получить текущий SHA EN-файла в target repo\n"
         "2. Сравнить с `task.target_file_sha` (зафиксирован при создании задачи)\n"

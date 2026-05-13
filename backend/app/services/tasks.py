@@ -24,9 +24,9 @@ from app.services.github import GitHubClient
 from app.services.projects import get_project_or_404
 
 ACTIVE_TASK_STATUSES = ("queued", "running")
-EDITABLE_TASK_STATUSES = {"done", "failed"}
+EDITABLE_TASK_STATUSES = {"done", "failed", "conflict"}
 RETRYABLE_TASK_STATUSES = {"done", "failed"}
-PUBLISHABLE_TASK_STATUSES = {"done"}
+PUBLISHABLE_TASK_STATUSES = {"done", "conflict"}
 logger = logging.getLogger(__name__)
 
 
@@ -195,12 +195,18 @@ def ensure_task_publishable(task: Task) -> None:
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Task must be in 'done' status to publish",
+        detail="Task must be in 'done' or 'conflict' status to publish",
     )
 
 
 def is_manual_upload_task(task: Task) -> bool:
     return task.github_ref == "manual" and task.source_file_sha is None
+
+
+def clear_task_conflict(task: Task) -> None:
+    task.conflict_base = None
+    task.conflict_ours = None
+    task.conflict_theirs = None
 
 
 def _apply_exclude_patterns(
@@ -520,6 +526,9 @@ async def reset_task_for_retry(
         .where(Task.id == task.id, Task.status == expected_status)
         .values(
             translated_content=None,
+            conflict_base=None,
+            conflict_ours=None,
+            conflict_theirs=None,
             log=None,
             error=None,
             completed_at=None,
@@ -567,6 +576,11 @@ async def publish_task(
                 task.file_path,
                 project.target_branch,
             )
+        task.status = "conflict"
+        task.conflict_base = task.original_content
+        task.conflict_ours = task.translated_content or ""
+        task.conflict_theirs = theirs
+        await session.commit()
         raise PublishConflictError(
             base=task.original_content,
             ours=task.translated_content or "",
@@ -592,6 +606,7 @@ async def publish_task(
     )
     session.add(publication)
     task.status = "published"
+    clear_task_conflict(task)
     await session.commit()
     logger.info(
         "task_published",

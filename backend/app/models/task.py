@@ -34,6 +34,9 @@ class Task(Base):
     target_file_sha: Mapped[str | None]
     original_content: Mapped[str]
     translated_content: Mapped[str | None]
+    conflict_base: Mapped[str | None]
+    conflict_ours: Mapped[str | None]
+    conflict_theirs: Mapped[str | None]
     status: Mapped[str] = mapped_column(server_default="queued")
     current_stage: Mapped[str | None]
     log: Mapped[str | None]
@@ -56,7 +59,7 @@ class Task(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'done', 'failed', 'published')",
+            "status IN ('queued', 'running', 'done', 'failed', 'published', 'conflict')",
             name="tasks_status_check",
         ),
         Index("idx_tasks_user_id", "user_id"),

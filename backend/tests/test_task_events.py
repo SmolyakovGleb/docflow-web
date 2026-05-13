@@ -79,6 +79,19 @@ async def test_task_events_finished_returns_current_status(auth_client, db_sessi
     assert '"status": "done"' in text
 
 
+async def test_task_events_conflict_returns_current_status(auth_client, db_session, test_project):
+    pipeline_runner.TASK_EVENT_QUEUES.clear()
+    task = await create_task(db_session, test_project, "conflict")
+
+    async with auth_client.stream("GET", f"/tasks/{task.id}/events") as response:
+        body = await response.aread()
+
+    text = body.decode("utf-8")
+    assert response.status_code == 200
+    assert "event: status_change" in text
+    assert '"status": "conflict"' in text
+
+
 async def test_task_events_not_found(auth_client):
     response = await auth_client.get(f"/tasks/{uuid.uuid4()}/events")
 
