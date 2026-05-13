@@ -221,6 +221,7 @@ async def github_webhook(
 
     tasks_to_create: list[Task] = [
         Task(
+            user_id=owner.id,
             project_id=project.id,
             file_path=file_path,
             github_ref=str(payload["ref"]),

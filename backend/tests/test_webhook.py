@@ -172,6 +172,7 @@ async def test_webhook_deduplication_queued(client, db_session, test_project, te
     test_user.github_access_token = encrypt_github_access_token("github-token")
 
     task = Task(
+        user_id=test_project.user_id,
         project_id=test_project.id,
         file_path="docs/index.md",
         github_ref="refs/heads/main",
@@ -224,6 +225,7 @@ async def test_webhook_deduplication_running(client, db_session, test_project, t
     test_user.github_access_token = encrypt_github_access_token("github-token")
 
     task = Task(
+        user_id=test_project.user_id,
         project_id=test_project.id,
         file_path="docs/index.md",
         github_ref="refs/heads/main",

@@ -3,13 +3,24 @@ import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
+import { setUser } from '@/features/auth/model/authSlice'
 import { NewRepositoryPage } from '@/features/projects/ui/NewRepositoryPage'
+import { createAppStore } from '@/shared/store'
 import { server } from '../msw/server'
 import { renderWithProviders } from '../utils/renderWithProviders'
 
 describe('NewRepositoryPage', () => {
-  it('submits valid form and opens webhook secret modal', async () => {
+  it('submits valid form and opens webhook secret modal after server confirms github link', async () => {
     server.use(
+      http.get('/api/auth/me', () =>
+        HttpResponse.json({
+          id: 'user-1',
+          email: 'anna@example.com',
+          display_name: 'Anna',
+          github_linked: true,
+          github_login: 'anna',
+        }),
+      ),
       http.get('/api/me/github-repos', () =>
         HttpResponse.json(['team/docs-ru', 'team/docs-en', 'team/portal']),
       ),
@@ -43,14 +54,25 @@ describe('NewRepositoryPage', () => {
     )
 
     const user = userEvent.setup()
+    const store = createAppStore()
+    store.dispatch(
+      setUser({
+        id: 'user-1',
+        email: 'anna@example.com',
+        display_name: 'Anna',
+        github_linked: false,
+        github_login: null,
+      }),
+    )
 
     renderWithProviders(
       <MemoryRouter initialEntries={['/repositories/new']}>
         <NewRepositoryPage />
       </MemoryRouter>,
+      { store },
     )
 
-    await user.type(screen.getByLabelText(/^Название проекта/), 'Docs EN')
+    await user.type(await screen.findByLabelText(/^Название проекта/), 'Docs EN')
     await user.type(screen.getByLabelText(/^Source repository/), 'team/docs-ru')
     await user.type(screen.getByLabelText(/^Target repository/), 'team/docs-en')
     await user.clear(screen.getByLabelText(/^Source branch/))
@@ -66,5 +88,42 @@ describe('NewRepositoryPage', () => {
         'http://localhost:8000/webhook/00000000-0000-0000-0000-000000000201',
       ),
     ).toBeInTheDocument()
+  })
+
+  it('keeps repository form blocked while server has not confirmed github link', async () => {
+    server.use(
+      http.get('/api/auth/me', () =>
+        HttpResponse.json({
+          id: 'user-1',
+          email: 'anna@example.com',
+          display_name: 'Anna',
+          github_linked: false,
+          github_login: null,
+        }),
+      ),
+    )
+
+    const store = createAppStore()
+    store.dispatch(
+      setUser({
+        id: 'user-1',
+        email: 'anna@example.com',
+        display_name: 'Anna',
+        github_linked: true,
+        github_login: 'anna',
+      }),
+    )
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/repositories/new']}>
+        <NewRepositoryPage />
+      </MemoryRouter>,
+      { store },
+    )
+
+    expect(await screen.findByText('Сначала привяжите GitHub')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Привязать GitHub' })).toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Source repository/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Target repository/)).not.toBeInTheDocument()
   })
 })

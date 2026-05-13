@@ -35,6 +35,7 @@ async def test_connect_redirects_to_github(auth_client, github_oauth_settings):
 
     assert response.status_code == 302
     assert response.cookies["github_oauth_state"]
+    assert response.cookies["github_oauth_return_to"].strip('"') == "http://localhost:3000/tasks"
 
     location = urlparse(response.headers["location"])
     params = parse_qs(location.query)
@@ -55,7 +56,11 @@ async def test_callback_saves_token(
     github_oauth_settings,
     mocker,
 ):
-    connect_response = await auth_client.get("/auth/github/connect", follow_redirects=False)
+    connect_response = await auth_client.get(
+        "/auth/github/connect?return_to=/repositories/new",
+        follow_redirects=False,
+        headers={"referer": "http://localhost:5173/repositories/new"},
+    )
     state = extract_state(connect_response.headers["location"])
 
     mocker.patch("app.api.routes.auth.exchange_code_for_token", return_value="github-access-token")
@@ -70,7 +75,7 @@ async def test_callback_saves_token(
     )
 
     assert response.status_code == 302
-    assert response.headers["location"] == "http://localhost:3000/settings"
+    assert response.headers["location"] == "http://localhost:5173/repositories/new?github_linked=1"
 
     await db_session.refresh(test_user)
     assert test_user.github_id == 123456
@@ -103,8 +108,8 @@ async def test_callback_wrong_state(auth_client, github_oauth_settings, mocker):
         follow_redirects=False,
     )
 
-    assert response.status_code == 400
-    assert response.json() == {"detail": "Invalid OAuth state"}
+    assert response.status_code == 302
+    assert response.headers["location"] == "http://localhost:3000/tasks?github_error=invalid_state"
     exchange_code_for_token.assert_not_called()
     get_github_user.assert_not_called()
 
@@ -130,7 +135,10 @@ async def test_callback_account_already_linked(
     db_session.add(other_user)
     await db_session.commit()
 
-    connect_response = await auth_client.get("/auth/github/connect", follow_redirects=False)
+    connect_response = await auth_client.get(
+        "/auth/github/connect?reconnect=1",
+        follow_redirects=False,
+    )
     state = extract_state(connect_response.headers["location"])
 
     mocker.patch("app.api.routes.auth.exchange_code_for_token", return_value="github-access-token")
@@ -144,8 +152,8 @@ async def test_callback_account_already_linked(
         follow_redirects=False,
     )
 
-    assert response.status_code == 409
-    assert response.json() == {"detail": "GitHub account already linked to another user"}
+    assert response.status_code == 302
+    assert response.headers["location"] == "http://localhost:3000/tasks?github_error=already_linked"
 
     await db_session.refresh(test_user)
     assert test_user.github_id is None
@@ -175,7 +183,10 @@ async def test_callback_relinks_same_user_and_refreshes_token(
     test_user.github_access_token = "old-encrypted-token"
     await db_session.commit()
 
-    connect_response = await auth_client.get("/auth/github/connect", follow_redirects=False)
+    connect_response = await auth_client.get(
+        "/auth/github/connect?reconnect=1",
+        follow_redirects=False,
+    )
     state = extract_state(connect_response.headers["location"])
 
     mocker.patch(
@@ -193,7 +204,7 @@ async def test_callback_relinks_same_user_and_refreshes_token(
     )
 
     assert response.status_code == 302
-    assert response.headers["location"] == "http://localhost:3000/settings"
+    assert response.headers["location"] == "http://localhost:3000/tasks?github_linked=1"
 
     await db_session.refresh(test_user)
     assert test_user.github_id == 123456
@@ -203,6 +214,27 @@ async def test_callback_relinks_same_user_and_refreshes_token(
         "old-encrypted-token",
         "new-github-access-token",
     }
+
+
+async def test_connect_returns_to_current_frontend_screen_when_already_linked(
+    auth_client,
+    db_session,
+    test_user,
+    github_oauth_settings,
+):
+    test_user.github_id = 123456
+    test_user.github_login = "octocat"
+    test_user.github_access_token = "encrypted-token"
+    await db_session.commit()
+
+    response = await auth_client.get(
+        "/auth/github/connect?return_to=/repositories/new",
+        follow_redirects=False,
+        headers={"referer": "http://localhost:5173/repositories/new"},
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "http://localhost:5173/repositories/new?github_linked=1"
 
 
 async def test_disconnect_unauthenticated(client):

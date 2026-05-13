@@ -38,6 +38,7 @@ async def create_task(
     current_stage: str | None = None,
 ) -> Task:
     task = Task(
+        user_id=project.user_id,
         project_id=project.id,
         file_path=file_path,
         github_ref=github_ref,
@@ -140,7 +141,10 @@ async def test_get_tasks_hides_orphaned_tasks(auth_client, db_session, test_proj
     response = await auth_client.get("/tasks")
 
     assert response.status_code == 200
-    assert response.json()["total"] == 0
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["id"] == str(task.id)
+    assert payload["items"][0]["project_id"] is None
 
 
 async def test_get_task_not_found(auth_client):
@@ -291,10 +295,10 @@ async def test_manual_task_upload_success(auth_client, db_session, test_project,
 async def test_manual_task_upload_without_github_link_allowed(
     auth_client,
     db_session,
-    test_project,
+    test_user,
     mocker,
 ):
-    mocker.patch(
+    run_task = mocker.patch(
         "app.api.routes.tasks.pipeline_runner.run_task",
         new=mocker.AsyncMock(),
     )
@@ -302,7 +306,6 @@ async def test_manual_task_upload_without_github_link_allowed(
     response = await auth_client.post(
         "/tasks/manual",
         data={
-            "project_id": str(test_project.id),
             "target_path": "docs/uploaded.md",
         },
         files={"file": ("uploaded.md", io.BytesIO(b"# Source"), "text/markdown")},
@@ -310,6 +313,12 @@ async def test_manual_task_upload_without_github_link_allowed(
 
     assert response.status_code == 201
     assert response.json()["created"] == 1
+
+    task = await db_session.scalar(select(Task).where(Task.file_path == "docs/uploaded.md"))
+    assert task is not None
+    assert task.user_id == test_user.id
+    assert task.project_id is None
+    run_task.assert_awaited_once()
 
 
 async def test_upload_non_md_rejected(auth_client, test_project):

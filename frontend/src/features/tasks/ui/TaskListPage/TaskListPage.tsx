@@ -1,0 +1,337 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
+import { selectUser } from '@/features/auth/model/authSlice'
+import { redirectToGithubConnect } from '@/features/auth/lib/redirectToGithubConnect'
+import { useGetProjectsQuery } from '@/features/projects/api/projectsApi'
+import {
+  useGetTasksQuery,
+  useLazyGetTaskQuery,
+  usePublishTaskMutation,
+  useRetryTaskMutation,
+} from '@/features/tasks/api/tasksApi'
+import { usePollNewTasks } from '@/features/tasks/hooks/usePollNewTasks'
+import { useTaskFilters } from '@/features/tasks/hooks/useTaskFilters'
+import { groupByCommit } from '@/features/tasks/lib/groupByCommit'
+import {
+  clearSelection,
+  selectRange,
+  setBatchMode,
+  setSelectedTaskIds,
+  toggleTask,
+} from '@/features/tasks/model/uiSlice'
+import type { TaskSummary } from '@/features/tasks/model/types'
+import { useGetHealthQuery } from '@/shared/api/healthApi'
+import { translateApiError } from '@/shared/lib/errorMessages'
+import { useAppDispatch, useAppSelector } from '@/shared/store/hooks'
+import { toast } from '@/shared/ui/Toast/toast'
+import { BatchFloatingBar } from '../BatchFloatingBar'
+import { CommitGroup } from '../CommitGroup'
+import { NewTasksBanner } from '../NewTasksBanner'
+import { StatusTabs } from '../StatusTabs'
+import { TaskListEmpty, TaskListError } from '../TaskListEmpty'
+import { TaskListFooter } from '../TaskListFooter'
+import { TaskListHeader } from '../TaskListHeader'
+import { TaskListSkeleton } from '../TaskListSkeleton'
+import { TaskListToolbar } from '../TaskListToolbar'
+import { TriggerTranslationDialog } from '../TriggerTranslationDialog'
+import styles from './TaskListPage.module.css'
+
+const EMPTY_TASKS: TaskSummary[] = []
+type TriggerDialogTab = 'repo' | 'upload'
+
+function downloadMarkdown(filePath: string, content: string) {
+  const filename = filePath.split('/').at(-1) ?? 'translation.md'
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
+export function TaskListPage() {
+  const { t } = useTranslation(['tasks', 'common'])
+  const navigate = useNavigate()
+  const dispatch = useAppDispatch()
+  const user = useAppSelector(selectUser)
+  const selectedTaskIds = useAppSelector((state) => state.tasksUI.selectedTaskIds)
+  const batchMode = useAppSelector((state) => state.tasksUI.batchMode)
+
+  const { filters, setFilters, resetFilters } = useTaskFilters()
+  const [isDialogOpen, setDialogOpen] = useState(false)
+  const [dialogTab, setDialogTab] = useState<TriggerDialogTab>('repo')
+
+  const { data: projects = [] } = useGetProjectsQuery()
+  const {
+    data: tasksResponse,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useGetTasksQuery(
+    {
+      status: filters.status,
+      project_id: filters.projectId,
+      search: filters.search,
+      limit: 50,
+      offset: 0,
+    },
+    { pollingInterval: 15000 },
+  )
+  const { data: health } = useGetHealthQuery(undefined, { pollingInterval: 30000 })
+  const [fetchTask] = useLazyGetTaskQuery()
+  const [publishTask] = usePublishTaskMutation()
+  const [retryTask] = useRetryTaskMutation()
+
+  const tasks = tasksResponse?.items ?? EMPTY_TASKS
+  const selectedIdsSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds])
+  const groups = useMemo(() => groupByCommit(tasks), [tasks])
+  const hasActiveFilters = Boolean(filters.status || filters.projectId || filters.search)
+  const hasGithubLinked = Boolean(user?.github_linked)
+  const showToolbar =
+    hasGithubLinked && (isLoading || Boolean(error) || tasks.length > 0 || hasActiveFilters)
+  const showFooter = !isLoading && !error && tasks.length > 0
+
+  // resetKey ensures usePollNewTasks resets its baseline when filters change
+  const resetKey = `${filters.status ?? ''}-${filters.projectId ?? ''}-${filters.search}`
+  const taskIds = useMemo(() => tasks.map((task) => task.id), [tasks])
+  const { newTasksCount, clearNewTasks } = usePollNewTasks(taskIds, resetKey)
+
+  // Active tab derived from filter status
+  const activeTab =
+    filters.status === 'queued' ||
+    filters.status === 'running' ||
+    filters.status === 'done' ||
+    filters.status === 'failed' ||
+    filters.status === 'published'
+      ? filters.status
+      : 'all'
+
+  const selectedDoneCount = tasks.filter(
+    (task) => selectedIdsSet.has(task.id) && task.status === 'done' && Boolean(task.project_id),
+  ).length
+
+  // Keep selection in sync with currently visible tasks.
+  useEffect(() => {
+    if (!tasks.length && selectedTaskIds.length) {
+      dispatch(clearSelection())
+      return
+    }
+    const visibleIds = new Set(tasks.map((t) => t.id))
+    const next = selectedTaskIds.filter((id) => visibleIds.has(id))
+    if (next.length !== selectedTaskIds.length) {
+      dispatch(setSelectedTaskIds(next))
+    }
+  }, [dispatch, selectedTaskIds, tasks])
+
+  const lastSelectedIdxRef = useRef(-1)
+
+  const handleToggleSelect = useCallback(
+    (taskId: string, event?: React.MouseEvent) => {
+      const flatTasks = groups.flatMap((g) => g.tasks)
+      const currentIdx = flatTasks.findIndex((t) => t.id === taskId)
+
+      if (event?.shiftKey && lastSelectedIdxRef.current >= 0 && batchMode) {
+        const start = Math.min(lastSelectedIdxRef.current, currentIdx)
+        const end = Math.max(lastSelectedIdxRef.current, currentIdx)
+        const rangeIds = flatTasks.slice(start, end + 1).map((t) => t.id)
+        dispatch(selectRange(rangeIds))
+      } else {
+        if ((event?.ctrlKey || event?.metaKey) && !batchMode) {
+          dispatch(setBatchMode(true))
+        }
+        dispatch(toggleTask(taskId))
+      }
+      lastSelectedIdxRef.current = currentIdx
+    },
+    [batchMode, dispatch, groups],
+  )
+
+  const handleToggleBatchMode = () => {
+    if (batchMode) {
+      dispatch(clearSelection())
+    } else {
+      dispatch(setBatchMode(true))
+    }
+  }
+
+  const handleDownload = async (task: TaskSummary) => {
+    try {
+      const detail = await fetchTask(task.id).unwrap()
+      if (!detail.translated_content) {
+        toast.error(t('download_missing'))
+        return
+      }
+      downloadMarkdown(task.file_path, detail.translated_content)
+    } catch (err) {
+      toast.error(translateApiError(err))
+    }
+  }
+
+  const handleRetry = async (taskId: string) => {
+    try {
+      await retryTask({ taskId }).unwrap()
+      toast.success(t('actions.retry_success'))
+    } catch (err) {
+      toast.error(translateApiError(err))
+    }
+  }
+
+  const handlePublish = async (taskId: string) => {
+    try {
+      await publishTask(taskId).unwrap()
+      toast.success(t('actions.publish_success'))
+    } catch (err) {
+      toast.error(translateApiError(err))
+    }
+  }
+
+  const handlePublishGroup = async (taskIds: string[]) => {
+    if (!taskIds.length) return
+    const results = await Promise.allSettled(taskIds.map((id) => publishTask(id).unwrap()))
+    const successCount = results.filter((r) => r.status === 'fulfilled').length
+    const failCount = results.length - successCount
+    if (successCount > 0) toast.success(t('actions.publish_group_success', { count: successCount }))
+    if (failCount > 0) toast.error(t('actions.publish_group_failed', { count: failCount }))
+  }
+
+  const handleBatchPublish = async () => {
+    const ids = tasks
+      .filter(
+        (task) => selectedIdsSet.has(task.id) && task.status === 'done' && Boolean(task.project_id),
+      )
+      .map((task) => task.id)
+    await handlePublishGroup(ids)
+  }
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setFilters({ search: value })
+    },
+    [setFilters],
+  )
+
+  return (
+    <section className={styles.page}>
+      <TaskListHeader
+        searchValue={filters.search}
+        onSearchChange={handleSearchChange}
+        onTriggerTranslation={() => {
+          setDialogTab(hasGithubLinked && projects.length > 0 ? 'repo' : 'upload')
+          setDialogOpen(true)
+        }}
+      />
+
+      <StatusTabs
+        activeTab={activeTab}
+        tasks={tasks}
+        onTabChange={(status) => setFilters({ status })}
+      />
+
+      <NewTasksBanner
+        count={newTasksCount}
+        onRefresh={() => {
+          clearNewTasks()
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+          void refetch()
+        }}
+      />
+
+      {showToolbar ? (
+        <TaskListToolbar
+          batchMode={batchMode}
+          health={health}
+          tasks={tasks}
+          projects={projects}
+          selectedProjectId={filters.projectId}
+          showSelectionToggle={tasks.length > 0}
+          onToggleBatchMode={handleToggleBatchMode}
+          onProjectChange={(projectId) => setFilters({ projectId })}
+        />
+      ) : null}
+
+      {isLoading ? (
+        <TaskListSkeleton />
+      ) : error ? (
+        <TaskListError isRetrying={isFetching} onRetry={() => void refetch()} />
+      ) : tasks.length === 0 ? (
+        <TaskListEmpty
+          userGithubLinked={hasGithubLinked}
+          hasFilters={hasActiveFilters}
+          hasProjects={projects.length > 0}
+          onConnectGithub={() => {
+            redirectToGithubConnect()
+          }}
+          onResetFilters={resetFilters}
+          onOpenDialog={() => {
+            setDialogTab('repo')
+            setDialogOpen(true)
+          }}
+          onOpenUploadDialog={() => {
+            setDialogTab('upload')
+            setDialogOpen(true)
+          }}
+          onOpenRepositories={() => void navigate('/repositories')}
+        />
+      ) : (
+        <div className={styles.list}>
+          {groups.map((group) => (
+            <CommitGroup
+              key={group.id}
+              group={group}
+              batchMode={batchMode}
+              selectedIds={selectedIdsSet}
+              onToggleSelect={handleToggleSelect}
+              onOpenTask={(taskId) => void navigate(`/tasks/${taskId}`)}
+              onDownload={(task) => void handleDownload(task)}
+              onRetry={(taskId) => void handleRetry(taskId)}
+              onPublish={(taskId) => void handlePublish(taskId)}
+              onPublishGroup={(taskIds) => void handlePublishGroup(taskIds)}
+            />
+          ))}
+        </div>
+      )}
+
+      {showFooter ? (
+        <TaskListFooter
+          health={health}
+          visibleCount={tasks.length}
+          totalCount={tasksResponse?.total ?? 0}
+        />
+      ) : null}
+
+      <BatchFloatingBar
+        selectedCount={selectedTaskIds.length}
+        selectedDoneCount={selectedDoneCount}
+        onDownload={() => {
+          const selected = tasks.filter((task) => selectedIdsSet.has(task.id))
+          void Promise.all(selected.map((task) => handleDownload(task)))
+        }}
+        onPublish={() => void handleBatchPublish()}
+        onClose={() => dispatch(clearSelection())}
+      />
+
+      <TriggerTranslationDialog
+        open={isDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setDialogOpen(nextOpen)
+          if (!nextOpen) {
+            setDialogTab('repo')
+          }
+        }}
+        tab={dialogTab}
+        onTabChange={setDialogTab}
+        projects={projects}
+        githubLinked={hasGithubLinked}
+        onConnectGithub={() => {
+          redirectToGithubConnect()
+        }}
+        onOpenRepositories={() => void navigate('/repositories')}
+      />
+    </section>
+  )
+}

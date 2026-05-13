@@ -54,6 +54,7 @@ async def create_task(
     error: str | None = None,
 ) -> Task:
     task = Task(
+        user_id=project.user_id,
         project_id=project.id,
         file_path=file_path,
         github_ref="refs/heads/main",

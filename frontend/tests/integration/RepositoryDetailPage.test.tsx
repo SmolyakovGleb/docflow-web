@@ -70,8 +70,8 @@ describe('RepositoryDetailPage', () => {
     renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Docs EN' })).toBeInTheDocument()
-    expect(screen.getByText('team/docs-ru')).toBeInTheDocument()
-    expect(screen.getByText('team/docs-en')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /team\/docs-ru/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /team\/docs-en/i })).toBeInTheDocument()
     expect(screen.getByText('docs/install.md')).toBeInTheDocument()
   })
 

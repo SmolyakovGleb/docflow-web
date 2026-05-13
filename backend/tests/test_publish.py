@@ -31,6 +31,7 @@ async def create_task(
     original_content: str = "# Source",
 ) -> Task:
     task = Task(
+        user_id=project.user_id,
         project_id=project.id,
         file_path=file_path,
         github_ref="refs/heads/main",
@@ -187,6 +188,34 @@ async def test_publish_requires_github_link(auth_client, db_session, test_projec
 
     assert response.status_code == 400
     assert response.json() == {"detail": "GitHub account is not linked"}
+
+
+async def test_publish_manual_upload_without_project_rejected(
+    auth_client,
+    db_session,
+    test_user,
+):
+    task = Task(
+        user_id=test_user.id,
+        project_id=None,
+        file_path="docs/manual.md",
+        github_ref="manual",
+        github_sha=None,
+        commit_message="manual",
+        source_file_sha=None,
+        target_file_sha=None,
+        original_content="# Source",
+        translated_content="# Target",
+        status="done",
+    )
+    db_session.add(task)
+    await db_session.commit()
+    await db_session.refresh(task)
+
+    response = await auth_client.post(f"/tasks/{task.id}/publish")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Task has no target repository"}
 
 
 async def test_publish_other_user_task(auth_client, db_session, test_project):

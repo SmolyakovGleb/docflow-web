@@ -12,12 +12,14 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.project import Project
     from app.models.publication import Publication
+    from app.models.user import User
 
 
 class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     project_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
@@ -44,6 +46,7 @@ class Task(Base):
         onupdate=func.now(),
     )
 
+    user: Mapped[User] = relationship(back_populates="tasks")
     project: Mapped[Project | None] = relationship(back_populates="tasks")
     publications: Mapped[list[Publication]] = relationship(back_populates="task")
 
@@ -56,6 +59,7 @@ class Task(Base):
             "status IN ('queued', 'running', 'done', 'failed', 'published')",
             name="tasks_status_check",
         ),
+        Index("idx_tasks_user_id", "user_id"),
         Index("idx_tasks_project_id", "project_id"),
         Index("idx_tasks_status", "status"),
         Index("idx_tasks_created_at", "created_at"),

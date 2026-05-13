@@ -141,10 +141,17 @@ services:
     volumes:
       - ./frontend:/app/frontend
       - /app/frontend/node_modules          # исключить node_modules из mount
+    environment:
+      - VITE_PROXY_TARGET=http://backend:8000
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=300
+      - WATCHPACK_POLLING=true
     ports:
       - "5173:5173"
     command: npm run dev -- --host
 ```
+
+Для bind-mount в Docker polling включён специально: без него Vite/Chokidar на некоторых хостах и Docker Desktop может не увидеть изменения в `frontend/src` до перезапуска контейнера.
 
 Запуск в dev-режиме:
 ```bash

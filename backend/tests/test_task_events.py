@@ -9,6 +9,7 @@ from app.services import pipeline_runner
 
 async def create_task(db_session, test_project, status: str) -> Task:
     task = Task(
+        user_id=test_project.user_id,
         project_id=test_project.id,
         file_path="docs/index.md",
         github_ref="refs/heads/main",

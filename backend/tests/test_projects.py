@@ -336,6 +336,7 @@ async def test_delete_project_keeps_tasks_with_null_project_id(
     test_project,
 ):
     task = Task(
+        user_id=test_project.user_id,
         project_id=test_project.id,
         file_path="docs/index.md",
         github_ref="refs/heads/main",
@@ -356,6 +357,7 @@ async def test_delete_project_keeps_tasks_with_null_project_id(
 
     await db_session.refresh(task)
     assert task.project_id is None
+    assert task.user_id == test_project.user_id
 
 
 async def test_regenerate_webhook_secret(auth_client, db_session, test_project):

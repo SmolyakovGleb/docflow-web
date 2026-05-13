@@ -11,6 +11,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.project import Project
+    from app.models.task import Task
 
 
 class User(Base):
@@ -31,6 +32,7 @@ class User(Base):
     )
 
     projects: Mapped[list[Project]] = relationship(back_populates="user")
+    tasks: Mapped[list[Task]] = relationship(back_populates="user")
 
     @property
     def github_linked(self) -> bool:

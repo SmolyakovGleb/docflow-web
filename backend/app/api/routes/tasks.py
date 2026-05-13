@@ -62,7 +62,7 @@ async def _stream_task_events(task_id: UUID) -> AsyncIterator[str]:
     summary="Список задач",
     description=(
         "Задачи текущего пользователя по всем его проектам. "
-        "Задачи с `project_id=null` (orphaned) не включаются. "
+        "Задачи с `project_id=null` включаются, если принадлежат текущему пользователю. "
         "Фильтры: `project_id`, `status`. Поддерживается пагинация."
     ),
 )
@@ -157,7 +157,7 @@ async def patch_task(
         "```json\n{\"project_id\": \"...\", \"file_paths\": [\"docs/crm-deal-get.md\"]}\n```\n"
         "Требует привязанный GitHub-аккаунт. Скачивает файлы через GitHub API.\n\n"
         "**B — загрузка файла** (`multipart/form-data`):\n"
-        "Поля: `project_id`, `target_path`, `file` (только `.md`, UTF-8, максимум 1 MB).\n"
+        "Поля: `project_id` (необязательно), `target_path`, `file` (только `.md`, UTF-8, максимум 1 MB).\n"
         "GitHub-аккаунт не требуется.\n\n"
         "Поддерживает частичный успех: `skipped` содержит пропущенные файлы с причиной."
     ),

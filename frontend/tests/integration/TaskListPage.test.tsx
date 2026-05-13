@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { setUser } from '@/features/auth/model/authSlice'
@@ -158,7 +159,319 @@ describe('TaskListPage', () => {
       { store },
     )
 
-    expect(await screen.findByText('По этим фильтрам задач нет')).toBeInTheDocument()
+    expect(await screen.findByText('Нет задач по этому фильтру')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Сбросить фильтры' })).toBeInTheDocument()
+  })
+
+  it('renders no tasks empty state without extra repositories action', async () => {
+    server.use(
+      http.get('/api/projects', () =>
+        HttpResponse.json([
+          {
+            id: 'project-1',
+            name: 'CRM Docs',
+            source_repo: 'team/docs-ru',
+            source_branch: 'main',
+            target_repo: 'team/docs-en',
+            target_branch: 'main',
+            exclude_patterns: [],
+            webhook_url: 'http://localhost:8000/webhook/project-1',
+            version: 1,
+            created_at: '2026-05-10T09:00:00Z',
+          },
+        ]),
+      ),
+      http.get('/api/health', () =>
+        HttpResponse.json({
+          status: 'ok',
+          pipeline_version: 'abc1234',
+          last_webhook_at: null,
+        }),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          done: 0,
+          failed: 0,
+          published: 0,
+          running: 0,
+        }),
+      ),
+      http.get('/api/tasks', () =>
+        HttpResponse.json({
+          items: [],
+          total: 0,
+          limit: 50,
+          offset: 0,
+        }),
+      ),
+    )
+
+    const store = createAppStore()
+    store.dispatch(
+      setUser({
+        id: 'user-1',
+        email: 'anna@example.com',
+        display_name: 'Anna',
+        github_linked: true,
+        github_login: 'anna',
+      }),
+    )
+
+    renderWithProviders(
+      <MemoryRouter>
+        <TaskListPage />
+      </MemoryRouter>,
+      { store },
+    )
+
+    const emptyStateTitle = await screen.findByText('Нет задач')
+    const emptyState = emptyStateTitle.closest('section')
+
+    expect(emptyState).not.toBeNull()
+    expect(
+      within(emptyState as HTMLElement).getByRole('button', { name: 'Запустить перевод' }),
+    ).toBeInTheDocument()
+    expect(
+      within(emptyState as HTMLElement).queryByRole('button', { name: 'Открыть репозитории' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders dashboard error state with retry action', async () => {
+    server.use(
+      http.get('/api/projects', () => HttpResponse.json([])),
+      http.get('/api/health', () =>
+        HttpResponse.json({
+          status: 'ok',
+          pipeline_version: 'abc1234',
+          last_webhook_at: null,
+        }),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          done: 0,
+          failed: 0,
+          published: 0,
+          running: 0,
+        }),
+      ),
+      http.get('/api/tasks', () =>
+        HttpResponse.json(
+          {
+            detail: 'boom',
+          },
+          { status: 500 },
+        ),
+      ),
+    )
+
+    const store = createAppStore()
+    store.dispatch(
+      setUser({
+        id: 'user-1',
+        email: 'anna@example.com',
+        display_name: 'Anna',
+        github_linked: true,
+        github_login: 'anna',
+      }),
+    )
+
+    renderWithProviders(
+      <MemoryRouter>
+        <TaskListPage />
+      </MemoryRouter>,
+      { store },
+    )
+
+    expect(await screen.findByText('Не удалось загрузить задачи')).toBeInTheDocument()
+    expect(screen.getByText('Проверьте соединение и повторите попытку.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Повторить' })).toBeInTheDocument()
+  })
+
+  it('hides toolbar when github is not linked even if a status filter is selected', async () => {
+    server.use(
+      http.get('/api/projects', () => HttpResponse.json([])),
+      http.get('/api/health', () =>
+        HttpResponse.json({
+          status: 'ok',
+          pipeline_version: 'abc1234',
+          last_webhook_at: null,
+        }),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          done: 0,
+          failed: 0,
+          published: 0,
+          running: 0,
+        }),
+      ),
+      http.get('/api/tasks', () =>
+        HttpResponse.json({
+          items: [],
+          total: 0,
+          limit: 50,
+          offset: 0,
+        }),
+      ),
+    )
+
+    const store = createAppStore()
+    store.dispatch(
+      setUser({
+        id: 'user-1',
+        email: 'anna@example.com',
+        display_name: 'Anna',
+        github_linked: false,
+        github_login: null,
+      }),
+    )
+
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/tasks?status=queued']}>
+        <TaskListPage />
+      </MemoryRouter>,
+      { store },
+    )
+
+    expect(await screen.findByText('Подключите GitHub чтобы начать')).toBeInTheDocument()
+    expect(screen.queryByText('webhook активен')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Все проекты' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Выбрать' })).not.toBeInTheDocument()
+  })
+
+  it('shows github prompt inside trigger dialog when repository launch is unavailable', async () => {
+    server.use(
+      http.get('/api/projects', () => HttpResponse.json([])),
+      http.get('/api/health', () =>
+        HttpResponse.json({
+          status: 'ok',
+          pipeline_version: 'abc1234',
+          last_webhook_at: null,
+        }),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          done: 0,
+          failed: 0,
+          published: 0,
+          running: 0,
+        }),
+      ),
+      http.get('/api/tasks', () =>
+        HttpResponse.json({
+          items: [],
+          total: 0,
+          limit: 50,
+          offset: 0,
+        }),
+      ),
+    )
+
+    const user = userEvent.setup()
+    const store = createAppStore()
+    store.dispatch(
+      setUser({
+        id: 'user-1',
+        email: 'anna@example.com',
+        display_name: 'Anna',
+        github_linked: false,
+        github_login: null,
+      }),
+    )
+
+    renderWithProviders(
+      <MemoryRouter>
+        <TaskListPage />
+      </MemoryRouter>,
+      { store },
+    )
+
+    await screen.findByText('Подключите GitHub чтобы начать')
+    const [headerTriggerButton] = screen.getAllByRole('button', { name: 'Запустить перевод' })
+    expect(headerTriggerButton).toBeDefined()
+    await user.click(headerTriggerButton!)
+
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Из репозитория' }))
+    expect(within(dialog).getByText('Подключите GitHub чтобы начать')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Привязать GitHub' })).toBeInTheDocument()
+    expect(within(dialog).queryByText('Проект')).not.toBeInTheDocument()
+  })
+
+  it('shows manual upload form without projects', async () => {
+    server.use(
+      http.get('/api/projects', () => HttpResponse.json([])),
+      http.get('/api/health', () =>
+        HttpResponse.json({
+          status: 'ok',
+          pipeline_version: 'abc1234',
+          last_webhook_at: null,
+        }),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          done: 0,
+          failed: 0,
+          published: 0,
+          running: 0,
+        }),
+      ),
+      http.get('/api/tasks', () =>
+        HttpResponse.json({
+          items: [],
+          total: 0,
+          limit: 50,
+          offset: 0,
+        }),
+      ),
+    )
+
+    const user = userEvent.setup()
+    const store = createAppStore()
+    store.dispatch(
+      setUser({
+        id: 'user-1',
+        email: 'anna@example.com',
+        display_name: 'Anna',
+        github_linked: true,
+        github_login: 'anna',
+      }),
+    )
+
+    renderWithProviders(
+      <MemoryRouter>
+        <TaskListPage />
+      </MemoryRouter>,
+      { store },
+    )
+
+    const emptyStateTitle = await screen.findByText('Нет задач')
+    const emptyState = emptyStateTitle.closest('section')
+
+    expect(emptyState).not.toBeNull()
+    await user.click(
+      within(emptyState as HTMLElement).getByRole('button', { name: 'Запустить перевод' }),
+    )
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Markdown-файл')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Проект')).not.toBeInTheDocument()
+    expect(
+      within(dialog).getByText(
+        'Задача будет создана без привязки к репозиторию. Её можно будет скачать, но не опубликовать в GitHub.',
+      ),
+    ).toBeInTheDocument()
+
+    await user.type(
+      within(dialog).getByPlaceholderText('docs/manual/new-page.md'),
+      'docs/manual/new-page.md',
+    )
+    const fileInput = dialog.querySelector('input[type="file"]')
+    expect(fileInput).not.toBeNull()
+    await user.upload(
+      fileInput as HTMLInputElement,
+      new File(['# Source'], 'uploaded.md', { type: 'text/markdown' }),
+    )
+    expect(within(dialog).getByRole('button', { name: 'Запустить' })).toBeEnabled()
   })
 })

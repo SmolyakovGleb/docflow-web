@@ -14,6 +14,7 @@ async def test_health_includes_pipeline_version_and_last_webhook_at(
     created_at = datetime(2026, 5, 12, 10, 30, tzinfo=UTC)
     db_session.add(
         Task(
+            user_id=test_project.user_id,
             project_id=test_project.id,
             file_path="docs/webhook.md",
             github_ref="refs/heads/main",

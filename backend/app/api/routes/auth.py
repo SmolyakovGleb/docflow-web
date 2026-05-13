@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from typing import Annotated
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
@@ -39,6 +40,8 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+GITHUB_OAUTH_RETURN_TO_COOKIE_NAME = "github_oauth_return_to"
+DEFAULT_GITHUB_REDIRECT_PATH = "/tasks"
 
 
 def set_session_cookie(response: Response, token: str) -> None:
@@ -89,8 +92,91 @@ def clear_github_oauth_state_cookie(response: Response) -> None:
     )
 
 
+def set_github_oauth_return_to_cookie(response: Response, redirect_url: str) -> None:
+    settings = get_settings()
+    response.set_cookie(
+        key=GITHUB_OAUTH_RETURN_TO_COOKIE_NAME,
+        value=redirect_url,
+        max_age=GITHUB_OAUTH_STATE_MAX_AGE_SECONDS,
+        httponly=True,
+        samesite="lax",
+        secure=not settings.debug,
+        path="/",
+    )
+
+
+def clear_github_oauth_return_to_cookie(response: Response) -> None:
+    settings = get_settings()
+    response.delete_cookie(
+        key=GITHUB_OAUTH_RETURN_TO_COOKIE_NAME,
+        httponly=True,
+        samesite="lax",
+        secure=not settings.debug,
+        path="/",
+    )
+
+
 def to_user_read(user: User) -> UserRead:
     return UserRead.model_validate(user)
+
+
+def is_safe_return_path(path: str | None) -> bool:
+    if not path:
+        return False
+    return path.startswith("/") and not path.startswith("//")
+
+
+def get_frontend_origin(request: Request) -> str:
+    settings = get_settings()
+    referer = request.headers.get("referer")
+    if referer:
+        parsed = urlparse(referer)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+
+    origin = request.headers.get("origin")
+    if origin:
+        parsed = urlparse(origin)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+
+    return settings.frontend_base_url.rstrip("/")
+
+
+def build_frontend_redirect_url(request: Request, return_to: str | None = None) -> str:
+    referer = request.headers.get("referer")
+    referer_path = None
+    if referer:
+        parsed = urlparse(referer)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            referer_path = parsed.path or DEFAULT_GITHUB_REDIRECT_PATH
+            if parsed.query:
+                referer_path = f"{referer_path}?{parsed.query}"
+
+    target_path = (
+        return_to
+        if is_safe_return_path(return_to)
+        else referer_path or DEFAULT_GITHUB_REDIRECT_PATH
+    )
+    return f"{get_frontend_origin(request)}{target_path}"
+
+
+def append_query_param(url: str, key: str, value: str) -> str:
+    parsed = urlparse(url)
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    query.append((key, value))
+    return urlunparse(parsed._replace(query=urlencode(query)))
+
+
+def build_github_callback_redirect(
+    request: Request,
+    key: str,
+    value: str,
+) -> str:
+    redirect_url = request.cookies.get(GITHUB_OAUTH_RETURN_TO_COOKIE_NAME)
+    if not redirect_url:
+        redirect_url = build_frontend_redirect_url(request)
+    return append_query_param(redirect_url, key, value)
 
 
 @router.post(
@@ -201,10 +287,26 @@ async def me(current_user: CurrentUser) -> UserRead:
         401: {"description": "Нет активной сессии"},
     },
 )
-async def github_connect(_: CurrentUser) -> RedirectResponse:
+async def github_connect(
+    request: Request,
+    current_user: CurrentUser,
+    return_to: str | None = None,
+    reconnect: bool = False,
+) -> RedirectResponse:
+    redirect_url = build_frontend_redirect_url(request, return_to)
+    if current_user.github_linked and not reconnect:
+        response = RedirectResponse(
+            url=append_query_param(redirect_url, "github_linked", "1"),
+            status_code=status.HTTP_302_FOUND,
+        )
+        clear_github_oauth_state_cookie(response)
+        clear_github_oauth_return_to_cookie(response)
+        return response
+
     state = generate_github_oauth_state()
     response = RedirectResponse(url=get_github_oauth_url(state), status_code=status.HTTP_302_FOUND)
     set_github_oauth_state_cookie(response, state)
+    set_github_oauth_return_to_cookie(response, redirect_url)
     return response
 
 
@@ -231,31 +333,44 @@ async def github_callback(
     error: str | None = None,
 ) -> Response:
     if error:
-        settings = get_settings()
         response = RedirectResponse(
-            url=f"{settings.frontend_base_url.rstrip('/')}/settings?github_error={error}",
+            url=build_github_callback_redirect(request, "github_error", error),
             status_code=status.HTTP_302_FOUND,
         )
         clear_github_oauth_state_cookie(response)
+        clear_github_oauth_return_to_cookie(response)
         return response
 
     if not code:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing OAuth code",
+        response = RedirectResponse(
+            url=build_github_callback_redirect(request, "github_error", "missing_code"),
+            status_code=status.HTTP_302_FOUND,
         )
+        clear_github_oauth_state_cookie(response)
+        clear_github_oauth_return_to_cookie(response)
+        return response
 
     github_oauth_state = request.cookies.get(GITHUB_OAUTH_STATE_COOKIE_NAME)
     if not github_oauth_state or github_oauth_state != state:
-        response = JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={"detail": "Invalid OAuth state"},
+        response = RedirectResponse(
+            url=build_github_callback_redirect(request, "github_error", "invalid_state"),
+            status_code=status.HTTP_302_FOUND,
         )
         clear_github_oauth_state_cookie(response)
+        clear_github_oauth_return_to_cookie(response)
         return response
 
-    access_token = await exchange_code_for_token(code)
-    github_user = await get_github_user(access_token)
+    try:
+        access_token = await exchange_code_for_token(code)
+        github_user = await get_github_user(access_token)
+    except HTTPException:
+        response = RedirectResponse(
+            url=build_github_callback_redirect(request, "github_error", "oauth_failed"),
+            status_code=status.HTTP_302_FOUND,
+        )
+        clear_github_oauth_state_cookie(response)
+        clear_github_oauth_return_to_cookie(response)
+        return response
 
     existing_user = await session.scalar(
         select(User).where(
@@ -264,11 +379,12 @@ async def github_callback(
         )
     )
     if existing_user is not None:
-        response = JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content={"detail": "GitHub account already linked to another user"},
+        response = RedirectResponse(
+            url=build_github_callback_redirect(request, "github_error", "already_linked"),
+            status_code=status.HTTP_302_FOUND,
         )
         clear_github_oauth_state_cookie(response)
+        clear_github_oauth_return_to_cookie(response)
         return response
 
     current_user.github_id = int(github_user["id"])
@@ -280,12 +396,12 @@ async def github_callback(
         extra={"user_id": str(current_user.id), "github_login": current_user.github_login},
     )
 
-    settings = get_settings()
     response = RedirectResponse(
-        url=f"{settings.frontend_base_url.rstrip('/')}/settings",
+        url=build_github_callback_redirect(request, "github_linked", "1"),
         status_code=status.HTTP_302_FOUND,
     )
     clear_github_oauth_state_cookie(response)
+    clear_github_oauth_return_to_cookie(response)
     return response
 
 

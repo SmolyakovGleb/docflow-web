@@ -56,6 +56,7 @@ async def create_task_with_publication(
     published_at: datetime | None = None,
 ) -> Publication:
     task = Task(
+        user_id=project.user_id,
         project_id=project.id,
         file_path=file_path,
         github_ref="refs/heads/main",

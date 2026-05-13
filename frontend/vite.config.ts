@@ -4,6 +4,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
 
+const watchUsePolling = process.env.CHOKIDAR_USEPOLLING === 'true'
+const watchInterval = Number(process.env.CHOKIDAR_INTERVAL ?? 300)
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -23,6 +26,10 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    watch: {
+      usePolling: watchUsePolling,
+      interval: watchInterval,
+    },
     proxy: {
       '/api': {
         // В Docker dev: VITE_PROXY_TARGET=http://backend:8000

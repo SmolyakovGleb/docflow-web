@@ -31,6 +31,9 @@ services:
       - /app/frontend/node_modules
     environment:
       - VITE_PROXY_TARGET=http://backend:8000
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=300
+      - WATCHPACK_POLLING=true
     ports:
       - "5173:5173"
     command: npm run dev

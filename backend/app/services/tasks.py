@@ -38,7 +38,7 @@ class ManualTaskCreationResult:
 
 @dataclass(frozen=True)
 class UploadTaskPayload:
-    project_id: UUID
+    project_id: UUID | None
     target_path: str
     filename: str
     content: str
@@ -83,11 +83,7 @@ def ensure_github_access(user: User) -> str:
 
 
 def _base_visible_task_query(current_user: User):
-    return (
-        select(Task)
-        .join(Project, Task.project_id == Project.id)
-        .where(Project.user_id == current_user.id)
-    )
+    return select(Task).where(Task.user_id == current_user.id)
 
 
 async def get_task_or_404(
@@ -127,12 +123,7 @@ async def list_tasks(
         await get_project_or_404(session, project_id, current_user)
 
     query = _base_visible_task_query(current_user).options(selectinload(Task.project))
-    count_query = (
-        select(func.count())
-        .select_from(Task)
-        .join(Project, Task.project_id == Project.id)
-        .where(Project.user_id == current_user.id)
-    )
+    count_query = select(func.count()).select_from(Task).where(Task.user_id == current_user.id)
 
     if project_id is not None:
         query = query.where(Task.project_id == project_id)
@@ -240,21 +231,25 @@ def _apply_exclude_patterns(
 
 async def _get_active_tasks_by_path(
     session: AsyncSession,
-    project_id: UUID,
+    *,
+    user_id: UUID,
     file_paths: list[str],
+    project_id: UUID | None,
 ) -> dict[str, Task]:
     if not file_paths:
         return {}
 
-    active_tasks = (
-        await session.scalars(
-            select(Task).where(
-                Task.project_id == project_id,
-                Task.file_path.in_(file_paths),
-                Task.status.in_(ACTIVE_TASK_STATUSES),
-            )
-        )
-    ).all()
+    query = select(Task).where(
+        Task.user_id == user_id,
+        Task.file_path.in_(file_paths),
+        Task.status.in_(ACTIVE_TASK_STATUSES),
+    )
+    if project_id is None:
+        query = query.where(Task.project_id.is_(None))
+    else:
+        query = query.where(Task.project_id == project_id)
+
+    active_tasks = (await session.scalars(query)).all()
     return {task.file_path: task for task in active_tasks}
 
 
@@ -288,12 +283,15 @@ def _append_active_task_skips(
 
 def _build_repo_task(
     project: Project,
+    *,
+    user_id: UUID,
     file_path: str,
     original_content: str,
     source_file_sha: str,
     target_file_sha: str | None,
 ) -> Task:
     return Task(
+        user_id=user_id,
         project_id=project.id,
         file_path=file_path,
         github_ref="manual",
@@ -306,9 +304,15 @@ def _build_repo_task(
     )
 
 
-def _build_upload_task(project: Project, payload: UploadTaskPayload) -> Task:
+def _build_upload_task(
+    *,
+    user_id: UUID,
+    project: Project | None,
+    payload: UploadTaskPayload,
+) -> Task:
     return Task(
-        project_id=project.id,
+        user_id=user_id,
+        project_id=project.id if project is not None else None,
         file_path=payload.target_path,
         github_ref="manual",
         github_sha=None,
@@ -331,7 +335,12 @@ async def create_manual_tasks_from_repo(
 
     unique_paths = list(dict.fromkeys(payload.file_paths))
     candidate_paths, skipped = _apply_exclude_patterns(unique_paths, project.exclude_patterns)
-    active_tasks_by_path = await _get_active_tasks_by_path(session, project.id, candidate_paths)
+    active_tasks_by_path = await _get_active_tasks_by_path(
+        session,
+        user_id=current_user.id,
+        file_paths=candidate_paths,
+        project_id=project.id,
+    )
     files_to_create = _append_active_task_skips(candidate_paths, active_tasks_by_path, skipped)
 
     created_tasks: list[Task] = []
@@ -349,10 +358,11 @@ async def create_manual_tasks_from_repo(
         created_tasks.append(
             _build_repo_task(
                 project,
-                file_path,
-                original_content,
-                source_file_sha,
-                target_file_sha,
+                user_id=current_user.id,
+                file_path=file_path,
+                original_content=original_content,
+                source_file_sha=source_file_sha,
+                target_file_sha=target_file_sha,
             )
         )
 
@@ -368,7 +378,11 @@ async def create_manual_task_from_upload(
     current_user: User,
     payload: UploadTaskPayload,
 ) -> ManualTaskCreationResult:
-    project = await get_project_or_404(session, payload.project_id, current_user)
+    project = (
+        await get_project_or_404(session, payload.project_id, current_user)
+        if payload.project_id is not None
+        else None
+    )
 
     if not payload.filename.endswith(".md"):
         raise HTTPException(
@@ -378,14 +392,23 @@ async def create_manual_task_from_upload(
 
     candidate_paths, skipped = _apply_exclude_patterns(
         [payload.target_path],
-        project.exclude_patterns,
+        project.exclude_patterns if project is not None else [],
     )
-    active_tasks_by_path = await _get_active_tasks_by_path(session, project.id, candidate_paths)
+    active_tasks_by_path = await _get_active_tasks_by_path(
+        session,
+        user_id=current_user.id,
+        file_paths=candidate_paths,
+        project_id=project.id if project is not None else None,
+    )
     files_to_create = _append_active_task_skips(candidate_paths, active_tasks_by_path, skipped)
 
     created_tasks: list[Task] = []
     if files_to_create:
-        task = _build_upload_task(project, payload)
+        task = _build_upload_task(
+            user_id=current_user.id,
+            project=project,
+            payload=payload,
+        )
         created_tasks.append(task)
         session.add(task)
         await session.commit()
@@ -440,7 +463,7 @@ def parse_upload_payload(
     _ensure_safe_relative_path(target_path, field="target_path")
 
     try:
-        parsed_project_id = uuid.UUID(project_id)
+        parsed_project_id = uuid.UUID(project_id) if project_id else None
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -523,7 +546,10 @@ async def publish_task(
 
     project = task.project
     if project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Task has no target repository",
+        )
 
     access_token = ensure_github_access(current_user)
     github_client = GitHubClient(access_token)
