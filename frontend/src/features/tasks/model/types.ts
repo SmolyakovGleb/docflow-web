@@ -1,4 +1,10 @@
 export type TaskStatus = 'queued' | 'running' | 'done' | 'failed' | 'published' | 'conflict'
+export type TaskDetailTab = 'diff' | 'logs' | 'conflict'
+export type TaskPipelineStage = 'prepare' | 'pipeline' | 'persist'
+export type ParsedTaskLogStageId = TaskPipelineStage | 'other'
+
+export const TASK_DETAIL_TABS: TaskDetailTab[] = ['diff', 'logs', 'conflict']
+export const TASK_PIPELINE_STAGES: TaskPipelineStage[] = ['prepare', 'pipeline', 'persist']
 
 export interface TaskSummary {
   id: string
@@ -22,6 +28,9 @@ export interface TaskDetail extends TaskSummary {
   target_file_sha: string | null
   original_content: string
   translated_content: string | null
+  conflict_base: string | null
+  conflict_ours: string | null
+  conflict_theirs: string | null
   log: string | null
   error: string | null
   publications: Publication[]
@@ -71,4 +80,35 @@ export interface TaskPublishResponse {
   commit_sha: string
   target_repo: string
   target_path: string
+}
+
+export interface TaskStageUpdateEvent {
+  stage: TaskPipelineStage
+  index: number
+  total: number
+}
+
+export interface TaskStatusChangeEvent {
+  status: TaskStatus
+}
+
+export interface ParsedTaskLogStage {
+  id: ParsedTaskLogStageId
+  lines: string[]
+}
+
+export function isTaskDetailTab(value: string | null): value is TaskDetailTab {
+  return value === 'diff' || value === 'logs' || value === 'conflict'
+}
+
+export function getDefaultTaskDetailTab(status: TaskStatus): TaskDetailTab {
+  if (status === 'failed' || status === 'running') {
+    return 'logs'
+  }
+
+  if (status === 'conflict') {
+    return 'conflict'
+  }
+
+  return 'diff'
 }

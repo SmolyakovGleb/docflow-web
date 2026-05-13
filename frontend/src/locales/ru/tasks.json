@@ -31,6 +31,11 @@
     "published": "опубликовано",
     "conflict": "конфликт"
   },
+  "detail_tabs": {
+    "diff": "Diff",
+    "logs": "Логи",
+    "conflict": "Конфликт"
+  },
   "stats": {
     "running": "в работе",
     "ready": "ждут публикации",
@@ -99,7 +104,31 @@
     "prepare": "Подготовка",
     "pipeline": "Pipeline",
     "persist": "Сохранение",
+    "other": "Прочее",
     "running": "Выполнение"
+  },
+  "diff": {
+    "save": "Сохранить",
+    "discard": "Отменить",
+    "download": "Скачать .md"
+  },
+  "logs": {
+    "runtime": "Время выполнения",
+    "copy": "Скопировать логи"
+  },
+  "conflict": {
+    "use_ours": "Использовать наш перевод",
+    "use_theirs": "Использовать текущий EN"
+  },
+  "queued": {
+    "starts_in": "начнётся через ~{{seconds}} с"
+  },
+  "published_label": "Опубликовано",
+  "retry_conflict": {
+    "title": "Source-файл изменился в GitHub",
+    "body": "Файл был изменён в репозитории после создания задачи.",
+    "create_new": "Создать новую задачу",
+    "use_old": "Перевести старую версию"
   },
   "units": {
     "seconds": "с",

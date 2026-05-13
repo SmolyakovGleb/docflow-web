@@ -10,6 +10,7 @@ import {
   usePublishTaskMutation,
   useRetryTaskMutation,
 } from '@/features/tasks/api/tasksApi'
+import { downloadMd } from '@/features/tasks/lib/downloadMd'
 import { usePollNewTasks } from '@/features/tasks/hooks/usePollNewTasks'
 import { useTaskFilters } from '@/features/tasks/hooks/useTaskFilters'
 import { groupByCommit } from '@/features/tasks/lib/groupByCommit'
@@ -39,19 +40,6 @@ import styles from './TaskListPage.module.css'
 
 const EMPTY_TASKS: TaskSummary[] = []
 type TriggerDialogTab = 'repo' | 'upload'
-
-function downloadMarkdown(filePath: string, content: string) {
-  const filename = filePath.split('/').at(-1) ?? 'translation.md'
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  document.body.append(anchor)
-  anchor.click()
-  anchor.remove()
-  URL.revokeObjectURL(url)
-}
 
 export function TaskListPage() {
   const { t } = useTranslation(['tasks', 'common'])
@@ -166,7 +154,7 @@ export function TaskListPage() {
         toast.error(t('download_missing'))
         return
       }
-      downloadMarkdown(task.file_path, detail.translated_content)
+      downloadMd(task.file_path, detail.translated_content)
     } catch (err) {
       toast.error(translateApiError(err))
     }
