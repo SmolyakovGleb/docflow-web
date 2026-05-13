@@ -56,6 +56,31 @@ def apply_history_filters(
     return query
 
 
+async def list_history_publishers(
+    session: AsyncSession,
+    *,
+    visible_source_repos: set[str],
+    project_id: UUID | None,
+    date_from: datetime | None,
+    date_to: datetime | None,
+) -> list[tuple[UUID, str]]:
+    label_expr = func.coalesce(User.display_name, User.email).label("label")
+    sort_label_expr = func.lower(func.coalesce(User.display_name, User.email)).label("sort_label")
+    query = apply_history_filters(
+        select(User.id.label("id"), label_expr, sort_label_expr).join(
+            Publication, Publication.published_by == User.id
+        ),
+        visible_source_repos=visible_source_repos,
+        project_id=project_id,
+        published_by=None,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    query = query.distinct().order_by(sort_label_expr, User.id)
+    rows = (await session.execute(query)).all()
+    return [(row.id, row.label) for row in rows]
+
+
 def extract_error_type(error_text: str) -> str:
     lines = [line.strip() for line in error_text.splitlines() if line.strip()]
     if not lines:

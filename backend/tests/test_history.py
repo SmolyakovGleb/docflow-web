@@ -91,7 +91,7 @@ async def test_history_empty_when_no_projects(auth_client, db_session):
     response = await auth_client.get("/history")
 
     assert response.status_code == 200
-    assert response.json() == {"items": [], "total": 0, "limit": 50, "offset": 0}
+    assert response.json() == {"items": [], "publishers": [], "total": 0, "limit": 50, "offset": 0}
 
 
 async def test_history_shared_by_source_repo(auth_client, db_session, test_user):
@@ -135,12 +135,17 @@ async def test_history_shared_by_source_repo(auth_client, db_session, test_user)
     payload = response.json()
     assert payload["total"] == 2
     assert {item["file_path"] for item in payload["items"]} == {"docs/shared.md", "docs/own.md"}
+    assert {publisher["label"] for publisher in payload["publishers"]} == {"Teammate", test_user.display_name}
 
     teammate_item = next(item for item in payload["items"] if item["file_path"] == "docs/shared.md")
     assert teammate_item["id"] == str(publication.id)
     assert teammate_item["source_repo"] == "Team/Docs"
     assert teammate_item["published_by"]["display_name"] == "Teammate"
     assert teammate_item["published_by"]["github_login"] == "teammate-gh"
+    assert teammate_item["can_open_task"] is False
+
+    own_item = next(item for item in payload["items"] if item["file_path"] == "docs/own.md")
+    assert own_item["can_open_task"] is True
 
 
 async def test_history_isolated_by_source_repo(auth_client, db_session, test_user):
@@ -220,6 +225,7 @@ async def test_history_filter_by_project(auth_client, db_session, test_user):
     payload = response.json()
     assert payload["total"] == 1
     assert payload["items"][0]["file_path"] == "docs/first.md"
+    assert {publisher["label"] for publisher in payload["publishers"]} == {test_user.display_name}
 
 
 async def test_history_filter_by_published_by(auth_client, db_session, test_user):
@@ -262,6 +268,10 @@ async def test_history_filter_by_published_by(auth_client, db_session, test_user
     payload = response.json()
     assert payload["total"] == 1
     assert payload["items"][0]["file_path"] == "docs/own.md"
+    assert {publisher["label"] for publisher in payload["publishers"]} == {
+        "Teammate",
+        test_user.display_name,
+    }
 
 
 async def test_history_orphaned_publication_hidden(auth_client, db_session, test_user):
@@ -326,3 +336,4 @@ async def test_history_date_filters_and_sorting(auth_client, db_session, test_us
     payload = response.json()
     assert payload["total"] == 2
     assert [item["file_path"] for item in payload["items"]] == ["docs/newer.md", "docs/older.md"]
+    assert payload["publishers"] == [{"id": str(test_user.id), "label": test_user.display_name}]

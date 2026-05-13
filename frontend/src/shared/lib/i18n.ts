@@ -5,6 +5,7 @@ import { initReactI18next } from 'react-i18next'
 import authRu from '@/locales/ru/auth.json'
 import commonRu from '@/locales/ru/common.json'
 import errorsRu from '@/locales/ru/errors.json'
+import historyRu from '@/locales/ru/history.json'
 import navRu from '@/locales/ru/nav.json'
 import repositoriesRu from '@/locales/ru/repositories.json'
 import tasksRu from '@/locales/ru/tasks.json'
@@ -20,10 +21,11 @@ void i18n
         auth: authRu,
         tasks: tasksRu,
         errors: errorsRu,
+        history: historyRu,
         repositories: repositoriesRu,
       },
     },
-    ns: ['common', 'nav', 'auth', 'tasks', 'errors', 'repositories'],
+    ns: ['common', 'nav', 'auth', 'tasks', 'errors', 'history', 'repositories'],
     defaultNS: 'common',
     lng: 'ru',
     fallbackLng: 'ru',

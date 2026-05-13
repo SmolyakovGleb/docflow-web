@@ -94,7 +94,11 @@ export const tasksApi = baseApi.injectEndpoints({
         url: `/tasks/${taskId}/publish`,
         method: 'POST',
       }),
-      invalidatesTags: (_result, _error, taskId) => ['Task', { type: 'Task', id: taskId }],
+      invalidatesTags: (_result, _error, taskId) => [
+        'History',
+        'Task',
+        { type: 'Task', id: taskId },
+      ],
     }),
   }),
 })

@@ -13,12 +13,17 @@ from app.db.session import get_db_session
 from app.models.publication import Publication
 from app.models.task import Task
 from app.models.user import User
-from app.schemas.publication import HistoryPublicationRead, HistoryResponse
+from app.schemas.publication import (
+    HistoryPublicationRead,
+    HistoryPublisherOptionRead,
+    HistoryResponse,
+)
 from app.services.auth import get_current_user
 from app.services.history_analytics import (
     apply_history_filters,
     get_visible_project_or_404,
     get_visible_source_repos,
+    list_history_publishers,
 )
 
 router = APIRouter(tags=["history"])
@@ -82,9 +87,27 @@ async def get_history(
 
     publications = list((await session.scalars(items_query)).all())
     total = int((await session.scalar(count_query)) or 0)
+    publishers = await list_history_publishers(
+        session,
+        visible_source_repos=visible_source_repos,
+        project_id=project_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
     return HistoryResponse(
-        items=[HistoryPublicationRead.model_validate(item) for item in publications],
+        items=[
+            HistoryPublicationRead.model_validate(item).model_copy(
+                update={
+                    "can_open_task": item.task is not None and item.task.user_id == current_user.id,
+                }
+            )
+            for item in publications
+        ],
+        publishers=[
+            HistoryPublisherOptionRead(id=publisher_id, label=label)
+            for publisher_id, label in publishers
+        ],
         total=total,
         limit=limit,
         offset=offset,
