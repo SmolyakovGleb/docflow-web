@@ -9,22 +9,22 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .loadMore {
   display: flex;
   justify-content: center;
-  margin-top: 24px;
+  margin-top: 20px;
 }
 
 .skeletonCard {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 18px 20px;
+  border-radius: 10px;
+  padding: 16px 14px;
   background: var(--surface);
 }
 
@@ -32,6 +32,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 12px;
 }
 
 .skeletonMeta {
