@@ -1,10 +1,11 @@
+import { memo } from 'react'
 import { ArrowRight, ArrowUpRight, Clock3, FileText } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Avatar } from '@/shared/ui/Avatar/Avatar'
 import { RepoLink } from '@/shared/ui/RepoLink/RepoLink'
 import { formatDateTime, formatRelativeShort } from '@/shared/lib/date'
-import type { HistoryPublication } from '../model/types'
+import type { HistoryPublication } from '../../model/types'
 import styles from './HistoryItem.module.css'
 
 interface HistoryItemProps {
@@ -19,7 +20,7 @@ function getAuthorLabel(item: HistoryPublication) {
   return item.published_by.display_name ?? item.published_by.email
 }
 
-export function HistoryItem({ item }: HistoryItemProps) {
+function HistoryItemComponent({ item }: HistoryItemProps) {
   const { t } = useTranslation('history')
   const authorLabel = getAuthorLabel(item)
 
@@ -101,3 +102,7 @@ export function HistoryItem({ item }: HistoryItemProps) {
     </article>
   )
 }
+
+HistoryItemComponent.displayName = 'HistoryItem'
+
+export const HistoryItem = memo(HistoryItemComponent)

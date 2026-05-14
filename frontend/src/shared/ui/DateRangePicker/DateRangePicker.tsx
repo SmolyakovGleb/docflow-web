@@ -1,18 +1,36 @@
 import * as Popover from '@radix-ui/react-popover'
-import { CalendarRange, ChevronDown, X } from 'lucide-react'
-import { DayPicker, type DateRange } from 'react-day-picker'
-import { ru } from 'react-day-picker/locale'
+import { CalendarRange, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { DayPicker, type DateRange } from 'react-day-picker'
+import type { Locale } from 'react-day-picker'
+import { ru } from 'react-day-picker/locale'
+import { cn } from '@/shared/lib/cn'
 import { formatDate } from '@/shared/lib/date'
 import { Button } from '@/shared/ui/Button/Button'
 import 'react-day-picker/style.css'
 import styles from './DateRangePicker.module.css'
 
+export interface DateRangePickerValue {
+  from: string | null
+  to: string | null
+}
+
+interface DateRangePickerLabels {
+  placeholder: string
+  title: string
+  clear: string
+  close: string
+  hint: string
+}
+
 interface DateRangePickerProps {
   from: string | null
   to: string | null
-  onChange: (value: { from: string | null; to: string | null }) => void
+  labels: DateRangePickerLabels
+  onChange: (value: DateRangePickerValue) => void
+  locale?: Locale
+  align?: 'start' | 'center' | 'end'
+  className?: string
 }
 
 function startOfDayIso(date: Date) {
@@ -27,7 +45,7 @@ function endOfDayIso(date: Date) {
   return value.toISOString()
 }
 
-function getTriggerLabel(from: string | null, to: string | null, fallback: string) {
+function getTriggerLabel(from: string | null, to: string | null, placeholder: string) {
   if (from && to) {
     return `${formatDate(from)} - ${formatDate(to)}`
   }
@@ -40,12 +58,20 @@ function getTriggerLabel(from: string | null, to: string | null, fallback: strin
     return `... - ${formatDate(to)}`
   }
 
-  return fallback
+  return placeholder
 }
 
-export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
-  const { t } = useTranslation('history')
+export function DateRangePicker({
+  from,
+  to,
+  labels,
+  onChange,
+  locale = ru,
+  align = 'end',
+  className,
+}: DateRangePickerProps) {
   const [open, setOpen] = useState(false)
+  const hasValue = Boolean(from || to)
   const selected = useMemo<DateRange | undefined>(
     () =>
       from || to
@@ -64,30 +90,30 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
     })
   }
 
-  const hasValue = Boolean(from || to)
+  const triggerLabel = getTriggerLabel(from, to, labels.placeholder)
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
-        <button type="button" className={styles.trigger}>
+        <button
+          type="button"
+          className={cn(styles.trigger, hasValue && styles.triggerActive, className)}
+        >
           <CalendarRange size={14} />
-          <span className={styles.triggerLabel}>
-            {getTriggerLabel(from, to, t('toolbar.all_dates'))}
-          </span>
-          <ChevronDown size={12} className={styles.triggerChevron} />
+          <span className={styles.triggerLabel}>{triggerLabel}</span>
         </button>
       </Popover.Trigger>
 
       <Popover.Portal>
-        <Popover.Content className={styles.content} align="end" sideOffset={8}>
+        <Popover.Content className={styles.content} align={align} sideOffset={8}>
           <div className={styles.heading}>
-            <div className={styles.headingTitle}>{t('toolbar.date_range')}</div>
+            <div className={styles.headingTitle}>{labels.title}</div>
             {hasValue ? (
               <button
                 type="button"
                 className={styles.clearIcon}
                 onClick={() => onChange({ from: null, to: null })}
-                aria-label={t('datepicker.clear')}
+                aria-label={labels.clear}
               >
                 <X size={12} />
               </button>
@@ -96,28 +122,24 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
 
           <div className={styles.calendar}>
             <DayPicker
-              locale={ru}
+              locale={locale}
               mode="range"
               selected={selected}
               onSelect={handleSelect}
               weekStartsOn={1}
               showOutsideDays
-              className={styles.dayPicker ?? ''}
+              className={styles.dayPicker || ''}
             />
           </div>
 
           <div className={styles.footer}>
-            <div className={styles.summary}>
-              {from || to
-                ? getTriggerLabel(from, to, t('toolbar.all_dates'))
-                : t('datepicker.hint')}
-            </div>
+            <div className={styles.summary}>{hasValue ? triggerLabel : labels.hint}</div>
             <div className={styles.actions}>
               <Button variant="ghost" size="sm" onClick={() => onChange({ from: null, to: null })}>
-                {t('datepicker.clear')}
+                {labels.clear}
               </Button>
               <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
-                {t('datepicker.close')}
+                {labels.close}
               </Button>
             </div>
           </div>

@@ -6,10 +6,10 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg);
+  cursor: text;
   transition:
     border-color 120ms ease,
     background-color 120ms ease;
-  cursor: text;
 }
 
 .root:focus-within {
@@ -25,19 +25,19 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: #222222;
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 7px 2px 8px;
+  background: #222222;
+  color: var(--text);
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--text);
 }
 
 .remove {
-  color: var(--text-faint);
   display: grid;
   place-items: center;
+  color: var(--text-faint);
   transition: color 120ms ease;
 }
 
@@ -48,10 +48,10 @@
 .input {
   flex: 1;
   min-width: 160px;
+  padding: 2px 4px;
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 12px;
-  padding: 2px 4px;
 }
 
 .input::placeholder {
