@@ -1,16 +1,18 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowRight, ChevronRight, FolderGit2 } from 'lucide-react'
+import { ArrowRight, FolderGit2 } from 'lucide-react'
 import { useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useGetMeQuery } from '@/features/auth/api/authApi'
 import { redirectToGithubConnect } from '@/features/auth/lib/redirectToGithubConnect'
 import { translateApiError } from '@/shared/lib/errorMessages'
+import { Breadcrumbs } from '@/shared/ui/Breadcrumbs/Breadcrumbs'
 import { Button } from '@/shared/ui/Button/Button'
 import { EmptyState } from '@/shared/ui/EmptyState/EmptyState'
 import { Field } from '@/shared/ui/Field/Field'
 import { Input } from '@/shared/ui/Input/Input'
+import { InlineAlert } from '@/shared/ui/InlineAlert/InlineAlert'
 import { useCreateProjectMutation, useGetGithubReposQuery } from '../../api/projectsApi'
 import { type ProjectCreateFormValues, projectCreateSchema } from '../../lib/schemas'
 import { ExcludePatternsInput } from '../ExcludePatternsInput'
@@ -76,16 +78,12 @@ export function NewRepositoryPage() {
 
   return (
     <section className={styles.page}>
-      {/* Breadcrumb */}
-      <nav className={styles.breadcrumb} aria-label="breadcrumb">
-        <Link className={styles.breadcrumbLink} to="/repositories">
-          {t('title')}
-        </Link>
-        <ChevronRight className={styles.breadcrumbSep} aria-hidden />
-        <span className={styles.breadcrumbCurrent}>{t('new_title')}</span>
-      </nav>
+      <Breadcrumbs
+        className={styles.breadcrumb}
+        items={[{ label: t('title'), to: '/repositories' }]}
+        current={t('new_title')}
+      />
 
-      {/* Header */}
       <div className={styles.header}>
         <h1 className={styles.title}>{t('new_title')}</h1>
         <p className={styles.subtitle}>{t('new_subtitle')}</p>
@@ -114,7 +112,9 @@ export function NewRepositoryPage() {
         />
       ) : null}
 
-      {githubLinked && submitError ? <div className={styles.submitError}>{submitError}</div> : null}
+      {githubLinked && submitError ? (
+        <InlineAlert className={styles.submitError}>{submitError}</InlineAlert>
+      ) : null}
 
       {githubLinked ? (
         <form

@@ -1,15 +1,5 @@
-import { Link } from 'react-router-dom'
-import styles from './Sidebar.module.css'
+import { Wordmark as SharedWordmark } from '@/shared/ui/Wordmark/Wordmark'
 
 export function Wordmark() {
-  return (
-    <Link className={styles.wordmark} to="/tasks" aria-label="DocFlow">
-      <span className={styles.wordmarkGlyph} aria-hidden>
-        <span />
-        <span />
-        <span />
-      </span>
-      <span>DocFlow</span>
-    </Link>
-  )
+  return <SharedWordmark to="/tasks" variant="sidebar" />
 }

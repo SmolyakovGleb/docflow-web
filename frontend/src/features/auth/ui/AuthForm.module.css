@@ -3,6 +3,10 @@
   gap: 14px;
 }
 
+.alert {
+  margin-bottom: 18px;
+}
+
 .optional {
   color: var(--text-faint);
   font-weight: 400;

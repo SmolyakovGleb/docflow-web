@@ -19,11 +19,13 @@ from app.models.task import Task
 from app.models.user import User
 from app.schemas.task import ManualTaskFromRepo, TaskStatus, TaskUpdate
 from app.services import bitrix_notify
+from app.services import task_list_events
 from app.services.auth import decrypt_github_access_token
 from app.services.github import GitHubClient
 from app.services.projects import get_project_or_404
 
 ACTIVE_TASK_STATUSES = ("queued", "running")
+ALL_TASK_STATUSES = ("queued", "running", "done", "failed", "published", "conflict")
 EDITABLE_TASK_STATUSES = {"done", "failed", "conflict"}
 RETRYABLE_TASK_STATUSES = {"done", "failed"}
 PUBLISHABLE_TASK_STATUSES = {"done", "conflict"}
@@ -118,16 +120,22 @@ async def list_tasks(
     search: str | None,
     limit: int,
     offset: int,
-) -> tuple[list[Task], int]:
+) -> tuple[list[Task], int, dict[str, int]]:
     if project_id is not None:
         await get_project_or_404(session, project_id, current_user)
 
     query = _base_visible_task_query(current_user).options(selectinload(Task.project))
     count_query = select(func.count()).select_from(Task).where(Task.user_id == current_user.id)
+    status_counts_query = (
+        select(Task.status, func.count())
+        .where(Task.user_id == current_user.id)
+        .group_by(Task.status)
+    )
 
     if project_id is not None:
         query = query.where(Task.project_id == project_id)
         count_query = count_query.where(Task.project_id == project_id)
+        status_counts_query = status_counts_query.where(Task.project_id == project_id)
     if status_filter is not None:
         query = query.where(Task.status == status_filter)
         count_query = count_query.where(Task.status == status_filter)
@@ -140,12 +148,17 @@ async def list_tasks(
             )
             query = query.where(search_condition)
             count_query = count_query.where(search_condition)
+            status_counts_query = status_counts_query.where(search_condition)
 
     query = query.order_by(Task.created_at.desc()).limit(limit).offset(offset)
 
     items = list((await session.scalars(query)).all())
     total = int((await session.scalar(count_query)) or 0)
-    return items, total
+    status_counts = {status: 0 for status in ALL_TASK_STATUSES}
+    for row_status, count in (await session.execute(status_counts_query)).all():
+        status_counts[str(row_status)] = int(count)
+
+    return items, total, status_counts
 
 
 def ensure_task_editable(task: Task) -> None:
@@ -375,6 +388,8 @@ async def create_manual_tasks_from_repo(
     if created_tasks:
         session.add_all(created_tasks)
         await session.commit()
+        for task in created_tasks:
+            task_list_events.publish_task_entered_scope(task)
 
     return ManualTaskCreationResult(created_tasks=created_tasks, skipped=skipped)
 
@@ -418,6 +433,7 @@ async def create_manual_task_from_upload(
         created_tasks.append(task)
         session.add(task)
         await session.commit()
+        task_list_events.publish_task_entered_scope(task)
 
     return ManualTaskCreationResult(created_tasks=created_tasks, skipped=skipped)
 
@@ -569,6 +585,7 @@ async def publish_task(
     )
 
     if current_sha != task.target_file_sha:
+        previous_status = task.status
         theirs = ""
         if current_sha is not None:
             theirs, _ = await github_client.get_file_content(
@@ -582,6 +599,7 @@ async def publish_task(
         task.conflict_ours = task.translated_content or ""
         task.conflict_theirs = theirs
         await session.commit()
+        task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
         raise PublishConflictError(
             base=task.original_content,
             ours=task.translated_content or "",
@@ -606,9 +624,11 @@ async def publish_task(
         target_file_sha_before=current_sha,
     )
     session.add(publication)
+    previous_status = task.status
     task.status = "published"
     clear_task_conflict(task)
     await session.commit()
+    task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
     logger.info(
         "task_published",
         extra={

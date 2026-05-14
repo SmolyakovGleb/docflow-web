@@ -18,6 +18,13 @@ class PublicationRead(BaseModel):
     published_at: datetime
 
 
+class HistoryPublisherOptionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    label: str
+
+
 class HistoryPublicationRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -31,12 +38,14 @@ class HistoryPublicationRead(BaseModel):
     commit_url: str
     published_by: UserRead = Field(validation_alias="publisher")
     published_at: datetime
+    can_open_task: bool = False
 
 
 class HistoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     items: list[HistoryPublicationRead]
+    publishers: list[HistoryPublisherOptionRead] = Field(default_factory=list)
     total: int
     limit: int
     offset: int

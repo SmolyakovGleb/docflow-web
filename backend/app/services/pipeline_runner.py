@@ -19,6 +19,7 @@ from app.core.config import get_settings
 from app.db.session import get_session_factory
 from app.models.task import Task
 from app.services import dictionary_merger
+from app.services import task_list_events
 
 PIPELINE_ROOT = Path(__file__).resolve().parents[3] / "pipeline"
 TASK_EVENT_QUEUES: dict[UUID, asyncio.Queue[dict[str, Any] | None]] = {}
@@ -50,19 +51,33 @@ def _sanitize_error(error_text: str) -> str:
 
 
 class QueueLogHandler(logging.Handler):
+    _KNOWN_STAGE_PREFIXES = ("[prepare]", "[pipeline]", "[persist]")
+
     def __init__(
         self,
         loop: asyncio.AbstractEventLoop,
         queue: asyncio.Queue[dict[str, Any] | None],
+        *,
+        stage: str | None = None,
     ) -> None:
         super().__init__()
         self._loop = loop
         self._queue = queue
         self._lines: list[str] = []
+        self._stage = stage
         self.setFormatter(logging.Formatter("%(message)s"))
 
+    def set_stage(self, stage: str | None) -> None:
+        self._stage = stage
+
+    def _format_line(self, line: str) -> str:
+        trimmed = line.lstrip()
+        if not self._stage or trimmed.startswith(self._KNOWN_STAGE_PREFIXES):
+            return line
+        return f"[{self._stage}] {line}"
+
     def emit(self, record: logging.LogRecord) -> None:
-        line = self.format(record)
+        line = self._format_line(self.format(record))
         self._lines.append(line)
         self._loop.call_soon_threadsafe(
             self._queue.put_nowait,
@@ -99,12 +114,15 @@ async def _set_stage(
     session,
     task: Task,
     queue: asyncio.Queue[dict[str, Any] | None],
+    handler: QueueLogHandler | None = None,
     *,
     stage: str,
     index: int,
     total: int,
 ) -> None:
     task.current_stage = stage
+    if handler is not None:
+        handler.set_stage(stage)
     await session.commit()
     await _emit_event(queue, "stage_update", {"stage": stage, "index": index, "total": total})
 
@@ -217,12 +235,14 @@ async def run_task(task_id: UUID) -> None:
         workspace: Path | None = None
 
         try:
+            previous_status = task.status
             task.status = "running"
             task.current_stage = "prepare"
             task.conflict_base = None
             task.conflict_ours = None
             task.conflict_theirs = None
             await session.commit()
+            task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
             app_logger.info("task_started", extra={"task_id": str(task.id)})
 
             await _emit_event(queue, "stage_update", {"stage": "prepare", "index": 1, "total": 3})
@@ -233,10 +253,18 @@ async def run_task(task_id: UUID) -> None:
             )
 
             loop = asyncio.get_running_loop()
-            log_handler = QueueLogHandler(loop, queue)
+            log_handler = QueueLogHandler(loop, queue, stage="prepare")
             logger = _build_task_logger(task.id, log_handler)
 
-            await _set_stage(session, task, queue, stage="pipeline", index=2, total=3)
+            await _set_stage(
+                session,
+                task,
+                queue,
+                log_handler,
+                stage="pipeline",
+                index=2,
+                total=3,
+            )
             async with PIPELINE_RUN_LOCK:
                 output_file = await _execute_pipeline(
                     input_file=input_file,
@@ -246,24 +274,36 @@ async def run_task(task_id: UUID) -> None:
                     logger=logger,
                 )
 
-            await _set_stage(session, task, queue, stage="persist", index=3, total=3)
+            await _set_stage(
+                session,
+                task,
+                queue,
+                log_handler,
+                stage="persist",
+                index=3,
+                total=3,
+            )
             task.translated_content = output_file.read_text(encoding="utf-8")
             task.log = log_handler.get_log()
             task.error = None
+            previous_status = task.status
             task.status = "done"
             task.current_stage = None
             task.completed_at = datetime.now(UTC)
             await session.commit()
+            task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
             await _emit_event(queue, "status_change", {"status": "done"})
             app_logger.info("task_completed", extra={"task_id": str(task.id)})
         except Exception:
             task.translated_content = None
             task.log = _sanitize_error(log_handler.get_log()) if log_handler else None
             task.error = _sanitize_error(traceback.format_exc())
+            previous_status = task.status
             task.status = "failed"
             task.current_stage = None
             task.completed_at = datetime.now(UTC)
             await session.commit()
+            task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
             await _emit_event(queue, "status_change", {"status": "failed"})
             app_logger.exception("task_failed", extra={"task_id": str(task.id)})
         finally:

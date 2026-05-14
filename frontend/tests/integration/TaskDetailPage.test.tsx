@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -8,17 +8,34 @@ import type { TaskDetail } from '@/features/tasks/model/types'
 import { renderWithProviders } from '../utils/renderWithProviders'
 import { server } from '../msw/server'
 
+type Listener = (event: MessageEvent<string>) => void
+
 class FakeEventSource {
   static instances: FakeEventSource[] = []
+
+  listeners = new Map<string, Set<Listener>>()
   close = vi.fn()
 
   constructor() {
     FakeEventSource.instances.push(this)
   }
 
-  addEventListener() {}
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+    const callback = listener as Listener
+    const handlers = this.listeners.get(type) ?? new Set<Listener>()
+    handlers.add(callback)
+    this.listeners.set(type, handlers)
+  }
 
-  removeEventListener() {}
+  removeEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+    const callback = listener as Listener
+    this.listeners.get(type)?.delete(callback)
+  }
+
+  emit(type: string, payload: unknown) {
+    const event = { data: JSON.stringify(payload) } as MessageEvent<string>
+    this.listeners.get(type)?.forEach((listener) => listener(event))
+  }
 }
 
 const baseTask: TaskDetail = {
@@ -239,7 +256,7 @@ describe('TaskDetailPage', () => {
     renderWithProviders(<RouterProvider router={router} />)
 
     await user.click(await screen.findByRole('button', { name: /Повторить/i }))
-    expect(await screen.findByText(/Перевод в очереди/i)).toBeInTheDocument()
+    expect(await screen.findByText(/в очереди/i)).toBeInTheDocument()
 
     await waitFor(
       () => {
@@ -248,6 +265,175 @@ describe('TaskDetailPage', () => {
       { timeout: 5000 },
     )
   }, 10000)
+
+  it('shows streamed logs immediately while the task is running', async () => {
+    FakeEventSource.instances = []
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const user = userEvent.setup()
+    const currentTask: TaskDetail = {
+      ...baseTask,
+      status: 'running',
+      translated_content: null,
+      completed_at: null,
+      current_stage: 'pipeline',
+    }
+
+    server.use(
+      http.get('/api/tasks/:taskId', () => HttpResponse.json(currentTask)),
+      http.get('/api/tasks/:taskId/log', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/projects', () =>
+        HttpResponse.json([
+          {
+            id: 'project-1',
+            name: 'CRM Docs',
+            source_repo: 'team/docs-ru',
+            source_branch: 'main',
+            target_repo: 'team/docs-en',
+            target_branch: 'main',
+            exclude_patterns: [],
+            webhook_url: 'http://localhost:8000/webhook/project-1',
+            version: 1,
+            created_at: '2026-05-10T09:00:00Z',
+          },
+        ]),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          total_tasks: 1,
+          success_rate: 1.0,
+          avg_duration_seconds: 42,
+          tasks_by_status: { queued: 0, running: 1, done: 0, failed: 0, published: 0, conflict: 0 },
+          tasks_per_day: [],
+          top_errors: [],
+        }),
+      ),
+    )
+
+    const router = createMemoryRouter([{ path: '/tasks/:taskId', element: <TaskDetailPage /> }], {
+      initialEntries: ['/tasks/task-1'],
+    })
+
+    renderWithProviders(<RouterProvider router={router} />)
+
+    await user.click(await screen.findByRole('tab', { name: /Логи/i }))
+
+    await waitFor(() => {
+      expect(
+        FakeEventSource.instances.some(
+          (instance) =>
+            (instance.listeners.get('log_line')?.size ?? 0) > 0 &&
+            (instance.listeners.get('status_change')?.size ?? 0) > 0,
+        ),
+      ).toBe(true)
+    })
+
+    const source = FakeEventSource.instances.find(
+      (instance) =>
+        (instance.listeners.get('log_line')?.size ?? 0) > 0 &&
+        (instance.listeners.get('status_change')?.size ?? 0) > 0,
+    )
+    if (!source) {
+      throw new Error('Expected EventSource instance to be created')
+    }
+
+    act(() => {
+      source.emit('log_line', { line: '[pipeline] translating file' })
+    })
+
+    const streamedEntries = await screen.findAllByText('translating file')
+    expect(streamedEntries).toHaveLength(1)
+  })
+
+  it('keeps the logs tab open after completion and shows legacy persisted logs after refetch', async () => {
+    FakeEventSource.instances = []
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const currentTask: TaskDetail = {
+      ...baseTask,
+      status: 'running',
+      translated_content: null,
+      completed_at: null,
+      current_stage: 'pipeline',
+    }
+
+    server.use(
+      http.get('/api/tasks/:taskId', () => HttpResponse.json(currentTask)),
+      http.get('/api/tasks/:taskId/log', () =>
+        currentTask.status === 'done'
+          ? HttpResponse.text('legacy translated line\nsaved output')
+          : new HttpResponse(null, { status: 204 }),
+      ),
+      http.get('/api/projects', () =>
+        HttpResponse.json([
+          {
+            id: 'project-1',
+            name: 'CRM Docs',
+            source_repo: 'team/docs-ru',
+            source_branch: 'main',
+            target_repo: 'team/docs-en',
+            target_branch: 'main',
+            exclude_patterns: [],
+            webhook_url: 'http://localhost:8000/webhook/project-1',
+            version: 1,
+            created_at: '2026-05-10T09:00:00Z',
+          },
+        ]),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          total_tasks: 1,
+          success_rate: 1.0,
+          avg_duration_seconds: 42,
+          tasks_by_status: {
+            queued: 0,
+            running: currentTask.status === 'running' ? 1 : 0,
+            done: currentTask.status === 'done' ? 1 : 0,
+            failed: 0,
+            published: 0,
+            conflict: 0,
+          },
+          tasks_per_day: [],
+          top_errors: [],
+        }),
+      ),
+    )
+
+    const router = createMemoryRouter([{ path: '/tasks/:taskId', element: <TaskDetailPage /> }], {
+      initialEntries: ['/tasks/task-1'],
+    })
+
+    renderWithProviders(<RouterProvider router={router} />)
+
+    await waitFor(() => {
+      expect(
+        FakeEventSource.instances.some(
+          (instance) =>
+            (instance.listeners.get('log_line')?.size ?? 0) > 0 &&
+            (instance.listeners.get('status_change')?.size ?? 0) > 0,
+        ),
+      ).toBe(true)
+    })
+
+    const source = FakeEventSource.instances.find(
+      (instance) =>
+        (instance.listeners.get('log_line')?.size ?? 0) > 0 &&
+        (instance.listeners.get('status_change')?.size ?? 0) > 0,
+    )
+    if (!source) {
+      throw new Error('Expected EventSource instance to be created')
+    }
+
+    act(() => {
+      currentTask.status = 'done'
+      currentTask.current_stage = null
+      currentTask.translated_content = '# Target'
+      currentTask.completed_at = '2026-05-12T09:55:00Z'
+      source.emit('status_change', { status: 'done' })
+    })
+
+    expect(await screen.findByText('legacy translated line')).toBeInTheDocument()
+    expect(screen.getByText('saved output')).toBeInTheDocument()
+    expect(screen.queryByLabelText('EN editor')).not.toBeInTheDocument()
+  })
 
   it('blocks in-app navigation when there are unsaved diff changes', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)

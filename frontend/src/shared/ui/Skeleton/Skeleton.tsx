@@ -13,7 +13,7 @@ interface SkeletonProps {
 
 export function Skeleton({
   variant = 'line',
-  width = variant === 'line' ? '100%' : 40,
+  width = variant === 'circle' ? 40 : '100%',
   height = variant === 'line' ? 12 : 40,
   className,
 }: SkeletonProps) {

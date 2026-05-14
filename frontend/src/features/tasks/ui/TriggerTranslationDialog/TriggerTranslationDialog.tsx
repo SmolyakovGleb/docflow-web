@@ -1,6 +1,5 @@
 import { useDeferredValue, useMemo, useState } from 'react'
-import * as Dialog from '@radix-ui/react-dialog'
-import { CheckCircle, ChevronDown, FolderGit2, LoaderCircle, Upload, X } from 'lucide-react'
+import { CheckCircle, FolderGit2, LoaderCircle, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Project } from '@/features/projects/model/types'
 import { useGetProjectFilesQuery } from '@/features/projects/api/projectsApi'
@@ -11,6 +10,11 @@ import {
 import type { TaskCreateResponse } from '@/features/tasks/model/types'
 import { cn } from '@/shared/lib/cn'
 import { translateApiError } from '@/shared/lib/errorMessages'
+import { Button } from '@/shared/ui/Button/Button'
+import { DialogShell } from '@/shared/ui/DialogShell/DialogShell'
+import { GitHubMark } from '@/shared/ui/GitHubMark/GitHubMark'
+import { Input } from '@/shared/ui/Input/Input'
+import { Select } from '@/shared/ui/Select/Select'
 import { toast } from '@/shared/ui/Toast/toast'
 import styles from './TriggerTranslationDialog.module.css'
 
@@ -38,24 +42,6 @@ const FIXED_LANGUAGES = {
   target: 'EN - английский',
 }
 
-function GitHubMark({ size = 18 }: { size?: number }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      width={size}
-      height={size}
-      aria-hidden="true"
-    >
-      <path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.22.66-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02.8-.22 1.65-.33 2.5-.33s1.7.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85V21c0 .27.16.57.67.48A10 10 0 0 0 22 12c0-5.52-4.48-10-10-10z" />
-    </svg>
-  )
-}
-
 interface DialogEmptyStateProps {
   icon: 'github' | 'projects'
   title: string
@@ -78,19 +64,19 @@ function DialogEmptyState({
   return (
     <section className={styles.emptyState}>
       <div className={styles.emptyIcon}>
-        {icon === 'github' ? <GitHubMark /> : <FolderGit2 size={18} />}
+        {icon === 'github' ? <GitHubMark size={18} /> : <FolderGit2 size={18} />}
       </div>
       <h2 className={styles.emptyTitle}>{title}</h2>
       <p className={styles.emptyDescription}>{description}</p>
       <div className={styles.emptyActions}>
-        <button
+        <Button
           type="button"
-          className={actionVariant === 'primary' ? styles.primaryButton : styles.secondaryButton}
+          variant={actionVariant}
+          iconLeft={icon === 'github' ? <GitHubMark size={13} /> : undefined}
           onClick={onAction}
         >
-          {icon === 'github' ? <GitHubMark size={13} /> : null}
-          <span>{actionLabel}</span>
-        </button>
+          {actionLabel}
+        </Button>
       </div>
       {footnote ? <p className={styles.emptyFootnote}>{footnote}</p> : null}
     </section>
@@ -243,288 +229,268 @@ export function TriggerTranslationDialog({
   const showForm = !showGithubPrompt && !showNoProjectsState
 
   return (
-    <Dialog.Root open={open} onOpenChange={closeAndReset}>
-      <Dialog.Portal>
-        <Dialog.Overlay className={styles.overlay} />
-        <Dialog.Content className={styles.content}>
-          <div className={styles.header}>
-            <Dialog.Title className={styles.title}>{t('tasks:trigger.title')}</Dialog.Title>
-            <Dialog.Close asChild>
-              <button type="button" className={styles.closeButton} aria-label={t('common:close')}>
-                <X size={16} />
-              </button>
-            </Dialog.Close>
+    <DialogShell
+      open={open}
+      onOpenChange={closeAndReset}
+      title={t('tasks:trigger.title')}
+      description={t('tasks:trigger.footer_hint')}
+      descriptionClassName={styles.srOnly}
+      size="lg"
+      position="top"
+      showCloseButton
+      closeLabel={t('common:close')}
+      overlayClassName={styles.overlay}
+      contentClassName={styles.content}
+      headerClassName={styles.header}
+      titleClassName={styles.title}
+      footerClassName={styles.footer}
+      footer={
+        !submitResult ? (
+          <>
+            <div className={styles.footerHint}>
+              {showForm ? (
+                <>
+                  <kbd>Enter</kbd>
+                  <span>{t('tasks:trigger.submit')}</span>
+                  <kbd>Esc</kbd>
+                  <span>{t('common:cancel')}</span>
+                </>
+              ) : null}
+            </div>
+            <div className={styles.footerActions}>
+              <Button type="button" variant="secondary" onClick={() => closeAndReset(false)}>
+                {t('common:cancel')}
+              </Button>
+              {showForm ? (
+                <Button
+                  type="button"
+                  loading={isLoading}
+                  disabled={tab === 'repo' ? !canSubmitRepo : !canSubmitUpload}
+                  onClick={() => {
+                    void (tab === 'repo' ? handleSubmitRepo() : handleSubmitUpload())
+                  }}
+                >
+                  {t('tasks:trigger.submit')}
+                </Button>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <>
+            <div />
+            <div className={styles.footerActions}>
+              <Button type="button" onClick={() => closeAndReset(false)}>
+                {t('common:close')}
+              </Button>
+            </div>
+          </>
+        )
+      }
+    >
+      {!submitResult ? (
+        <>
+          <div className={styles.tabs}>
+            <button
+              type="button"
+              className={cn(styles.tabButton, tab === 'repo' && styles.tabButtonActive)}
+              onClick={() => onTabChange('repo')}
+            >
+              {t('tasks:trigger.repo_tab')}
+            </button>
+            <button
+              type="button"
+              className={cn(styles.tabButton, tab === 'upload' && styles.tabButtonActive)}
+              onClick={() => onTabChange('upload')}
+            >
+              {t('tasks:trigger.upload_tab')}
+            </button>
           </div>
-          <Dialog.Description className={styles.srOnly}>
-            {t('tasks:trigger.footer_hint')}
-          </Dialog.Description>
 
-          {!submitResult ? (
-            <>
-              <div className={styles.tabs}>
-                <button
-                  type="button"
-                  className={cn(styles.tabButton, tab === 'repo' && styles.tabButtonActive)}
-                  onClick={() => onTabChange('repo')}
+          {showGithubPrompt ? (
+            <div className={styles.body}>
+              <DialogEmptyState
+                icon="github"
+                title={t('tasks:empty.no_github_title')}
+                description={t('tasks:empty.no_github_description')}
+                actionLabel={t('tasks:empty.link_github')}
+                onAction={onConnectGithub}
+                footnote={t('tasks:empty.no_github_secondary')}
+              />
+            </div>
+          ) : showNoProjectsState ? (
+            <div className={styles.body}>
+              <DialogEmptyState
+                icon="projects"
+                title={t('tasks:empty.no_projects_title')}
+                description={t('tasks:empty.no_projects_description')}
+                actionLabel={t('tasks:empty.open_repositories')}
+                actionVariant="secondary"
+                onAction={onOpenRepositories}
+              />
+            </div>
+          ) : tab === 'repo' ? (
+            <div className={styles.body}>
+              <div className={styles.field}>
+                <label className={styles.fieldLabel}>{t('tasks:trigger.project_label')}</label>
+                <Select
+                  value={resolvedRepoProjectId}
+                  onChange={(event) => setRepoProjectId(event.target.value)}
                 >
-                  {t('tasks:trigger.repo_tab')}
-                </button>
-                <button
-                  type="button"
-                  className={cn(styles.tabButton, tab === 'upload' && styles.tabButtonActive)}
-                  onClick={() => onTabChange('upload')}
-                >
-                  {t('tasks:trigger.upload_tab')}
-                </button>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </Select>
               </div>
 
-              {showGithubPrompt ? (
-                <div className={styles.body}>
-                  <DialogEmptyState
-                    icon="github"
-                    title={t('tasks:empty.no_github_title')}
-                    description={t('tasks:empty.no_github_description')}
-                    actionLabel={t('tasks:empty.link_github')}
-                    onAction={onConnectGithub}
-                    footnote={t('tasks:empty.no_github_secondary')}
-                  />
+              <div className={styles.field}>
+                <label className={styles.fieldLabel}>{t('tasks:trigger.path_label')}</label>
+                <Input
+                  inputClassName={styles.monoInput}
+                  value={repoPath}
+                  onChange={(event) => setRepoPath(event.target.value)}
+                  placeholder={t('tasks:trigger.path_placeholder')}
+                />
+                <div className={styles.fieldHint}>{repoCountLabel}</div>
+              </div>
+
+              <div className={styles.fieldRow}>
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>
+                    {t('tasks:trigger.source_language_label')}
+                  </label>
+                  <div className={styles.readonlyField}>{FIXED_LANGUAGES.source}</div>
                 </div>
-              ) : showNoProjectsState ? (
-                <div className={styles.body}>
-                  <DialogEmptyState
-                    icon="projects"
-                    title={t('tasks:empty.no_projects_title')}
-                    description={t('tasks:empty.no_projects_description')}
-                    actionLabel={t('tasks:empty.open_repositories')}
-                    actionVariant="secondary"
-                    onAction={onOpenRepositories}
-                  />
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>
+                    {t('tasks:trigger.target_language_label')}
+                  </label>
+                  <div className={styles.readonlyField}>{FIXED_LANGUAGES.target}</div>
                 </div>
-              ) : tab === 'repo' ? (
-                <div className={styles.body}>
-                  <div className={styles.field}>
-                    <label className={styles.fieldLabel}>{t('tasks:trigger.project_label')}</label>
-                    <div className={styles.selectWrap}>
-                      <select
-                        className={styles.fieldSelect}
-                        value={resolvedRepoProjectId}
-                        onChange={(event) => setRepoProjectId(event.target.value)}
-                      >
-                        {projects.map((project) => (
-                          <option key={project.id} value={project.id}>
-                            {project.name}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown size={12} className={styles.selectIcon} />
-                    </div>
-                  </div>
+              </div>
 
-                  <div className={styles.field}>
-                    <label className={styles.fieldLabel}>{t('tasks:trigger.path_label')}</label>
-                    <input
-                      className={styles.fieldInput}
-                      value={repoPath}
-                      onChange={(event) => setRepoPath(event.target.value)}
-                      placeholder={t('tasks:trigger.path_placeholder')}
-                    />
-                    <div className={styles.fieldHint}>{repoCountLabel}</div>
-                  </div>
+              <div className={styles.filePicker}>
+                <div className={styles.filePickerHeader}>
+                  <span>{t('tasks:trigger.files_label')}</span>
+                  {isFetchingRepoFiles ? <LoaderCircle size={14} className={styles.spin} /> : null}
+                </div>
 
-                  <div className={styles.fieldRow}>
-                    <div className={styles.field}>
-                      <label className={styles.fieldLabel}>
-                        {t('tasks:trigger.source_language_label')}
-                      </label>
-                      <div className={styles.readonlyField}>{FIXED_LANGUAGES.source}</div>
-                    </div>
-                    <div className={styles.field}>
-                      <label className={styles.fieldLabel}>
-                        {t('tasks:trigger.target_language_label')}
-                      </label>
-                      <div className={styles.readonlyField}>{FIXED_LANGUAGES.target}</div>
-                    </div>
+                {repoFiles?.items.length ? (
+                  <div className={styles.fileList}>
+                    {repoFiles.items.map((filePath) => {
+                      const checked = effectiveSelectedFiles.includes(filePath)
+                      return (
+                        <label key={filePath} className={styles.fileOption}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => handleToggleFile(filePath)}
+                          />
+                          <span>{filePath}</span>
+                        </label>
+                      )
+                    })}
                   </div>
-
-                  <div className={styles.filePicker}>
-                    <div className={styles.filePickerHeader}>
-                      <span>{t('tasks:trigger.files_label')}</span>
-                      {isFetchingRepoFiles ? (
-                        <LoaderCircle size={14} className={styles.spin} />
-                      ) : null}
-                    </div>
-
-                    {repoFiles?.items.length ? (
-                      <div className={styles.fileList}>
-                        {repoFiles.items.map((filePath) => {
-                          const checked = effectiveSelectedFiles.includes(filePath)
-                          return (
-                            <label key={filePath} className={styles.fileOption}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => handleToggleFile(filePath)}
-                              />
-                              <span>{filePath}</span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <div className={styles.filePlaceholder}>
-                        {t('tasks:trigger.files_placeholder')}
-                      </div>
-                    )}
+                ) : (
+                  <div className={styles.filePlaceholder}>
+                    {t('tasks:trigger.files_placeholder')}
                   </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className={styles.body}>
+              {projects.length > 0 ? (
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>
+                    {t('tasks:trigger.project_optional_label')}
+                  </label>
+                  <Select
+                    value={resolvedUploadProjectId}
+                    onChange={(event) => setUploadProjectId(event.target.value)}
+                  >
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </Select>
+                  <div className={styles.fieldHint}>{t('tasks:trigger.project_optional_hint')}</div>
                 </div>
               ) : (
-                <div className={styles.body}>
-                  {projects.length > 0 ? (
-                    <div className={styles.field}>
-                      <label className={styles.fieldLabel}>
-                        {t('tasks:trigger.project_optional_label')}
-                      </label>
-                      <div className={styles.selectWrap}>
-                        <select
-                          className={styles.fieldSelect}
-                          value={resolvedUploadProjectId}
-                          onChange={(event) => setUploadProjectId(event.target.value)}
-                        >
-                          {projects.map((project) => (
-                            <option key={project.id} value={project.id}>
-                              {project.name}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown size={12} className={styles.selectIcon} />
-                      </div>
-                      <div className={styles.fieldHint}>
-                        {t('tasks:trigger.project_optional_hint')}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className={styles.inlineNotice}>
-                      {t('tasks:trigger.upload_without_project_hint')}
-                    </div>
-                  )}
-
-                  <div className={styles.field}>
-                    <label className={styles.fieldLabel}>
-                      {t('tasks:trigger.target_path_label')}
-                    </label>
-                    <input
-                      className={styles.fieldInput}
-                      value={targetPath}
-                      onChange={(event) => setTargetPath(event.target.value)}
-                      placeholder={t('tasks:trigger.target_path_placeholder')}
-                    />
-                  </div>
-
-                  <div className={styles.field}>
-                    <label className={styles.fieldLabel}>{t('tasks:trigger.file_label')}</label>
-                    <label className={styles.uploadDropzone}>
-                      <input
-                        className={styles.fileInput}
-                        type="file"
-                        accept=".md,text/markdown"
-                        onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                      />
-                      <Upload size={16} />
-                      <span>{file?.name ? file.name : t('tasks:trigger.file_placeholder')}</span>
-                    </label>
-                  </div>
-
-                  <div className={styles.fieldRow}>
-                    <div className={styles.field}>
-                      <label className={styles.fieldLabel}>
-                        {t('tasks:trigger.source_language_label')}
-                      </label>
-                      <div className={styles.readonlyField}>{FIXED_LANGUAGES.source}</div>
-                    </div>
-                    <div className={styles.field}>
-                      <label className={styles.fieldLabel}>
-                        {t('tasks:trigger.target_language_label')}
-                      </label>
-                      <div className={styles.readonlyField}>{FIXED_LANGUAGES.target}</div>
-                    </div>
-                  </div>
+                <div className={styles.inlineNotice}>
+                  {t('tasks:trigger.upload_without_project_hint')}
                 </div>
               )}
 
-              <div className={styles.footer}>
-                <div className={styles.footerHint}>
-                  {showForm ? (
-                    <>
-                      <kbd>Enter</kbd>
-                      <span>{t('tasks:trigger.submit')}</span>
-                      <kbd>Esc</kbd>
-                      <span>{t('common:cancel')}</span>
-                    </>
-                  ) : null}
-                </div>
-                <div className={styles.footerActions}>
-                  <Dialog.Close asChild>
-                    <button type="button" className={styles.secondaryButton}>
-                      {t('common:cancel')}
-                    </button>
-                  </Dialog.Close>
-                  {showForm ? (
-                    <button
-                      type="button"
-                      className={styles.primaryButton}
-                      disabled={tab === 'repo' ? !canSubmitRepo : !canSubmitUpload}
-                      onClick={() => {
-                        void (tab === 'repo' ? handleSubmitRepo() : handleSubmitUpload())
-                      }}
-                    >
-                      {isLoading ? <LoaderCircle size={14} className={styles.spin} /> : null}
-                      <span>{t('tasks:trigger.submit')}</span>
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className={styles.body}>
-                <div className={styles.resultBanner}>
-                  <CheckCircle size={16} />
-                  <span>{t('tasks:trigger.created_success', { count: submitResult.created })}</span>
-                </div>
-
-                <div className={styles.skippedSection}>
-                  <div className={styles.skippedHeader}>
-                    <span>{t('tasks:trigger.skipped_section_title')}</span>
-                    <span className={styles.skippedCount}>{submitResult.skipped.length}</span>
-                  </div>
-
-                  <div className={styles.skippedList}>
-                    {submitResult.skipped.map((item) => (
-                      <div key={item.file_path} className={styles.skippedItem}>
-                        <span className={styles.skippedPath}>{item.file_path}</span>
-                        <span className={styles.skippedReason}>
-                          {t(SKIPPED_REASON_KEYS[item.reason])}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <div className={styles.field}>
+                <label className={styles.fieldLabel}>{t('tasks:trigger.target_path_label')}</label>
+                <Input
+                  inputClassName={styles.monoInput}
+                  value={targetPath}
+                  onChange={(event) => setTargetPath(event.target.value)}
+                  placeholder={t('tasks:trigger.target_path_placeholder')}
+                />
               </div>
 
-              <div className={styles.footer}>
-                <div />
-                <div className={styles.footerActions}>
-                  <Dialog.Close asChild>
-                    <button type="button" className={styles.primaryButton}>
-                      {t('common:close')}
-                    </button>
-                  </Dialog.Close>
+              <div className={styles.field}>
+                <label className={styles.fieldLabel}>{t('tasks:trigger.file_label')}</label>
+                <label className={styles.uploadDropzone}>
+                  <input
+                    className={styles.fileInput}
+                    type="file"
+                    accept=".md,text/markdown"
+                    onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                  />
+                  <Upload size={16} />
+                  <span>{file?.name ? file.name : t('tasks:trigger.file_placeholder')}</span>
+                </label>
+              </div>
+
+              <div className={styles.fieldRow}>
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>
+                    {t('tasks:trigger.source_language_label')}
+                  </label>
+                  <div className={styles.readonlyField}>{FIXED_LANGUAGES.source}</div>
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>
+                    {t('tasks:trigger.target_language_label')}
+                  </label>
+                  <div className={styles.readonlyField}>{FIXED_LANGUAGES.target}</div>
                 </div>
               </div>
-            </>
+            </div>
           )}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+        </>
+      ) : (
+        <div className={styles.body}>
+          <div className={styles.resultBanner}>
+            <CheckCircle size={16} />
+            <span>{t('tasks:trigger.created_success', { count: submitResult.created })}</span>
+          </div>
+
+          <div className={styles.skippedSection}>
+            <div className={styles.skippedHeader}>
+              <span>{t('tasks:trigger.skipped_section_title')}</span>
+              <span className={styles.skippedCount}>{submitResult.skipped.length}</span>
+            </div>
+
+            <div className={styles.skippedList}>
+              {submitResult.skipped.map((item) => (
+                <div key={item.file_path} className={styles.skippedItem}>
+                  <span className={styles.skippedPath}>{item.file_path}</span>
+                  <span className={styles.skippedReason}>
+                    {t(SKIPPED_REASON_KEYS[item.reason])}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </DialogShell>
   )
 }

@@ -48,6 +48,7 @@ export interface TaskListResponse {
   total: number
   limit: number
   offset: number
+  status_counts: Partial<Record<TaskStatus, number>>
 }
 
 export interface TaskListFilters {

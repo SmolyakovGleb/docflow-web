@@ -6,7 +6,7 @@ import styles from './StatusPill.module.css'
 
 interface StatusPillProps {
   status: TaskStatus
-  className?: string
+  className?: string | undefined
 }
 
 export function StatusPill({ status, className }: StatusPillProps) {

@@ -6,6 +6,9 @@
 }
 
 .card {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
   width: min(380px, 100%);
   padding: 32px;
   border: 1px solid var(--border);
@@ -13,47 +16,17 @@
   background:
     radial-gradient(circle at top, rgba(255, 255, 255, 0.04), transparent 50%), var(--surface);
   box-shadow: var(--shadow-dialog);
+  text-align: center;
 }
 
 .wordmark {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 28px;
-  color: var(--text);
-  font-size: var(--font-size-md);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.glyph {
-  display: grid;
-  gap: 3px;
-  width: 14px;
-}
-
-.glyph span {
-  display: block;
-  height: 2px;
-  border-radius: var(--radius-full);
-  background: var(--text);
-}
-
-.glyph span:nth-child(1) {
-  width: 14px;
-}
-
-.glyph span:nth-child(2) {
-  width: 11px;
-}
-
-.glyph span:nth-child(3) {
-  width: 8px;
+  margin-bottom: 0;
 }
 
 .status {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   color: var(--text-muted);
 }

@@ -11,7 +11,7 @@ import {
   useRetryTaskMutation,
 } from '@/features/tasks/api/tasksApi'
 import { downloadMd } from '@/features/tasks/lib/downloadMd'
-import { usePollNewTasks } from '@/features/tasks/hooks/usePollNewTasks'
+import { useTaskListNotifications } from '@/features/tasks/hooks/useTaskListNotifications'
 import { useTaskFilters } from '@/features/tasks/hooks/useTaskFilters'
 import { groupByCommit } from '@/features/tasks/lib/groupByCommit'
 import {
@@ -60,22 +60,20 @@ export function TaskListPage() {
     isFetching,
     error,
     refetch,
-  } = useGetTasksQuery(
-    {
-      status: filters.status,
-      project_id: filters.projectId,
-      search: filters.search,
-      limit: 50,
-      offset: 0,
-    },
-    { pollingInterval: 15000 },
-  )
+  } = useGetTasksQuery({
+    status: filters.status,
+    project_id: filters.projectId,
+    search: filters.search,
+    limit: 50,
+    offset: 0,
+  })
   const { data: health } = useGetHealthQuery(undefined, { pollingInterval: 30000 })
   const [fetchTask] = useLazyGetTaskQuery()
   const [publishTask] = usePublishTaskMutation()
   const [retryTask] = useRetryTaskMutation()
 
   const tasks = tasksResponse?.items ?? EMPTY_TASKS
+  const visibleTaskIds = useMemo(() => tasks.map((task) => task.id), [tasks])
   const selectedIdsSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds])
   const groups = useMemo(() => groupByCommit(tasks), [tasks])
   const hasActiveFilters = Boolean(filters.status || filters.projectId || filters.search)
@@ -84,10 +82,21 @@ export function TaskListPage() {
     hasGithubLinked && (isLoading || Boolean(error) || tasks.length > 0 || hasActiveFilters)
   const showFooter = !isLoading && !error && tasks.length > 0
 
-  // resetKey ensures usePollNewTasks resets its baseline when filters change
-  const resetKey = `${filters.status ?? ''}-${filters.projectId ?? ''}-${filters.search}`
-  const taskIds = useMemo(() => tasks.map((task) => task.id), [tasks])
-  const { newTasksCount, clearNewTasks } = usePollNewTasks(taskIds, resetKey)
+  const bannerScopeKey = JSON.stringify({
+    status: filters.status,
+    projectId: filters.projectId,
+    search: filters.search,
+  })
+  const { newTasksCount, clearNewTasks } = useTaskListNotifications(
+    bannerScopeKey,
+    {
+      status: filters.status,
+      projectId: filters.projectId,
+      search: filters.search,
+    },
+    visibleTaskIds,
+    true,
+  )
 
   // Active tab derived from filter status
   const activeTab =
@@ -95,6 +104,7 @@ export function TaskListPage() {
     filters.status === 'running' ||
     filters.status === 'done' ||
     filters.status === 'failed' ||
+    filters.status === 'conflict' ||
     filters.status === 'published'
       ? filters.status
       : 'all'
@@ -217,6 +227,7 @@ export function TaskListPage() {
       <StatusTabs
         activeTab={activeTab}
         tasks={tasks}
+        counts={tasksResponse?.status_counts}
         onTabChange={(status) => setFilters({ status })}
       />
 

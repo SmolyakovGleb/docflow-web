@@ -16,6 +16,7 @@ from app.models.project import Project
 from app.models.task import Task
 from app.models.user import User
 from app.services import pipeline_runner
+from app.services import task_list_events
 from app.services.auth import decrypt_github_access_token, decrypt_webhook_secret
 from app.services.github import GitHubClient
 from app.services.tasks import _apply_exclude_patterns
@@ -239,6 +240,8 @@ async def github_webhook(
 
     session.add_all(tasks_to_create)
     await session.commit()
+    for task in tasks_to_create:
+        task_list_events.publish_task_entered_scope(task)
     for task in tasks_to_create:
         background_tasks.add_task(pipeline_runner.run_task, task.id)
 

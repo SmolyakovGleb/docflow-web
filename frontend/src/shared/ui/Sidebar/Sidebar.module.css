@@ -8,42 +8,6 @@
   padding: 22px 14px 18px;
 }
 
-.wordmark {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px 26px;
-  color: var(--text);
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.wordmarkGlyph {
-  display: grid;
-  width: 12px;
-  gap: 3px;
-}
-
-.wordmarkGlyph span {
-  display: block;
-  height: 2px;
-  border-radius: var(--radius-full);
-  background: currentColor;
-}
-
-.wordmarkGlyph span:nth-child(1) {
-  width: 12px;
-}
-
-.wordmarkGlyph span:nth-child(2) {
-  width: 9px;
-}
-
-.wordmarkGlyph span:nth-child(3) {
-  width: 6px;
-}
-
 .nav {
   display: flex;
   flex-direction: column;

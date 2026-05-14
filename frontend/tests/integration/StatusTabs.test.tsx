@@ -2,8 +2,8 @@ import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
-import { StatusTabs } from '@/features/tasks/ui/StatusTabs'
 import type { TaskSummary } from '@/features/tasks/model/types'
+import { StatusTabs } from '@/features/tasks/ui/StatusTabs'
 import { renderWithProviders } from '../utils/renderWithProviders'
 
 const baseTask: TaskSummary = {
@@ -23,7 +23,7 @@ const baseTask: TaskSummary = {
 }
 
 describe('StatusTabs', () => {
-  it('renders all six tab labels', () => {
+  it('renders all status tab labels', () => {
     renderWithProviders(
       <MemoryRouter>
         <StatusTabs activeTab="all" tasks={[]} onTabChange={() => {}} />
@@ -35,6 +35,7 @@ describe('StatusTabs', () => {
     expect(screen.getByRole('button', { name: /в работе/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /к публикации/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /ошибки/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /конфликты/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /опубликовано/i })).toBeInTheDocument()
   })
 
@@ -85,6 +86,7 @@ describe('StatusTabs', () => {
       { ...baseTask, id: '1', status: 'done' },
       { ...baseTask, id: '2', status: 'done' },
       { ...baseTask, id: '3', status: 'failed' },
+      { ...baseTask, id: '4', status: 'conflict' },
     ]
 
     renderWithProviders(
@@ -93,11 +95,40 @@ describe('StatusTabs', () => {
       </MemoryRouter>,
     )
 
-    // "К публикации" tab should show count 2
     const doneBtn = screen.getByRole('button', { name: /к публикации/i })
     expect(doneBtn.textContent).toContain('2')
 
-    // "Ошибки" tab should show count 1
+    const failedBtn = screen.getByRole('button', { name: /ошибки/i })
+    expect(failedBtn.textContent).toContain('1')
+
+    const conflictBtn = screen.getByRole('button', { name: /конфликты/i })
+    expect(conflictBtn.textContent).toContain('1')
+  })
+
+  it('prefers aggregate counts over filtered task list when status filter is active', () => {
+    const filteredTasks: TaskSummary[] = [{ ...baseTask, id: '3', status: 'failed' }]
+
+    renderWithProviders(
+      <MemoryRouter>
+        <StatusTabs
+          activeTab="failed"
+          tasks={filteredTasks}
+          counts={{
+            queued: 0,
+            running: 0,
+            done: 2,
+            failed: 1,
+            conflict: 0,
+            published: 0,
+          }}
+          onTabChange={() => {}}
+        />
+      </MemoryRouter>,
+    )
+
+    const allBtn = screen.getByRole('button', { name: /все/i })
+    expect(allBtn.textContent).toContain('3')
+
     const failedBtn = screen.getByRole('button', { name: /ошибки/i })
     expect(failedBtn.textContent).toContain('1')
   })

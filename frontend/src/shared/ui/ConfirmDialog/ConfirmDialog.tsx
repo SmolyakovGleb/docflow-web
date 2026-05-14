@@ -1,5 +1,5 @@
-import * as Dialog from '@radix-ui/react-dialog'
 import { useTranslation } from 'react-i18next'
+import { DialogShell } from '../DialogShell/DialogShell'
 import { Button } from '../Button/Button'
 import styles from './ConfirmDialog.module.css'
 
@@ -29,26 +29,30 @@ export function ConfirmDialog({
   const { t } = useTranslation('common')
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className={styles.overlay} />
-        <Dialog.Content className={styles.content}>
-          <div className={styles.header}>
-            <Dialog.Title className={styles.title}>{title}</Dialog.Title>
-            {description && (
-              <Dialog.Description className={styles.description}>{description}</Dialog.Description>
-            )}
-          </div>
-          <div className={styles.actions}>
-            <Dialog.Close asChild>
-              <Button variant="secondary">{cancelText ?? t('cancel')}</Button>
-            </Dialog.Close>
-            <Button variant={confirmVariant} loading={loading} onClick={onConfirm}>
-              {confirmText ?? t('confirm')}
-            </Button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <DialogShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      size="sm"
+      overlayClassName={styles.overlay}
+      contentClassName={styles.content}
+      headerClassName={styles.header}
+      titleClassName={styles.title}
+      descriptionClassName={styles.description}
+      footerClassName={styles.actions}
+      footer={
+        <>
+          <Button variant="secondary" onClick={() => onOpenChange(false)}>
+            {cancelText ?? t('cancel')}
+          </Button>
+          <Button variant={confirmVariant} loading={loading} onClick={onConfirm}>
+            {confirmText ?? t('confirm')}
+          </Button>
+        </>
+      }
+    >
+      {null}
+    </DialogShell>
   )
 }

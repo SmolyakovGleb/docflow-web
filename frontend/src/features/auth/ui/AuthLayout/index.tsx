@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { AuthLogo } from '../AuthLogo'
+import { Wordmark } from '@/shared/ui/Wordmark/Wordmark'
 import styles from './index.module.css'
 
 interface AuthLayoutProps {
@@ -18,7 +18,7 @@ export function AuthLayout({ title, subtitle, footer, children }: AuthLayoutProp
     <main className={styles.page}>
       <div className={styles.stack}>
         <section className={styles.card}>
-          <AuthLogo />
+          <Wordmark variant="auth" />
           <h1 className={styles.title}>{title}</h1>
           <p className={styles.subtitle}>{subtitle}</p>
           {children}

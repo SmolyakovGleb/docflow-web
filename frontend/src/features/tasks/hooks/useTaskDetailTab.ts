@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   getAvailableTaskDetailTabs,
@@ -8,23 +8,39 @@ import {
   type TaskStatus,
 } from '../model/types'
 
-export function useTaskDetailTab(status: TaskStatus) {
+export function useTaskDetailTab(status?: TaskStatus | null) {
   const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
 
-  const activeTab = useMemo(() => {
-    const tabParam = searchParams.get('tab')
-    if (isTaskDetailTab(tabParam, status)) {
-      return tabParam
+  const activeTab = useMemo(
+    () =>
+      status && isTaskDetailTab(tabParam, status)
+        ? tabParam
+        : status
+          ? getDefaultTaskDetailTab(status)
+          : 'diff',
+    [status, tabParam],
+  )
+
+  useEffect(() => {
+    if (!status || tabParam === activeTab) {
+      return
     }
 
-    return getDefaultTaskDetailTab(status)
-  }, [searchParams, status])
+    const params = new URLSearchParams(searchParams)
+    params.set('tab', activeTab)
+    setSearchParams(params, { replace: true })
+  }, [activeTab, searchParams, setSearchParams, status, tabParam])
 
   const setActiveTab = useCallback(
     (tab: TaskDetailTab) => {
-      const resolvedTab = getAvailableTaskDetailTabs(status).includes(tab)
-        ? tab
-        : getDefaultTaskDetailTab(status)
+      const resolvedTab = status
+        ? getAvailableTaskDetailTabs(status).includes(tab)
+          ? tab
+          : getDefaultTaskDetailTab(status)
+        : isTaskDetailTab(tab)
+          ? tab
+          : 'diff'
       const params = new URLSearchParams(searchParams)
       params.set('tab', resolvedTab)
       setSearchParams(params, { replace: true })

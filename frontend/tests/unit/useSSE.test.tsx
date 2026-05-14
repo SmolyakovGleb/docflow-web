@@ -2,6 +2,8 @@ import { act, renderHook } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { Provider } from 'react-redux'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { waitFor } from '@testing-library/react'
+import { tasksApi } from '@/features/tasks/api/tasksApi'
 import { useSSE } from '@/features/tasks/hooks/useSSE'
 import { createAppStore, type AppStore } from '@/shared/store'
 
@@ -74,7 +76,7 @@ describe('useSSE', () => {
     expect(source?.close).toHaveBeenCalledOnce()
   })
 
-  it('keeps the EventSource open until status_change and invalidates the task cache', () => {
+  it('streams log lines into the task log cache and invalidates task data on status_change', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)
     const store = createAppStore()
     const dispatchSpy = vi.spyOn(store, 'dispatch')
@@ -106,9 +108,24 @@ describe('useSSE', () => {
       source.emit('stage_update', { stage: 'pipeline', index: 2, total: 3 })
     })
 
+    await waitFor(() => {
+      expect(tasksApi.endpoints.getTaskLog.select('task-42')(store.getState()).data).toBe(
+        'pipeline log',
+      )
+    })
     expect(source.close).not.toHaveBeenCalled()
     expect(onLogLine).toHaveBeenCalledWith('pipeline log')
     expect(onStageUpdate).toHaveBeenCalledWith({ stage: 'pipeline', index: 2, total: 3 })
+
+    act(() => {
+      source.emit('log_line', { line: 'persisted log' })
+    })
+
+    await waitFor(() => {
+      expect(tasksApi.endpoints.getTaskLog.select('task-42')(store.getState()).data).toBe(
+        'pipeline log\npersisted log',
+      )
+    })
 
     act(() => {
       source.emit('status_change', { status: 'done' })
@@ -119,7 +136,43 @@ describe('useSSE', () => {
     expect(dispatchSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'api/invalidateTags',
-        payload: ['Task', { type: 'Task', id: 'task-42' }],
+        payload: ['Task', { type: 'Task', id: 'task-42' }, { type: 'TaskLog', id: 'task-42' }],
+      }),
+    )
+  })
+
+  it('ignores non-terminal status_change events', () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const store = createAppStore()
+    const dispatchSpy = vi.spyOn(store, 'dispatch')
+    const onStatusChange = vi.fn()
+
+    renderHook(
+      () =>
+        useSSE({
+          taskId: 'task-42',
+          status: 'running',
+          onStatusChange,
+        }),
+      {
+        wrapper: makeWrapper(store),
+      },
+    )
+
+    const source = FakeEventSource.instances[0]
+    if (!source) {
+      throw new Error('Expected EventSource instance to be created')
+    }
+
+    act(() => {
+      source.emit('status_change', { status: 'running' })
+    })
+
+    expect(onStatusChange).not.toHaveBeenCalled()
+    expect(source.close).not.toHaveBeenCalled()
+    expect(dispatchSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'api/invalidateTags',
       }),
     )
   })

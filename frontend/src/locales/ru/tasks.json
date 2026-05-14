@@ -21,6 +21,7 @@
     "running": "В работе",
     "ready_to_publish": "К публикации",
     "failed": "Ошибки",
+    "conflict": "Конфликты",
     "published": "Опубликовано"
   },
   "status": {

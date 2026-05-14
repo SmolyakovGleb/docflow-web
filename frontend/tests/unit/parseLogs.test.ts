@@ -44,7 +44,7 @@ describe('parseLogs', () => {
     ])
   })
 
-  it('keeps backend logs without stage prefixes in the other group', () => {
+  it('keeps backend logs without stage prefixes in the other group by default', () => {
     const stages = parseLogs(['workspace created', 'chunk translated', 'saved output'].join('\n'))
 
     expect(stages).toEqual([
@@ -68,6 +68,21 @@ describe('parseLogs', () => {
       {
         id: 'other',
         lines: ['workspace created'],
+      },
+    ])
+  })
+
+  it('remaps legacy persisted logs to a fallback stage when no explicit stages are present', () => {
+    const stages = parseLogs(
+      ['workspace created', 'chunk translated', 'saved output'].join('\n'),
+      [],
+      { fallbackStage: 'pipeline' },
+    )
+
+    expect(stages).toEqual([
+      {
+        id: 'pipeline',
+        lines: ['workspace created', 'chunk translated', 'saved output'],
       },
     ])
   })

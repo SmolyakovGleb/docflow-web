@@ -10,9 +10,8 @@ import { translateApiError } from '@/shared/lib/errorMessages'
 import { Button } from '@/shared/ui/Button/Button'
 import { Field } from '@/shared/ui/Field/Field'
 import { Input } from '@/shared/ui/Input/Input'
+import { InlineAlert } from '@/shared/ui/InlineAlert/InlineAlert'
 import { useAppDispatch } from '@/shared/store/hooks'
-import { AuthError } from '../AuthError'
-import { PasswordInput } from '../PasswordInput'
 import styles from '../AuthForm.module.css'
 
 export function LoginForm() {
@@ -47,7 +46,7 @@ export function LoginForm() {
 
   return (
     <>
-      {submitError ? <AuthError message={submitError} /> : null}
+      {submitError ? <InlineAlert className={styles.alert}>{submitError}</InlineAlert> : null}
       <form
         className={styles.form}
         onSubmit={(event) => {
@@ -73,8 +72,9 @@ export function LoginForm() {
           error={errors.password?.message}
           required
         >
-          <PasswordInput
+          <Input
             id="login-password"
+            type="password"
             autoComplete="current-password"
             placeholder="**********"
             error={Boolean(errors.password)}

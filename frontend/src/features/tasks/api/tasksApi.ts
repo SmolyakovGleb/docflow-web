@@ -20,6 +20,23 @@ export function getTaskEventsUrl(taskId: string) {
   return `/api/tasks/${taskId}/events`
 }
 
+export function getTaskListEventsUrl(params: GetTasksParams = {}) {
+  const searchParams = new URLSearchParams()
+
+  if (params.status) {
+    searchParams.set('status', params.status)
+  }
+  if (params.project_id) {
+    searchParams.set('project_id', params.project_id)
+  }
+  if (params.search?.trim()) {
+    searchParams.set('search', params.search.trim())
+  }
+
+  const query = searchParams.toString()
+  return query ? `/api/tasks/events?${query}` : '/api/tasks/events'
+}
+
 export const tasksApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getTasks: builder.query<TaskListResponse, GetTasksParams | void>({
@@ -50,6 +67,7 @@ export const tasksApi = baseApi.injectEndpoints({
       query: (taskId) => ({
         url: `/tasks/${taskId}/log`,
       }),
+      transformResponse: (response) => (typeof response === 'string' ? response : ''),
       providesTags: (_result, _error, taskId) => [{ type: 'TaskLog', id: taskId }],
     }),
     updateTask: builder.mutation<TaskDetail, { taskId: string; translated_content: string }>({
@@ -87,14 +105,22 @@ export const tasksApi = baseApi.injectEndpoints({
         method: 'POST',
         data: force ? { force } : undefined,
       }),
-      invalidatesTags: (_result, _error, { taskId }) => ['Task', { type: 'Task', id: taskId }],
+      invalidatesTags: (_result, _error, { taskId }) => [
+        'Task',
+        { type: 'Task', id: taskId },
+        { type: 'TaskLog', id: taskId },
+      ],
     }),
     publishTask: builder.mutation<TaskPublishResponse, string>({
       query: (taskId) => ({
         url: `/tasks/${taskId}/publish`,
         method: 'POST',
       }),
-      invalidatesTags: (_result, _error, taskId) => ['Task', { type: 'Task', id: taskId }],
+      invalidatesTags: (_result, _error, taskId) => [
+        'History',
+        'Task',
+        { type: 'Task', id: taskId },
+      ],
     }),
   }),
 })

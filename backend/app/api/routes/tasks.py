@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Annotated, AsyncIterator
 from uuid import UUID
 
+import asyncio
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +22,9 @@ from app.schemas.task import (
     TaskUpdate,
 )
 from app.services import pipeline_runner
+from app.services import task_list_events
 from app.services.auth import get_current_user
+from app.services.projects import get_project_or_404
 from app.services.tasks import (
     PublishConflictError,
     SourceFileChangedError,
@@ -43,17 +47,36 @@ async def _single_status_event(status_value: str) -> AsyncIterator[str]:
     yield pipeline_runner.format_sse_event("status_change", {"status": status_value})
 
 
-async def _stream_task_events(task_id: UUID) -> AsyncIterator[str]:
+TASK_EVENTS_STREAM_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+
+async def _stream_task_events(task_id: UUID, request: Request) -> AsyncIterator[str]:
     queue = pipeline_runner.TASK_EVENT_QUEUES[task_id]
+    reached_end = False
 
     try:
+        yield ": connected\n\n"
         while True:
-            item = await queue.get()
+            if await request.is_disconnected():
+                break
+
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=10.0)
+            except asyncio.TimeoutError:
+                yield ": keep-alive\n\n"
+                continue
+
             if item is None:
+                reached_end = True
                 break
             yield pipeline_runner.format_sse_event(item["event"], item["data"])
     finally:
-        pipeline_runner.TASK_EVENT_QUEUES.pop(task_id, None)
+        if reached_end:
+            pipeline_runner.TASK_EVENT_QUEUES.pop(task_id, None)
 
 
 @router.get(
@@ -75,7 +98,7 @@ async def get_tasks(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> TaskListResponse:
-    items, total = await list_tasks(
+    items, total, status_counts = await list_tasks(
         session,
         current_user,
         project_id=project_id,
@@ -89,7 +112,61 @@ async def get_tasks(
         total=total,
         limit=limit,
         offset=offset,
+        status_counts=status_counts,
     )
+
+
+@router.get(
+    "/events",
+    summary="SSE-стрим списка задач",
+    description=(
+        "Server-Sent Events для текущего списка задач. "
+        "Поддерживает те же фильтры, что и `GET /tasks`: `project_id`, `status`, `search`. "
+        "Событие `task_entered` приходит, когда задача впервые попадает в текущий scope подписки."
+    ),
+    responses={
+        200: {"description": "SSE-поток (text/event-stream)"},
+        404: {"description": "Проект не найден"},
+    },
+)
+async def task_list_events_stream(
+    request: Request,
+    session: DbSession,
+    current_user: CurrentUser,
+    project_id: UUID | None = None,
+    status: TaskStatus | None = None,
+    search: str | None = Query(default=None, min_length=1, max_length=200),
+) -> StreamingResponse:
+    if project_id is not None:
+        await get_project_or_404(session, project_id, current_user)
+
+    subscription = task_list_events.register_subscription(
+        user_id=current_user.id,
+        status=status,
+        project_id=project_id,
+        search=search,
+    )
+
+    async def _stream() -> AsyncIterator[str]:
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                try:
+                    item = await asyncio.wait_for(subscription.queue.get(), timeout=20.0)
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+                    continue
+
+                if item is None:
+                    break
+
+                yield task_list_events.format_sse_event(item["event"], item["data"])
+        finally:
+            task_list_events.close_subscription(subscription.id)
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
 @router.get(
@@ -322,6 +399,7 @@ async def publish_task_route(
 )
 async def task_events(
     task_id: UUID,
+    request: Request,
     session: DbSession,
     current_user: CurrentUser,
 ) -> StreamingResponse:
@@ -332,9 +410,11 @@ async def task_events(
         return StreamingResponse(
             _single_status_event(task.status),
             media_type="text/event-stream",
+            headers=TASK_EVENTS_STREAM_HEADERS,
         )
 
     return StreamingResponse(
-        _stream_task_events(task.id),
+        _stream_task_events(task.id, request),
         media_type="text/event-stream",
+        headers=TASK_EVENTS_STREAM_HEADERS,
     )

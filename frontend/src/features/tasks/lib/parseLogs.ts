@@ -48,6 +48,27 @@ function toLines(value: string | string[] | null | undefined) {
 
 interface ParseLogsOptions {
   liveStage?: TaskPipelineStage | null
+  fallbackStage?: TaskPipelineStage | null
+}
+
+function applyFallbackStage(
+  groups: Map<ParsedTaskLogStageId, string[]>,
+  fallbackStage: TaskPipelineStage | null | undefined,
+) {
+  if (!fallbackStage) {
+    return groups
+  }
+
+  if (groups.size !== 1 || !groups.has('other')) {
+    return groups
+  }
+
+  const lines = groups.get('other')
+  if (!lines?.length) {
+    return groups
+  }
+
+  return new Map<ParsedTaskLogStageId, string[]>([[fallbackStage, lines]])
 }
 
 export function parseLogs(
@@ -93,11 +114,12 @@ export function parseLogs(
     appendLine(groups, currentStage, line.trim())
   }
 
+  const resolvedGroups = applyFallbackStage(groups, options.fallbackStage)
   const orderedStageIds: ParsedTaskLogStageId[] = ['prepare', 'pipeline', 'persist', 'other']
   return orderedStageIds
-    .filter((stageId) => groups.has(stageId))
+    .filter((stageId) => resolvedGroups.has(stageId))
     .map((stageId) => ({
       id: stageId,
-      lines: groups.get(stageId) ?? [],
+      lines: resolvedGroups.get(stageId) ?? [],
     }))
 }

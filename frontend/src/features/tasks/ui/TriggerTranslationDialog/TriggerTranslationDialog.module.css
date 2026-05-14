@@ -173,15 +173,6 @@
   letter-spacing: 0.01em;
 }
 
-.selectWrap {
-  position: relative;
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
-}
-
-.fieldInput,
-.fieldSelect,
 .readonlyField {
   width: 100%;
   border: 1px solid var(--border);
@@ -192,47 +183,15 @@
   font-size: 13px;
 }
 
-.fieldInput {
-  font-family: var(--font-mono);
-}
-
-.fieldInput:focus,
-.fieldSelect:focus {
-  border-color: #3a3a3a;
-  outline: none;
-}
-
-.fieldInput:focus-visible,
-.fieldSelect:focus-visible {
-  box-shadow: none;
-}
-
-.fieldSelect {
-  display: block;
-  appearance: none;
-  cursor: pointer;
-  padding-right: 32px;
-}
-
-.selectWrap:focus-within {
-  box-shadow: var(--shadow-focus);
-  border-radius: 5px;
-}
-
-.selectIcon {
-  position: absolute;
-  right: 11px;
-  top: 50%;
-  color: var(--text-dim);
-  transform: translateY(-50%);
-  pointer-events: none;
-}
-
 .readonlyField {
   display: flex;
   align-items: center;
   min-height: 41px;
   color: var(--text-dim);
+}
+
+.monoInput {
+  font-family: var(--font-mono);
 }
 
 .fieldHint {
@@ -366,56 +325,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.primaryButton,
-.secondaryButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border-radius: 6px;
-  padding: 7px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease,
-    opacity 120ms ease,
-    box-shadow 120ms ease;
-}
-
-.primaryButton {
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #0f0f0f;
-}
-
-.primaryButton:hover {
-  border-color: #f5f5f5;
-  background: #f5f5f5;
-}
-
-.secondaryButton {
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-}
-
-.secondaryButton:hover {
-  border-color: #3a3a3a;
-  color: var(--text);
-}
-
-.primaryButton:focus-visible,
-.secondaryButton:focus-visible {
-  box-shadow: var(--shadow-focus);
-}
-
-.primaryButton:disabled,
-.secondaryButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .resultBanner {

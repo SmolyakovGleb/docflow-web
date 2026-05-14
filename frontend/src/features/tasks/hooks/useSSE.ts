@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useRef } from 'react'
-import { getTaskEventsUrl } from '@/features/tasks/api/tasksApi'
+import { getTaskEventsUrl, tasksApi } from '@/features/tasks/api/tasksApi'
 import { baseApi } from '@/shared/api/baseApi'
 import { useAppDispatch } from '@/shared/store/hooks'
 import type { TaskStageUpdateEvent, TaskStatus, TaskStatusChangeEvent } from '../model/types'
@@ -27,9 +27,22 @@ export function useSSE({
     sourceRef.current = null
   })
 
+  const appendTaskLog = useEffectEvent((line: string) => {
+    if (!taskId) {
+      return
+    }
+
+    void dispatch((innerDispatch, getState) => {
+      const currentLog = tasksApi.endpoints.getTaskLog.select(taskId)(getState()).data
+      const nextLog = currentLog ? `${currentLog}\n${line}` : line
+      void innerDispatch(tasksApi.util.upsertQueryData('getTaskLog', taskId, nextLog))
+    })
+  })
+
   const handleLogLine = useEffectEvent((event: MessageEvent<string>) => {
     const payload = JSON.parse(event.data) as { line?: string }
     if (payload.line) {
+      appendTaskLog(payload.line)
       onLogLine?.(payload.line)
     }
   })
@@ -41,11 +54,21 @@ export function useSSE({
 
   const handleStatusChange = useEffectEvent((event: MessageEvent<string>) => {
     const payload = JSON.parse(event.data) as TaskStatusChangeEvent
+    if (payload.status === 'queued' || payload.status === 'running') {
+      return
+    }
+
     onStatusChange?.(payload)
     closeSource()
 
     if (taskId) {
-      dispatch(baseApi.util.invalidateTags(['Task', { type: 'Task', id: taskId }]))
+      dispatch(
+        baseApi.util.invalidateTags([
+          'Task',
+          { type: 'Task', id: taskId },
+          { type: 'TaskLog', id: taskId },
+        ]),
+      )
     }
   })
 
@@ -67,5 +90,5 @@ export function useSSE({
       source.removeEventListener('status_change', handleStatusChange as EventListener)
       closeSource()
     }
-  }, [closeSource, handleLogLine, handleStageUpdate, handleStatusChange, status, taskId])
+  }, [status, taskId])
 }

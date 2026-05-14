@@ -1,7 +1,7 @@
-import * as Dialog from '@radix-ui/react-dialog'
 import { Trans, useTranslation } from 'react-i18next'
 import { Button } from '@/shared/ui/Button/Button'
-import styles from '../TaskDetailPage/TaskDetailPage.module.css'
+import { FormDialog } from '@/shared/ui/FormDialog/FormDialog'
+import styles from './RetryConflictDialog.module.css'
 
 interface RetryConflictDialogData {
   filePath: string
@@ -36,36 +36,37 @@ export function RetryConflictDialog({
   const repoText = data.sourceRepo ? t('retry_conflict.in_repo', { repo: data.sourceRepo }) : ''
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className={styles.dialogOverlay} />
-        <Dialog.Content className={styles.dialogContent}>
-          <Dialog.Title className={styles.dialogTitle}>{t('retry_conflict.title')}</Dialog.Title>
-          <Dialog.Description className={styles.dialogDescription}>
-            <Trans
-              t={t}
-              i18nKey="retry_conflict.file_changed"
-              values={{ filePath: data.filePath, repoText }}
-              components={{ code: <code /> }}
-            />
-          </Dialog.Description>
-          <div className={styles.dialogCode}>
-            <span>{t('retry_conflict.sha_old', { sha: data.oldSha ?? 'n/a' })}</span>
-            <span>{t('retry_conflict.sha_new', { sha: data.newSha ?? 'n/a' })}</span>
-          </div>
-          <div className={styles.dialogActions}>
-            <Button loading={loading} onClick={onCreateNew}>
-              {t('retry_conflict.create_new')}
-            </Button>
-            <Button variant="secondary" loading={loading} onClick={onUseOld}>
-              {t('retry_conflict.use_old')}
-            </Button>
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              {t('retry_conflict.cancel')}
-            </Button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('retry_conflict.title')}
+      description={
+        <Trans
+          t={t}
+          i18nKey="retry_conflict.file_changed"
+          values={{ filePath: data.filePath, repoText }}
+          components={{ code: <code /> }}
+        />
+      }
+      size="md"
+      actions={
+        <>
+          <Button loading={loading} onClick={onCreateNew}>
+            {t('retry_conflict.create_new')}
+          </Button>
+          <Button variant="secondary" loading={loading} onClick={onUseOld}>
+            {t('retry_conflict.use_old')}
+          </Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            {t('retry_conflict.cancel')}
+          </Button>
+        </>
+      }
+    >
+      <div className={styles.code}>
+        <span>{t('retry_conflict.sha_old', { sha: data.oldSha ?? 'n/a' })}</span>
+        <span>{t('retry_conflict.sha_new', { sha: data.newSha ?? 'n/a' })}</span>
+      </div>
+    </FormDialog>
   )
 }

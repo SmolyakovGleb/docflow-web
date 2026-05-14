@@ -178,8 +178,80 @@ function getRetryConflictData(error: unknown) {
 function TaskDetailSkeleton() {
   return (
     <section className={styles.page}>
-      <Skeleton height={140} variant="rect" />
-      <Skeleton height={420} variant="rect" />
+      <header className={styles.header} aria-hidden>
+        <div className={styles.skeletonBreadcrumb}>
+          <Skeleton width={170} height={12} />
+        </div>
+
+        <div className={styles.skeletonTitleRow}>
+          <div className={styles.skeletonTitleBlock}>
+            <Skeleton width="min(420px, 72%)" height={28} />
+
+            <div className={styles.skeletonMetaRow}>
+              <Skeleton width={112} height={12} />
+              <Skeleton width={58} height={20} />
+              <div className={styles.skeletonAuthor}>
+                <Skeleton variant="circle" width={18} height={18} />
+                <Skeleton width={92} height={12} />
+              </div>
+              <Skeleton width={84} height={12} />
+            </div>
+          </div>
+
+          <div className={styles.skeletonActions}>
+            <Skeleton width={88} height={28} />
+            <Skeleton width={124} height={28} />
+          </div>
+        </div>
+
+        <div className={styles.skeletonTabs}>
+          <Skeleton width={74} height={12} />
+          <Skeleton width={88} height={12} />
+          <Skeleton width={68} height={12} />
+        </div>
+      </header>
+
+      <section className={styles.panel} aria-hidden>
+        <div className={styles.diffLayout}>
+          <div className={styles.diffColumn}>
+            <div className={styles.columnHeader}>
+              <Skeleton width={126} height={14} />
+              <Skeleton variant="circle" width={18} height={18} />
+            </div>
+            <div className={styles.skeletonPane}>
+              {Array.from({ length: 12 }).map((_, index) => (
+                <div key={`left-${index}`} className={styles.skeletonLine}>
+                  <Skeleton width={24} height={12} />
+                  <Skeleton width={`${52 + ((index * 7) % 34)}%`} height={12} />
+                </div>
+              ))}
+            </div>
+            <div className={styles.columnFooter}>
+              <Skeleton width={156} height={12} />
+            </div>
+          </div>
+
+          <div className={styles.divider} aria-hidden />
+
+          <div className={styles.diffColumn}>
+            <div className={styles.columnHeader}>
+              <Skeleton width={144} height={14} />
+              <Skeleton width={110} height={12} />
+            </div>
+            <div className={styles.skeletonPane}>
+              {Array.from({ length: 12 }).map((_, index) => (
+                <div key={`right-${index}`} className={styles.skeletonLine}>
+                  <Skeleton width={24} height={12} />
+                  <Skeleton width={`${48 + ((index * 9) % 38)}%`} height={12} />
+                </div>
+              ))}
+            </div>
+            <div className={styles.columnFooter}>
+              <Skeleton width={164} height={12} />
+            </div>
+          </div>
+        </div>
+      </section>
     </section>
   )
 }
@@ -212,7 +284,6 @@ function TaskDetailContent({
   const [createManualRepoTasks, { isLoading: isCreatingNewTask }] =
     useCreateManualRepoTasksMutation()
 
-  const [liveLines, setLiveLines] = useState<string[]>([])
   const [liveStage, setLiveStage] = useState<TaskPipelineStage | null>(null)
   const [liveElapsedSeconds, setLiveElapsedSeconds] = useState<number | null>(null)
   const [diffDraft, setDiffDraft] = useState<string | null>(null)
@@ -273,25 +344,21 @@ function TaskDetailContent({
   useSSE({
     taskId: task.id,
     status: task.status,
-    onLogLine: (line) => setLiveLines((current) => [...current, line]),
     onStageUpdate: (event) => setLiveStage(event.stage),
-    onStatusChange: (event) => {
-      setLiveLines([])
+    onStatusChange: () => {
       setLiveStage(null)
       setDiffDraft(null)
       setConflictDraft(null)
-
-      if (event.status === 'done') {
-        onTabChange('diff')
-      }
 
       void onRefresh()
     },
   })
 
+  const fallbackLogStage = task.status === 'running' ? null : ('pipeline' as const)
+
   const parsedLogs = useMemo(
-    () => parseLogs(taskLog ?? null, task.status === 'running' ? liveLines : [], { liveStage }),
-    [taskLog, liveLines, liveStage, task.status],
+    () => parseLogs(taskLog ?? null, [], { liveStage, fallbackStage: fallbackLogStage }),
+    [fallbackLogStage, taskLog, liveStage],
   )
 
   const diffCount = useMemo(() => {
@@ -315,7 +382,7 @@ function TaskDetailContent({
   const tabs = getAvailableTaskDetailTabs(task.status)
   const activeLogsTab = activeTab === 'logs'
   const shouldShowEmptyLogs = activeLogsTab && parsedLogs.length === 0
-  const rawLogText = [taskLog ?? '', ...liveLines].filter(Boolean).join('\n')
+  const rawLogText = taskLog ?? ''
   const fileName = getFileName(task.file_path)
   const authorName = task.commit_author_name ?? task.commit_author_login ?? null
   const authorInitials = getInitials(authorName)
@@ -349,7 +416,6 @@ function TaskDetailContent({
       await retryTask({ taskId: task.id, force }).unwrap()
       setRetryConflictOpen(false)
       setRetryConflictData(null)
-      setLiveLines([])
       setLiveStage(null)
       setDiffDraft(null)
       setConflictDraft(null)
@@ -598,7 +664,7 @@ export function TaskDetailPage() {
   const { data: task, isLoading, error, refetch } = useGetTaskQuery(taskId ?? skipToken)
   const { data: taskLog } = useGetTaskLogQuery(taskId ?? skipToken)
 
-  const { activeTab, setActiveTab } = useTaskDetailTab(task?.status ?? 'queued')
+  const { activeTab, setActiveTab } = useTaskDetailTab(task?.status)
   const project = useMemo(
     () => getProjectById(projects, task?.project_id ?? null),
     [projects, task],

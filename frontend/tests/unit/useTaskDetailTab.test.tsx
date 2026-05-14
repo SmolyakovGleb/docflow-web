@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
@@ -17,6 +17,26 @@ describe('useTaskDetailTab', () => {
     })
 
     expect(result.current.activeTab).toBe('logs')
+  })
+
+  it('keeps the resolved tab when status changes and the tab remains valid', async () => {
+    const { result, rerender } = renderHook(
+      (status: 'running' | 'done') => useTaskDetailTab(status),
+      {
+        initialProps: 'running',
+        wrapper: makeWrapper('/tasks/1'),
+      },
+    )
+
+    await waitFor(() => {
+      expect(result.current.activeTab).toBe('logs')
+    })
+
+    rerender('done')
+
+    await waitFor(() => {
+      expect(result.current.activeTab).toBe('logs')
+    })
   })
 
   it('falls back from conflict tab when status is no longer conflict', () => {

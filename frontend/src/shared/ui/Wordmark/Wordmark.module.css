@@ -1,0 +1,70 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.auth {
+  margin-bottom: 28px;
+  font-size: 14px;
+}
+
+.sidebar {
+  padding: 6px 10px 26px;
+  font-size: var(--font-size-md);
+}
+
+.glyph {
+  display: grid;
+}
+
+.glyph span {
+  display: block;
+  background: currentColor;
+}
+
+.glyphAuth {
+  width: 13px;
+  gap: 3px;
+}
+
+.glyphAuth span {
+  height: 1.5px;
+}
+
+.glyphAuth span:nth-child(1) {
+  width: 9px;
+}
+
+.glyphAuth span:nth-child(2) {
+  width: 13px;
+}
+
+.glyphAuth span:nth-child(3) {
+  width: 9px;
+}
+
+.glyphSidebar {
+  width: 12px;
+  gap: 3px;
+}
+
+.glyphSidebar span {
+  height: 2px;
+  border-radius: var(--radius-full);
+}
+
+.glyphSidebar span:nth-child(1) {
+  width: 12px;
+}
+
+.glyphSidebar span:nth-child(2) {
+  width: 9px;
+}
+
+.glyphSidebar span:nth-child(3) {
+  width: 6px;
+}

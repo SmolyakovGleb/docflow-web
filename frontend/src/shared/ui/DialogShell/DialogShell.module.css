@@ -1,0 +1,83 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(4px);
+}
+
+.content {
+  position: fixed;
+  left: 50%;
+  z-index: 81;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  transform: translate(-50%, -50%);
+}
+
+.center {
+  top: 50%;
+}
+
+.top {
+  top: 12vh;
+  max-height: calc(100vh - 24vh);
+  transform: translateX(-50%);
+}
+
+.sm {
+  width: min(480px, calc(100vw - 32px));
+}
+
+.md {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.lg {
+  width: min(640px, calc(100vw - 40px));
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.heading {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+}
+
+.description {
+  margin: 0;
+}
+
+.closeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  color: var(--text-dim);
+  transition: color 120ms ease;
+}
+
+.closeButton:hover {
+  color: var(--text);
+}
+
+.body,
+.footer {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .top {
+    top: 5vh;
+    max-height: calc(100vh - 10vh);
+  }
+}

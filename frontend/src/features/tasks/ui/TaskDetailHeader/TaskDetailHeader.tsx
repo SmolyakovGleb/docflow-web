@@ -1,11 +1,11 @@
-import { ChevronRight } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
 import type { Project } from '@/features/projects/model/types'
-import type { TaskDetail, TaskPublication, TaskStatus } from '@/features/tasks/model/types'
+import type { TaskDetail, TaskPublication } from '@/features/tasks/model/types'
 import { formatRelativeShort } from '@/shared/lib/date'
-import { cn } from '@/shared/lib/cn'
+import { Avatar } from '@/shared/ui/Avatar/Avatar'
+import { Breadcrumbs } from '@/shared/ui/Breadcrumbs/Breadcrumbs'
+import { StatusPill } from '@/shared/ui/StatusPill/StatusPill'
 import { PublishedHeader } from '../PublishedHeader/PublishedHeader'
 import styles from '../TaskDetailPage/TaskDetailPage.module.css'
 
@@ -31,40 +31,6 @@ function getAuthorName(task: TaskDetail) {
   return task.commit_author_name ?? task.commit_author_login ?? null
 }
 
-function getInitials(value: string | null) {
-  if (!value) {
-    return 'DF'
-  }
-
-  const chunks = value
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((chunk) => chunk[0]?.toUpperCase() ?? '')
-    .join('')
-
-  return chunks || value.slice(0, 2).toUpperCase()
-}
-
-function getStatusClass(status: TaskStatus) {
-  switch (status) {
-    case 'queued':
-      return styles.statusQueued
-    case 'running':
-      return styles.statusRunning
-    case 'done':
-      return styles.statusDone
-    case 'failed':
-      return styles.statusFailed
-    case 'conflict':
-      return styles.statusConflict
-    case 'published':
-      return styles.statusPublished
-    default:
-      return ''
-  }
-}
-
 export function TaskDetailHeader({
   task,
   project,
@@ -83,18 +49,17 @@ export function TaskDetailHeader({
 
   return (
     <header className={styles.header}>
-      <nav className={styles.breadcrumb} aria-label="breadcrumb">
-        <Link className={styles.breadcrumbLink} to="/tasks">
-          Задачи
-        </Link>
-        <span className={styles.breadcrumbSeparator}>
-          <ChevronRight size={12} aria-hidden />
-        </span>
-        <span className={styles.breadcrumbPath}>
-          {path.dir ? <span className={styles.breadcrumbDir}>{path.dir}</span> : null}
-          <span className={styles.breadcrumbFile}>{path.file}</span>
-        </span>
-      </nav>
+      <Breadcrumbs
+        className={styles.breadcrumb}
+        currentClassName={styles.breadcrumbPath}
+        items={[{ label: t('title'), to: '/tasks' }]}
+        current={
+          <>
+            {path.dir ? <span className={styles.breadcrumbDir}>{path.dir}</span> : null}
+            <span className={styles.breadcrumbFile}>{path.file}</span>
+          </>
+        }
+      />
 
       <div className={styles.titleRow}>
         <div className={styles.titleBlock}>
@@ -108,7 +73,7 @@ export function TaskDetailHeader({
             ) : null}
             {authorName ? (
               <span className={styles.author}>
-                <span className={styles.authorAvatar}>{getInitials(authorName)}</span>
+                <Avatar name={authorName} size={18} />
                 {authorName}
               </span>
             ) : null}
@@ -117,10 +82,7 @@ export function TaskDetailHeader({
         </div>
 
         <div className={styles.actions}>
-          <span className={cn(styles.statusBadge, getStatusClass(task.status))}>
-            <span className={styles.statusDot} aria-hidden />
-            <span>{t(`status.${task.status}`)}</span>
-          </span>
+          <StatusPill status={task.status} className={styles.statusPill} />
           {publication ? <PublishedHeader publication={publication} /> : null}
           {actions}
         </div>

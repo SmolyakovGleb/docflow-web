@@ -13,28 +13,57 @@
   background: var(--bg);
 }
 
-.breadcrumb {
+.skeletonBreadcrumb {
+  margin-bottom: 14px;
+}
+
+.skeletonTitleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 32px;
+  padding-bottom: 18px;
+}
+
+.skeletonTitleBlock {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  flex: 1;
+}
+
+.skeletonMetaRow {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 14px;
-  color: var(--text-dim);
-  font-size: 12.5px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.breadcrumbLink {
-  color: var(--text-dim);
-  transition: color 120ms ease;
-}
-
-.breadcrumbLink:hover {
-  color: var(--text);
-}
-
-.breadcrumbSeparator {
+.skeletonAuthor {
   display: inline-flex;
   align-items: center;
-  color: var(--text-faint);
+  gap: 6px;
+}
+
+.skeletonActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.skeletonTabs {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-top: 4px;
+  padding-bottom: 10px;
+}
+
+.breadcrumb {
+  margin-bottom: 14px;
 }
 
 .breadcrumbPath {
@@ -107,18 +136,6 @@
   display: none;
 }
 
-.authorAvatar {
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: #2a2a2a;
-  color: var(--text);
-  display: inline-grid;
-  place-items: center;
-  font-size: 9px;
-  font-weight: 600;
-}
-
 .actions {
   display: flex;
   align-items: center;
@@ -128,51 +145,8 @@
   flex-shrink: 0;
 }
 
-.statusBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-dim);
-  font-size: 11.5px;
-  font-weight: 500;
-}
-
-.statusDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.statusQueued {
-  color: var(--text-dim);
-}
-
-.statusRunning {
-  color: var(--text);
-  border-color: #2e2e2e;
-}
-
-.statusRunning .statusDot {
-  animation: pulse-dot 1.4s ease-in-out infinite;
-}
-
-.statusDone {
-  color: var(--text);
-  border-color: #2e2e2e;
-}
-
-.statusFailed,
-.statusConflict {
-  color: #d97757;
-  border-color: rgba(217, 119, 87, 0.3);
-}
-
-.statusPublished {
-  color: var(--text-dim);
+.statusPill {
+  min-width: auto;
 }
 
 .publishedLink {
@@ -371,6 +345,23 @@
   font-family: var(--font-mono);
   font-size: 12.5px;
   line-height: 1.7;
+}
+
+.skeletonPane {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 14px;
+  min-height: calc(100vh - 360px);
+  padding: 18px 22px;
+  background: var(--bg);
+}
+
+.skeletonLine {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
 }
 
 .numberedLine {
@@ -859,7 +850,9 @@
   }
 
   .titleRow,
+  .skeletonTitleRow,
   .actions,
+  .skeletonActions,
   .logsToolbar,
   .conflictEditorToolbar,
   .conflictEditorBar,
@@ -869,6 +862,10 @@
   }
 
   .tabs {
+    overflow-x: auto;
+  }
+
+  .skeletonTabs {
     overflow-x: auto;
   }
 

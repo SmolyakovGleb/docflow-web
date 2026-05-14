@@ -58,6 +58,7 @@ class TaskListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+    status_counts: dict[str, int] = Field(default_factory=dict)
 
 
 class SkippedFile(BaseModel):

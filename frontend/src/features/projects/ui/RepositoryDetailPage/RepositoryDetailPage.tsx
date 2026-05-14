@@ -1,12 +1,14 @@
 import { skipToken } from '@reduxjs/toolkit/query'
-import { ArrowRight, ChevronRight, Copy } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { formatDate, formatRelativeShort } from '@/shared/lib/date'
 import { translateApiError } from '@/shared/lib/errorMessages'
+import { Breadcrumbs } from '@/shared/ui/Breadcrumbs/Breadcrumbs'
 import { Button } from '@/shared/ui/Button/Button'
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog/ConfirmDialog'
+import { CopyField } from '@/shared/ui/CopyField/CopyField'
 import { EmptyState } from '@/shared/ui/EmptyState/EmptyState'
 import { Field } from '@/shared/ui/Field/Field'
 import { RepoLink } from '@/shared/ui/RepoLink/RepoLink'
@@ -158,13 +160,11 @@ function RepositoryDetailContent({
 
   return (
     <section className={styles.page}>
-      <nav className={styles.breadcrumb} aria-label="breadcrumb">
-        <Link className={styles.breadcrumbLink} to="/repositories">
-          {t('repositories:title')}
-        </Link>
-        <ChevronRight className={styles.breadcrumbSep} aria-hidden />
-        <span className={styles.breadcrumbCurrent}>{project.name}</span>
-      </nav>
+      <Breadcrumbs
+        className={styles.breadcrumb}
+        items={[{ label: t('repositories:title'), to: '/repositories' }]}
+        current={project.name}
+      />
 
       <div className={styles.header}>
         <h1 className={styles.title}>{project.name}</h1>
@@ -268,22 +268,13 @@ function RepositoryDetailContent({
           <div className={styles.sectionLabel}>{t('repositories:detail_webhook')}</div>
 
           <Field label={t('repositories:webhook_url_label')}>
-            <div className={styles.copyField}>
-              <span className={styles.copyValue}>{project.webhook_url}</span>
-              <button
-                type="button"
-                className={styles.copyButton}
-                onClick={() => {
-                  void navigator.clipboard
-                    .writeText(project.webhook_url)
-                    .then(() => toast.success(t('repositories:url_copy_success')))
-                    .catch((error) => toast.error(translateApiError(error)))
-                }}
-              >
-                <Copy size={12} />
-                {t('repositories:copy_webhook_url')}
-              </button>
-            </div>
+            <CopyField
+              value={project.webhook_url}
+              wrap
+              buttonLabel={t('repositories:copy_webhook_url')}
+              onCopySuccess={() => toast.success(t('repositories:url_copy_success'))}
+              onCopyError={(error) => toast.error(translateApiError(error))}
+            />
           </Field>
 
           <div className={styles.footer}>
