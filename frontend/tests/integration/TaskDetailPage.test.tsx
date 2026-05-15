@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -582,5 +582,72 @@ describe('TaskDetailPage', () => {
     await user.click(await screen.findByRole('button', { name: /Создать новую задачу/i }))
 
     expect(await screen.findByRole('heading', { name: 'second.md' })).toBeInTheDocument()
+  })
+
+  it('removes a queued task from the detail page without starting the pipeline', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const user = userEvent.setup()
+    let deleteCalls = 0
+
+    server.use(
+      http.get('/api/tasks/:taskId', () =>
+        HttpResponse.json({
+          ...baseTask,
+          status: 'queued',
+          translated_content: null,
+          completed_at: null,
+        }),
+      ),
+      http.get('/api/tasks/:taskId/log', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/projects', () =>
+        HttpResponse.json([
+          {
+            id: 'project-1',
+            name: 'CRM Docs',
+            source_repo: 'team/docs-ru',
+            source_branch: 'main',
+            target_repo: 'team/docs-en',
+            target_branch: 'main',
+            exclude_patterns: [],
+            webhook_url: 'http://localhost:8000/webhook/project-1',
+            version: 1,
+            created_at: '2026-05-10T09:00:00Z',
+          },
+        ]),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          total_tasks: 1,
+          success_rate: 1.0,
+          avg_duration_seconds: 42,
+          tasks_by_status: { queued: 1, running: 0, done: 0, failed: 0, published: 0, conflict: 0 },
+          tasks_per_day: [],
+          top_errors: [],
+        }),
+      ),
+      http.delete('/api/tasks/:taskId', () => {
+        deleteCalls += 1
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    const router = createMemoryRouter(
+      [
+        { path: '/tasks', element: <div>Tasks list</div> },
+        { path: '/tasks/:taskId', element: <TaskDetailPage /> },
+      ],
+      {
+        initialEntries: ['/tasks/task-1'],
+      },
+    )
+
+    renderWithProviders(<RouterProvider router={router} />)
+
+    await user.click(await screen.findByRole('button', { name: /Убрать из очереди/i }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /Убрать из очереди/i }))
+
+    expect(await screen.findByText('Tasks list')).toBeInTheDocument()
+    expect(deleteCalls).toBe(1)
   })
 })

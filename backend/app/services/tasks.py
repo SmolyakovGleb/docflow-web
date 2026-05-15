@@ -29,6 +29,7 @@ ALL_TASK_STATUSES = ("queued", "running", "done", "failed", "published", "confli
 EDITABLE_TASK_STATUSES = {"done", "failed", "conflict"}
 RETRYABLE_TASK_STATUSES = {"done", "failed"}
 PUBLISHABLE_TASK_STATUSES = {"done", "conflict"}
+REMOVABLE_TASK_STATUSES = {"queued"}
 logger = logging.getLogger(__name__)
 
 
@@ -209,6 +210,16 @@ def ensure_task_publishable(task: Task) -> None:
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="Task must be in 'done' or 'conflict' status to publish",
+    )
+
+
+def ensure_task_removable(task: Task) -> None:
+    if task.status in REMOVABLE_TASK_STATUSES:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Cannot remove task with status '{task.status}' from queue",
     )
 
 
@@ -560,6 +571,15 @@ async def reset_task_for_retry(
     await session.commit()
     await session.refresh(task)
     return task
+
+
+async def delete_queued_task(
+    session: AsyncSession,
+    task: Task,
+) -> None:
+    ensure_task_removable(task)
+    await session.delete(task)
+    await session.commit()
 
 
 async def publish_task(

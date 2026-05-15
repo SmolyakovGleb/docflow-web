@@ -16,6 +16,7 @@ interface TaskRowProps {
   onOpenTask: (taskId: string) => void
   onDownload: (task: TaskSummary) => void
   onRetry: (taskId: string) => void
+  onRemove: (taskId: string) => void
   onPublish: (taskId: string) => void
 }
 
@@ -27,6 +28,7 @@ export function TaskRow({
   onOpenTask,
   onDownload,
   onRetry,
+  onRemove,
   onPublish,
 }: TaskRowProps) {
   const { t } = useTranslation('tasks')
@@ -174,6 +176,19 @@ export function TaskRow({
             }}
           >
             {t('actions.retry')}
+          </button>
+        ) : null}
+
+        {task.status === 'queued' ? (
+          <button
+            type="button"
+            className={styles.quickActionSingle}
+            onClick={(event) => {
+              event.stopPropagation()
+              onRemove(task.id)
+            }}
+          >
+            {t('actions.remove_from_queue')}
           </button>
         ) : null}
 

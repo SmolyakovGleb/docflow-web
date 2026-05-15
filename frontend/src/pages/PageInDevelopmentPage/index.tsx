@@ -6,9 +6,10 @@ import styles from './PageInDevelopmentPage.module.css'
 
 interface PageInDevelopmentPageProps {
   title: string
+  description?: string
 }
 
-export default function PageInDevelopmentPage({ title }: PageInDevelopmentPageProps) {
+export default function PageInDevelopmentPage({ title, description }: PageInDevelopmentPageProps) {
   const { t } = useTranslation('common')
   const navigate = useNavigate()
 
@@ -19,7 +20,7 @@ export default function PageInDevelopmentPage({ title }: PageInDevelopmentPagePr
           <FileClock size={28} />
         </span>
         <h1 className={styles.title}>{title}</h1>
-        <p className={styles.description}>{t('page_in_development_description')}</p>
+        <p className={styles.description}>{description ?? t('page_in_development_description')}</p>
         <Button
           variant="secondary"
           onClick={() => {

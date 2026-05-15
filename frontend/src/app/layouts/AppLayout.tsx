@@ -2,7 +2,9 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useHotkeys } from 'react-hotkeys-hook'
+import { CommandPalette } from '@/features/cmdk'
 import { open } from '@/features/cmdk/model/cmdkSlice'
+import { OnboardingGate } from '@/features/onboarding'
 import { Sidebar } from '@/shared/ui/Sidebar/Sidebar'
 import { useAppDispatch } from '@/shared/store/hooks'
 import { toast } from '@/shared/ui/Toast/toast'
@@ -72,6 +74,8 @@ export function AppLayout() {
           <Outlet />
         </div>
       </main>
+      <CommandPalette />
+      <OnboardingGate />
     </div>
   )
 }

@@ -12,6 +12,7 @@ import { CopyField } from '@/shared/ui/CopyField/CopyField'
 import { EmptyState } from '@/shared/ui/EmptyState/EmptyState'
 import { Field } from '@/shared/ui/Field/Field'
 import { RepoLink } from '@/shared/ui/RepoLink/RepoLink'
+import { SectionCard } from '@/shared/ui/SectionCard/SectionCard'
 import { Skeleton } from '@/shared/ui/Skeleton/Skeleton'
 import { StatusPill } from '@/shared/ui/StatusPill/StatusPill'
 import { toast } from '@/shared/ui/Toast/toast'
@@ -181,9 +182,14 @@ function RepositoryDetailContent({
       </div>
 
       <div className={styles.form}>
-        <section className={styles.section}>
-          <div className={styles.sectionLabel}>{t('repositories:section_repositories')}</div>
-
+        <SectionCard
+          label={t('repositories:section_repositories')}
+          footer={
+            <Button size="sm" variant="secondary" onClick={() => setEditBranchesOpen(true)}>
+              {t('repositories:edit_branches')}
+            </Button>
+          }
+        >
           <div className={styles.row}>
             <Field label={t('repositories:source_repo_label')}>
               <div className={styles.valueBox}>
@@ -223,17 +229,21 @@ function RepositoryDetailContent({
               </div>
             </Field>
           </div>
+        </SectionCard>
 
-          <div className={styles.footer}>
-            <Button size="sm" variant="secondary" onClick={() => setEditBranchesOpen(true)}>
-              {t('repositories:edit_branches')}
+        <SectionCard
+          label={t('repositories:section_filters')}
+          footer={
+            <Button
+              size="sm"
+              loading={isUpdating}
+              variant="secondary"
+              onClick={() => void handleSaveExcludePatterns()}
+            >
+              {t('repositories:save_exclude_patterns')}
             </Button>
-          </div>
-        </section>
-
-        <section className={styles.section}>
-          <div className={styles.sectionLabel}>{t('repositories:section_filters')}</div>
-
+          }
+        >
           <Field
             label={
               <>
@@ -251,22 +261,16 @@ function RepositoryDetailContent({
               onChange={setExcludePatternsDraft}
             />
           </Field>
+        </SectionCard>
 
-          <div className={styles.footer}>
-            <Button
-              size="sm"
-              loading={isUpdating}
-              variant="secondary"
-              onClick={() => void handleSaveExcludePatterns()}
-            >
-              {t('repositories:save_exclude_patterns')}
+        <SectionCard
+          label={t('repositories:detail_webhook')}
+          footer={
+            <Button size="sm" variant="danger" onClick={() => setConfirmSecretOpen(true)}>
+              {t('repositories:regenerate_secret')}
             </Button>
-          </div>
-        </section>
-
-        <section className={styles.section}>
-          <div className={styles.sectionLabel}>{t('repositories:detail_webhook')}</div>
-
+          }
+        >
           <Field label={t('repositories:webhook_url_label')}>
             <CopyField
               value={project.webhook_url}
@@ -276,22 +280,16 @@ function RepositoryDetailContent({
               onCopyError={(error) => toast.error(translateApiError(error))}
             />
           </Field>
+        </SectionCard>
 
-          <div className={styles.footer}>
-            <Button size="sm" variant="danger" onClick={() => setConfirmSecretOpen(true)}>
-              {t('repositories:regenerate_secret')}
-            </Button>
-          </div>
-        </section>
-
-        <section className={styles.section}>
-          <div className={styles.sectionLabel}>{t('repositories:detail_recent_tasks')}</div>
-          <p className={styles.sectionDescription}>
-            {hasTasks
+        <SectionCard
+          label={t('repositories:detail_recent_tasks')}
+          description={
+            hasTasks
               ? `${t('repositories:table_tasks')}: ${totalTasks}`
-              : t('repositories:related_tasks_empty')}
-          </p>
-
+              : t('repositories:related_tasks_empty')
+          }
+        >
           {isTasksLoading ? (
             <Skeleton variant="rect" height={92} />
           ) : hasTasks ? (
@@ -313,20 +311,17 @@ function RepositoryDetailContent({
           ) : (
             <div className={styles.mutedText}>{t('repositories:related_tasks_empty')}</div>
           )}
-        </section>
+        </SectionCard>
 
-        <section className={styles.section}>
-          <div className={styles.sectionLabel}>{t('repositories:detail_danger_zone')}</div>
-          <p className={styles.sectionDescription}>
-            {t('repositories:delete_confirm_description')}
-          </p>
-
-          <div className={styles.footer}>
+        <SectionCard
+          label={t('repositories:detail_danger_zone')}
+          description={t('repositories:delete_confirm_description')}
+          footer={
             <Button variant="danger" size="sm" onClick={() => setDeleteOpen(true)}>
               {t('repositories:delete_project')}
             </Button>
-          </div>
-        </section>
+          }
+        />
       </div>
 
       <EditBranchesDialog
@@ -368,6 +363,7 @@ function RepositoryDetailContent({
       {secretModalOpen ? (
         <WebhookSecretModal
           open
+          mode="regenerate"
           webhookSecret={secretModalOpen}
           webhookUrl={project.webhook_url}
           onDone={() => setSecretModalOpen(null)}

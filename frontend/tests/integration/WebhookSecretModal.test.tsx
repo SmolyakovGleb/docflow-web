@@ -30,8 +30,10 @@ describe('WebhookSecretModal', () => {
       />,
     )
 
+    const [copyUrlButton] = screen.getAllByRole('button', { name: 'Скопировать URL' })
+
     await user.click(screen.getByRole('button', { name: 'Скопировать secret' }))
-    await user.click(screen.getAllByRole('button', { name: 'Скопировать URL' })[0])
+    await user.click(copyUrlButton!)
 
     expect(writeText).toHaveBeenNthCalledWith(1, 'secret-123')
     expect(writeText).toHaveBeenNthCalledWith(2, 'https://example.com/webhook/1')

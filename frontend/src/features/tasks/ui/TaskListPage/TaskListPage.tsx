@@ -5,6 +5,7 @@ import { selectUser } from '@/features/auth/model/authSlice'
 import { redirectToGithubConnect } from '@/features/auth/lib/redirectToGithubConnect'
 import { useGetProjectsQuery } from '@/features/projects/api/projectsApi'
 import {
+  useDeleteTaskMutation,
   useGetTasksQuery,
   useLazyGetTaskQuery,
   usePublishTaskMutation,
@@ -25,6 +26,7 @@ import type { TaskSummary } from '@/features/tasks/model/types'
 import { useGetHealthQuery } from '@/shared/api/healthApi'
 import { translateApiError } from '@/shared/lib/errorMessages'
 import { useAppDispatch, useAppSelector } from '@/shared/store/hooks'
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog/ConfirmDialog'
 import { toast } from '@/shared/ui/Toast/toast'
 import { BatchFloatingBar } from '../BatchFloatingBar'
 import { CommitGroup } from '../CommitGroup'
@@ -52,6 +54,7 @@ export function TaskListPage() {
   const { filters, setFilters, resetFilters } = useTaskFilters()
   const [isDialogOpen, setDialogOpen] = useState(false)
   const [dialogTab, setDialogTab] = useState<TriggerDialogTab>('repo')
+  const [taskToRemove, setTaskToRemove] = useState<TaskSummary | null>(null)
 
   const { data: projects = [] } = useGetProjectsQuery()
   const {
@@ -71,6 +74,7 @@ export function TaskListPage() {
   const [fetchTask] = useLazyGetTaskQuery()
   const [publishTask] = usePublishTaskMutation()
   const [retryTask] = useRetryTaskMutation()
+  const [deleteTask, { isLoading: isDeletingTask }] = useDeleteTaskMutation()
 
   const tasks = tasksResponse?.items ?? EMPTY_TASKS
   const visibleTaskIds = useMemo(() => tasks.map((task) => task.id), [tasks])
@@ -173,17 +177,37 @@ export function TaskListPage() {
 
   const handleRetry = async (taskId: string) => {
     try {
-      await retryTask({ taskId }).unwrap()
-      toast.success(t('actions.retry_success'))
-    } catch (err) {
-      toast.error(translateApiError(err))
+      await toast.promise(retryTask({ taskId }).unwrap(), {
+        loading: `${t('actions.retry')}...`,
+        success: t('actions.retry_success'),
+        error: (error) => translateApiError(error),
+      })
+    } catch {
+      // promise toast already shows the error state
     }
   }
 
   const handlePublish = async (taskId: string) => {
     try {
-      await publishTask(taskId).unwrap()
-      toast.success(t('actions.publish_success'))
+      await toast.promise(publishTask(taskId).unwrap(), {
+        loading: `${t('actions.publish')}...`,
+        success: t('actions.publish_success'),
+        error: (error) => translateApiError(error),
+      })
+    } catch {
+      // promise toast already shows the error state
+    }
+  }
+
+  const handleRemove = async () => {
+    if (!taskToRemove) {
+      return
+    }
+
+    try {
+      await deleteTask(taskToRemove.id).unwrap()
+      toast.success(t('actions.remove_success'))
+      setTaskToRemove(null)
     } catch (err) {
       toast.error(translateApiError(err))
     }
@@ -289,6 +313,10 @@ export function TaskListPage() {
               onOpenTask={(taskId) => void navigate(`/tasks/${taskId}`)}
               onDownload={(task) => void handleDownload(task)}
               onRetry={(taskId) => void handleRetry(taskId)}
+              onRemove={(taskId) => {
+                const task = tasks.find((item) => item.id === taskId) ?? null
+                setTaskToRemove(task)
+              }}
               onPublish={(taskId) => void handlePublish(taskId)}
               onPublishGroup={(taskIds) => void handlePublishGroup(taskIds)}
             />
@@ -331,6 +359,21 @@ export function TaskListPage() {
           redirectToGithubConnect()
         }}
         onOpenRepositories={() => void navigate('/repositories')}
+      />
+
+      <ConfirmDialog
+        open={Boolean(taskToRemove)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTaskToRemove(null)
+          }
+        }}
+        title={t('remove_from_queue.title')}
+        description={t('remove_from_queue.description', { file: taskToRemove?.file_path ?? '' })}
+        confirmText={t('actions.remove_from_queue')}
+        confirmVariant="danger"
+        loading={isDeletingTask}
+        onConfirm={() => void handleRemove()}
       />
     </section>
   )
