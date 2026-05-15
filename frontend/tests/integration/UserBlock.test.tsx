@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { setUser } from '@/features/auth/model/authSlice'
+import { ProfilePage } from '@/features/settings/ui/ProfilePage/ProfilePage'
 import { UserBlock } from '@/shared/ui/Sidebar/UserBlock'
 import { createAppStore } from '@/shared/store'
 import { server } from '../msw/server'
@@ -25,6 +26,13 @@ describe('UserBlock', () => {
     )
 
     server.use(
+      http.get('/api/health', () =>
+        HttpResponse.json({
+          status: 'ok',
+          pipeline_version: 'test-build',
+          last_webhook_at: null,
+        }),
+      ),
       http.post('/api/auth/logout', () => {
         logoutCalls += 1
         return HttpResponse.json({ ok: true })
@@ -38,6 +46,7 @@ describe('UserBlock', () => {
         <UserBlock />
         <Routes>
           <Route path="/tasks" element={<div>tasks page</div>} />
+          <Route path="/settings/profile" element={<ProfilePage />} />
           <Route path="/login" element={<div>login page</div>} />
         </Routes>
       </MemoryRouter>,
@@ -45,7 +54,7 @@ describe('UserBlock', () => {
     )
 
     await user.click(screen.getByRole('button', { name: /anna kuznetsova/i }))
-    await user.click(await screen.findByRole('menuitem', { name: 'Выйти' }))
+    await user.click(await screen.findByRole('button', { name: 'Выйти' }))
 
     expect(await screen.findByText('login page')).toBeInTheDocument()
 
