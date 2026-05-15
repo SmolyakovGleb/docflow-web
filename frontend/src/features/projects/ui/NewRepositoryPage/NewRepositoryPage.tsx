@@ -3,9 +3,10 @@ import { ArrowRight, FolderGit2 } from 'lucide-react'
 import { useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useGetMeQuery } from '@/features/auth/api/authApi'
 import { redirectToGithubConnect } from '@/features/auth/lib/redirectToGithubConnect'
+import { markOnboardingCompleted } from '@/features/onboarding'
 import { translateApiError } from '@/shared/lib/errorMessages'
 import { Breadcrumbs } from '@/shared/ui/Breadcrumbs/Breadcrumbs'
 import { Button } from '@/shared/ui/Button/Button'
@@ -29,6 +30,7 @@ interface CreatedProjectSecret {
 export function NewRepositoryPage() {
   const { t } = useTranslation('repositories')
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const {
     data: me,
     isLoading: isMeLoading,
@@ -39,6 +41,7 @@ export function NewRepositoryPage() {
     refetchOnReconnect: true,
   })
   const githubLinked = Boolean(me?.github_linked)
+  const isOnboardingFlow = searchParams.get('onboarding') === '1'
   const isGithubStatePending = isMeLoading || (isMeFetching && !me)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [secretModal, setSecretModal] = useState<CreatedProjectSecret | null>(null)
@@ -281,6 +284,12 @@ export function NewRepositoryPage() {
           webhookUrl={secretModal.webhook_url}
           onDone={() => {
             setSecretModal(null)
+            if (isOnboardingFlow) {
+              markOnboardingCompleted(me?.id)
+              void navigate('/repositories', { replace: true })
+              return
+            }
+
             void navigate('/repositories')
           }}
         />

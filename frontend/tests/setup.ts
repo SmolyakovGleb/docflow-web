@@ -9,11 +9,15 @@ HTMLElement.prototype.setPointerCapture = () => undefined
 HTMLElement.prototype.releasePointerCapture = () => undefined
 Element.prototype.scrollIntoView = () => undefined
 
-global.ResizeObserver = class ResizeObserver {
+class ResizeObserverMock {
+  constructor(_callback?: ResizeObserverCallback) {}
+
   observe() {}
   unobserve() {}
   disconnect() {}
 }
+
+globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,

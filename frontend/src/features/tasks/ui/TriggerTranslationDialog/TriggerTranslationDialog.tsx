@@ -236,19 +236,28 @@ export function TriggerTranslationDialog({
     }
 
     try {
-      const result = await createManualRepoTasks({
-        project_id: resolvedRepoProjectId,
-        file_paths: effectiveSelectedFiles,
-      }).unwrap()
+      const result = await toast.promise(
+        createManualRepoTasks({
+          project_id: resolvedRepoProjectId,
+          file_paths: effectiveSelectedFiles,
+        }).unwrap(),
+        {
+          loading: `${t('tasks:trigger.submit')}...`,
+          success: (response) =>
+            response.created > 0
+              ? t('tasks:trigger.created_success', { count: response.created })
+              : null,
+          error: (error) => translateApiError(error),
+        },
+      )
 
-      toast.success(t('tasks:trigger.created_success', { count: result.created }))
       if (result.skipped.length > 0) {
         setSubmitResult(result)
       } else {
         onOpenChange(false)
       }
-    } catch (error) {
-      toast.error(translateApiError(error))
+    } catch {
+      // promise toast already shows the error state
     }
   }
 
@@ -270,11 +279,14 @@ export function TriggerTranslationDialog({
     formData.append('file', file)
 
     try {
-      await uploadManualTask(formData).unwrap()
-      toast.success(t('tasks:trigger.created_success', { count: 1 }))
+      await toast.promise(uploadManualTask(formData).unwrap(), {
+        loading: `${t('tasks:trigger.submit')}...`,
+        success: t('tasks:trigger.created_success', { count: 1 }),
+        error: (error) => translateApiError(error),
+      })
       onOpenChange(false)
-    } catch (error) {
-      toast.error(translateApiError(error))
+    } catch {
+      // promise toast already shows the error state
     }
   }
 

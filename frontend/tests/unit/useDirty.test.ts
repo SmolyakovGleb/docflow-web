@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { useDirty } from '@/features/tasks/hooks/useDirty'
+import { useDirty } from '@/shared/hooks/useDirty'
 
 describe('useDirty', () => {
   it('prevents beforeunload when dirty', () => {

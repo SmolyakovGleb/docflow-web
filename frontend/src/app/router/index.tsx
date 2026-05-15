@@ -10,6 +10,7 @@ import AnalyticsPage from '@/pages/AnalyticsPage'
 import DictionariesPage from '@/pages/DictionariesPage'
 import HistoryPage from '@/pages/HistoryPage'
 import SettingsPage from '@/pages/SettingsPage'
+import NotFoundPage from '@/pages/NotFoundPage'
 import PageInDevelopmentPage from '@/pages/PageInDevelopmentPage'
 import { ProfilePage } from '@/features/settings/ui/ProfilePage/ProfilePage'
 import { GithubPage } from '@/features/settings/ui/GithubPage/GithubPage'
@@ -43,11 +44,25 @@ const router = createBrowserRouter([
   },
   {
     path: '/terms',
-    element: <PageInDevelopmentPage title={i18n.t('common:terms_title')} />,
+    element: (
+      <PageInDevelopmentPage
+        title={i18n.t('common:terms_title')}
+        description={i18n.t('common:terms_page_in_development_description')}
+      />
+    ),
   },
   {
     path: '/privacy',
-    element: <PageInDevelopmentPage title={i18n.t('common:privacy_title')} />,
+    element: (
+      <PageInDevelopmentPage
+        title={i18n.t('common:privacy_title')}
+        description={i18n.t('common:privacy_page_in_development_description')}
+      />
+    ),
+  },
+  {
+    path: '/404',
+    element: <NotFoundPage />,
   },
   {
     element: (
@@ -110,7 +125,7 @@ const router = createBrowserRouter([
   },
   {
     path: '*',
-    element: <Navigate to="/tasks" replace />,
+    element: <NotFoundPage />,
   },
 ])
 
