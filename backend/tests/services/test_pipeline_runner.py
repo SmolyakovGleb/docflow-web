@@ -317,3 +317,33 @@ async def test_run_task_uses_lock(engine, db_session, test_project, mocker):
     await asyncio.gather(first_run, second_run)
 
     assert call_order == [1, 2]  # both ran, sequentially
+
+
+async def test_schedule_task_marks_task_failed_when_scheduling_breaks(
+    engine,
+    db_session,
+    test_project,
+    mocker,
+):
+    task = await create_task(db_session, test_project)
+
+    mocker.patch(
+        "app.services.pipeline_runner.get_session_factory",
+        return_value=make_session_factory(engine),
+    )
+    mocker.patch(
+        "app.services.pipeline_runner._spawn_pipeline_task",
+        side_effect=RuntimeError("no running event loop"),
+    )
+
+    scheduled = await pipeline_runner.schedule_task(task.id)
+
+    session_factory = make_session_factory(engine)
+    async with session_factory() as session:
+        updated_task = await session.get(Task, task.id)
+
+    assert scheduled is False
+    assert updated_task is not None
+    assert updated_task.status == "failed"
+    assert "Failed to schedule pipeline run" in (updated_task.error or "")
+    assert updated_task.completed_at is not None

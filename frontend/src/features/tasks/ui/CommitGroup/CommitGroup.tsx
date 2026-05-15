@@ -16,6 +16,7 @@ interface CommitGroupProps {
   onOpenTask: (taskId: string) => void
   onDownload: (task: TaskSummary) => void
   onRetry: (taskId: string) => void
+  onRemove: (taskId: string) => void
   onPublish: (taskId: string) => void
   onPublishGroup: (taskIds: string[]) => void
 }
@@ -28,6 +29,7 @@ export function CommitGroup({
   onOpenTask,
   onDownload,
   onRetry,
+  onRemove,
   onPublish,
   onPublishGroup,
 }: CommitGroupProps) {
@@ -85,6 +87,7 @@ export function CommitGroup({
           onOpenTask={onOpenTask}
           onDownload={onDownload}
           onRetry={onRetry}
+          onRemove={onRemove}
           onPublish={onPublish}
         />
       ))}

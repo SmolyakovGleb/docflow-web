@@ -251,8 +251,8 @@ async def test_manual_task_from_repo(auth_client, db_session, test_project, test
     github_client.get_file_content = mocker.AsyncMock(return_value=("# Source", "source-sha"))
     github_client.get_file_sha = mocker.AsyncMock(return_value="target-sha")
     mocker.patch("app.services.tasks.GitHubClient", return_value=github_client)
-    run_task = mocker.patch(
-        "app.api.routes.tasks.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.tasks.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -277,7 +277,7 @@ async def test_manual_task_from_repo(auth_client, db_session, test_project, test
     assert task.commit_message == "manual"
     assert task.source_file_sha == "source-sha"
     assert task.original_content == "# Source"
-    run_task.assert_awaited_once()
+    schedule_task.assert_awaited_once()
 
 
 async def test_manual_task_from_repo_requires_github_link(auth_client, test_project):
@@ -294,8 +294,8 @@ async def test_manual_task_from_repo_requires_github_link(auth_client, test_proj
 
 
 async def test_manual_task_upload_success(auth_client, db_session, test_project, mocker):
-    run_task = mocker.patch(
-        "app.api.routes.tasks.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.tasks.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -320,7 +320,7 @@ async def test_manual_task_upload_success(auth_client, db_session, test_project,
     assert task.commit_message == "manual"
     assert task.source_file_sha is None
     assert task.original_content == "# Source"
-    run_task.assert_awaited_once()
+    schedule_task.assert_awaited_once()
 
 
 async def test_manual_task_upload_without_github_link_allowed(
@@ -329,8 +329,8 @@ async def test_manual_task_upload_without_github_link_allowed(
     test_user,
     mocker,
 ):
-    run_task = mocker.patch(
-        "app.api.routes.tasks.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.tasks.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -349,7 +349,7 @@ async def test_manual_task_upload_without_github_link_allowed(
     assert task is not None
     assert task.user_id == test_user.id
     assert task.project_id is None
-    run_task.assert_awaited_once()
+    schedule_task.assert_awaited_once()
 
 
 async def test_upload_non_md_rejected(auth_client, test_project):
@@ -397,8 +397,8 @@ async def test_manual_task_partial_success_with_skipped(
     github_client.get_file_content = mocker.AsyncMock(return_value=("# Source", "source-sha"))
     github_client.get_file_sha = mocker.AsyncMock(return_value="target-sha")
     mocker.patch("app.services.tasks.GitHubClient", return_value=github_client)
-    run_task = mocker.patch(
-        "app.api.routes.tasks.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.tasks.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -426,7 +426,7 @@ async def test_manual_task_partial_success_with_skipped(
             "existing_task_id": payload["skipped"][1]["existing_task_id"],
         },
     ]
-    run_task.assert_awaited_once()
+    schedule_task.assert_awaited_once()
 
 
 async def test_retry_task_success(auth_client, db_session, test_project, test_user, mocker):
@@ -449,8 +449,8 @@ async def test_retry_task_success(auth_client, db_session, test_project, test_us
     github_client = mocker.Mock()
     github_client.get_file_sha = mocker.AsyncMock(return_value="source-sha")
     mocker.patch("app.services.tasks.GitHubClient", return_value=github_client)
-    run_task = mocker.patch(
-        "app.api.routes.tasks.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.tasks.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -468,7 +468,7 @@ async def test_retry_task_success(auth_client, db_session, test_project, test_us
     assert task.conflict_base is None
     assert task.conflict_ours is None
     assert task.conflict_theirs is None
-    run_task.assert_awaited_once()
+    schedule_task.assert_awaited_once()
 
 
 async def test_retry_task_running_rejected(auth_client, db_session, test_project):
@@ -499,8 +499,8 @@ async def test_retry_task_source_changed_conflict(
     github_client = mocker.Mock()
     github_client.get_file_sha = mocker.AsyncMock(return_value="new-source-sha")
     mocker.patch("app.services.tasks.GitHubClient", return_value=github_client)
-    run_task = mocker.patch(
-        "app.api.routes.tasks.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.tasks.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -514,7 +514,7 @@ async def test_retry_task_source_changed_conflict(
             "new_sha": "new-source-sha",
         },
     }
-    run_task.assert_not_awaited()
+    schedule_task.assert_not_awaited()
 
 
 async def test_retry_force_ignores_sha_conflict(
@@ -536,7 +536,7 @@ async def test_retry_force_ignores_sha_conflict(
     github_client = mocker.Mock()
     github_client.get_file_sha = mocker.AsyncMock(return_value="new-sha")
     mocker.patch("app.services.tasks.GitHubClient", return_value=github_client)
-    mocker.patch("app.api.routes.tasks.pipeline_runner.run_task", new=mocker.AsyncMock())
+    mocker.patch("app.api.routes.tasks.pipeline_runner.schedule_task", new=mocker.AsyncMock())
 
     response = await auth_client.post(f"/tasks/{task.id}/retry", json={"force": True})
 
@@ -644,8 +644,8 @@ async def test_retry_manual_upload_skips_source_sha_check(
     )
 
     github_client_cls = mocker.patch("app.services.tasks.GitHubClient")
-    run_task = mocker.patch(
-        "app.api.routes.tasks.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.tasks.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -654,4 +654,33 @@ async def test_retry_manual_upload_skips_source_sha_check(
     assert response.status_code == 202
     assert response.json() == {"id": str(task.id), "status": "queued"}
     github_client_cls.assert_not_called()
-    run_task.assert_awaited_once()
+    schedule_task.assert_awaited_once()
+
+
+async def test_delete_queued_task_success(auth_client, db_session, test_project, mocker):
+    task = await create_task(db_session, test_project, status="queued", translated_content=None)
+    cancel_scheduled_task = mocker.patch(
+        "app.api.routes.tasks.pipeline_runner.cancel_scheduled_task",
+        new=mocker.AsyncMock(return_value=False),
+    )
+
+    response = await auth_client.delete(f"/tasks/{task.id}")
+
+    assert response.status_code == 204
+    assert response.text == ""
+    assert await db_session.get(Task, task.id) is None
+    cancel_scheduled_task.assert_awaited_once_with(task.id)
+
+
+async def test_delete_queued_task_rejects_non_queued(auth_client, db_session, test_project, mocker):
+    task = await create_task(db_session, test_project, status="done")
+    cancel_scheduled_task = mocker.patch(
+        "app.api.routes.tasks.pipeline_runner.cancel_scheduled_task",
+        new=mocker.AsyncMock(return_value=False),
+    )
+
+    response = await auth_client.delete(f"/tasks/{task.id}")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Cannot remove task with status 'done' from queue"}
+    cancel_scheduled_task.assert_not_awaited()

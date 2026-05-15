@@ -7,7 +7,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from cryptography.fernet import InvalidToken
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -86,7 +86,6 @@ async def _get_project_owner(session: AsyncSession, project: Project) -> User:
 async def github_webhook(
     project_id: UUID,
     request: Request,
-    background_tasks: BackgroundTasks,
     session: DbSession,
 ) -> dict[str, Any]:
     raw_body = await request.body()
@@ -275,14 +274,14 @@ async def github_webhook(
     for task in tasks_to_create:
         task_list_events.publish_task_entered_scope(task)
     for task in tasks_to_create:
-        background_tasks.add_task(pipeline_runner.run_task, task.id)
+        await pipeline_runner.schedule_task(task.id)
 
     logger.info(
         "webhook_processed",
         extra={
             "project_id": str(project.id),
-            "created": len(tasks_to_create),
-            "skipped": len(skipped_files),
+            "created_count": len(tasks_to_create),
+            "skipped_count": len(skipped_files),
         },
     )
     return {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib
 import json
 import logging
@@ -25,6 +26,7 @@ PIPELINE_ROOT = Path(__file__).resolve().parents[3] / "pipeline"
 TASK_EVENT_QUEUES: dict[UUID, asyncio.Queue[dict[str, Any] | None]] = {}
 PIPELINE_RUN_LOCK = asyncio.Lock()
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
+_SCHEDULED_PIPELINES: dict[UUID, asyncio.Task[None]] = {}
 MAX_TASK_EVENT_QUEUES = 200
 app_logger = logging.getLogger(__name__)
 
@@ -220,12 +222,76 @@ async def _cleanup_queue_after(task_id: UUID, delay: float) -> None:
     TASK_EVENT_QUEUES.pop(task_id, None)
 
 
+def _spawn_pipeline_task(task_id: UUID) -> asyncio.Task[None]:
+    return asyncio.create_task(run_task(task_id), name=f"docflow.task.{task_id}")
+
+
+def _finish_scheduled_pipeline(task_id: UUID, scheduled_task: asyncio.Task[None]) -> None:
+    _SCHEDULED_PIPELINES.pop(task_id, None)
+    _BACKGROUND_TASKS.discard(scheduled_task)
+
+
+async def _mark_task_failed_before_start(task_id: UUID, error_text: str) -> None:
+    session_factory = get_session_factory()
+
+    async with session_factory() as session:
+        task = await session.get(Task, task_id)
+        if task is None or task.status != "queued":
+            return
+
+        previous_status = task.status
+        task.status = "failed"
+        task.current_stage = None
+        task.error = _sanitize_error(error_text)
+        task.completed_at = datetime.now(UTC)
+        await session.commit()
+        task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
+
+
+async def schedule_task(task_id: UUID) -> bool:
+    if task_id in _SCHEDULED_PIPELINES:
+        return False
+
+    try:
+        scheduled_task = _spawn_pipeline_task(task_id)
+    except RuntimeError as exc:
+        await _mark_task_failed_before_start(
+            task_id,
+            f"Failed to schedule pipeline run: {type(exc).__name__}: {exc}",
+        )
+        app_logger.exception("task_schedule_failed", extra={"task_id": str(task_id)})
+        return False
+
+    _SCHEDULED_PIPELINES[task_id] = scheduled_task
+    _BACKGROUND_TASKS.add(scheduled_task)
+    scheduled_task.add_done_callback(lambda finished_task: _finish_scheduled_pipeline(task_id, finished_task))
+    return True
+
+
+async def cancel_scheduled_task(task_id: UUID) -> bool:
+    scheduled_task = _SCHEDULED_PIPELINES.pop(task_id, None)
+    if scheduled_task is None:
+        return False
+
+    scheduled_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await scheduled_task
+    _BACKGROUND_TASKS.discard(scheduled_task)
+    return True
+
+
 async def run_task(task_id: UUID) -> None:
     session_factory = get_session_factory()
 
     async with session_factory() as session:
         task = await session.get(Task, task_id)
         if task is None:
+            return
+        if task.status != "queued":
+            app_logger.info(
+                "task_run_skipped",
+                extra={"task_id": str(task.id), "status": task.status},
+            )
             return
 
         queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()

@@ -1,19 +1,47 @@
 import { useTranslation } from 'react-i18next'
-import { selectUser } from '@/features/auth/model/authSlice'
+import { useNavigate } from 'react-router-dom'
+import { useLogoutMutation } from '@/features/auth/api/authApi'
+import { clearUser, selectUser } from '@/features/auth/model/authSlice'
 import { useGetHealthQuery } from '@/shared/api/healthApi'
-import { useAppSelector } from '@/shared/store/hooks'
+import { useAppDispatch, useAppSelector } from '@/shared/store/hooks'
+import { Button } from '@/shared/ui/Button/Button'
 import { SectionCard } from '@/shared/ui/SectionCard/SectionCard'
 import { ChangePasswordForm } from './ChangePasswordForm'
 import styles from './ProfilePage.module.css'
 
 export function ProfilePage() {
-  const { t } = useTranslation('settings')
+  const { t } = useTranslation(['settings', 'common'])
+  const dispatch = useAppDispatch()
+  const navigate = useNavigate()
   const user = useAppSelector(selectUser)
   const { data: health } = useGetHealthQuery()
+  const [logout, { isLoading }] = useLogoutMutation()
+
+  async function handleLogout() {
+    try {
+      await logout().unwrap()
+      dispatch(clearUser())
+      void navigate('/login', { replace: true })
+    } catch {
+      // Error handling will be added with global notifications.
+    }
+  }
 
   return (
     <>
-      <SectionCard label={t('profile.account_section')}>
+      <SectionCard
+        label={t('profile.account_section')}
+        footer={
+          <Button
+            className={styles.logoutButton}
+            loading={isLoading}
+            variant="secondary"
+            onClick={() => void handleLogout()}
+          >
+            {t('common:logout')}
+          </Button>
+        }
+      >
         <div className={styles.field}>
           <span className={styles.fieldLabel}>{t('profile.email_label')}</span>
           <span className={styles.fieldValue}>{user?.email}</span>

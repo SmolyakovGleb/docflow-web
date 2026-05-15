@@ -7,6 +7,7 @@ import { useGetProjectsQuery } from '@/features/projects/api/projectsApi'
 import type { Project } from '@/features/projects/model/types'
 import {
   useCreateManualRepoTasksMutation,
+  useDeleteTaskMutation,
   useGetTaskLogQuery,
   useGetTaskQuery,
   useLazyGetTaskQuery,
@@ -14,7 +15,6 @@ import {
   useRetryTaskMutation,
   useUpdateTaskMutation,
 } from '@/features/tasks/api/tasksApi'
-import { useDirty } from '@/features/tasks/hooks/useDirty'
 import { useSSE } from '@/features/tasks/hooks/useSSE'
 import { useTaskDetailTab } from '@/features/tasks/hooks/useTaskDetailTab'
 import { downloadMd } from '@/features/tasks/lib/downloadMd'
@@ -30,7 +30,9 @@ import type { AxiosBaseQueryError } from '@/shared/api/axiosBaseQuery'
 import { formatRelativeShort } from '@/shared/lib/date'
 import { getPlural } from '@/shared/lib/plural'
 import { translateApiError } from '@/shared/lib/errorMessages'
+import { useDirty } from '@/shared/hooks/useDirty'
 import { Button } from '@/shared/ui/Button/Button'
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog/ConfirmDialog'
 import { EmptyState } from '@/shared/ui/EmptyState/EmptyState'
 import { Skeleton } from '@/shared/ui/Skeleton/Skeleton'
 import { toast } from '@/shared/ui/Toast/toast'
@@ -280,6 +282,7 @@ function TaskDetailContent({
   const [fetchTask] = useLazyGetTaskQuery()
   const [updateTask, { isLoading: isSaving }] = useUpdateTaskMutation()
   const [retryTask, { isLoading: isRetrying }] = useRetryTaskMutation()
+  const [deleteTask, { isLoading: isDeleting }] = useDeleteTaskMutation()
   const [publishTask, { isLoading: isPublishing }] = usePublishTaskMutation()
   const [createManualRepoTasks, { isLoading: isCreatingNewTask }] =
     useCreateManualRepoTasksMutation()
@@ -296,6 +299,7 @@ function TaskDetailContent({
     newSha: string | null
   } | null>(null)
   const [publishConflictOpen, setPublishConflictOpen] = useState(false)
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
 
   const baseDiffContent = task.translated_content ?? ''
   const baseConflictContent = task.conflict_theirs ?? task.translated_content ?? ''
@@ -413,13 +417,17 @@ function TaskDetailContent({
 
   async function handleRetry(force = false) {
     try {
-      await retryTask({ taskId: task.id, force }).unwrap()
+      await toast.promise(retryTask({ taskId: task.id, force }).unwrap(), {
+        loading: `${t('actions.retry')}...`,
+        success: t('actions.retry_success'),
+        error: (error) => (getRetryConflictData(error) ? null : translateApiError(error)),
+      })
+
       setRetryConflictOpen(false)
       setRetryConflictData(null)
       setLiveStage(null)
       setDiffDraft(null)
       setConflictDraft(null)
-      toast.success(t('actions.retry_success'))
       await onRefresh()
     } catch (retryError) {
       const conflictData = getRetryConflictData(retryError)
@@ -433,8 +441,6 @@ function TaskDetailContent({
         setRetryConflictOpen(true)
         return
       }
-
-      toast.error(translateApiError(retryError))
     }
   }
 
@@ -444,10 +450,17 @@ function TaskDetailContent({
     }
 
     try {
-      const response = await createManualRepoTasks({
-        project_id: task.project_id,
-        file_paths: [task.file_path],
-      }).unwrap()
+      const response = await toast.promise(
+        createManualRepoTasks({
+          project_id: task.project_id,
+          file_paths: [task.file_path],
+        }).unwrap(),
+        {
+          loading: `${t('trigger.submit')}...`,
+          success: null,
+          error: (error) => translateApiError(error),
+        },
+      )
 
       const createdTaskId = response.task_ids[0]
       const existingTaskId =
@@ -468,21 +481,30 @@ function TaskDetailContent({
       }
 
       toast.error(t('retry_conflict.create_failed'))
-    } catch (createError) {
-      toast.error(translateApiError(createError))
+    } catch {
+      // promise toast already shows the error state
     }
   }
 
   async function handlePublish(content: string) {
     try {
-      if (content !== (task.translated_content ?? '')) {
-        await updateTask({ taskId: task.id, translated_content: content }).unwrap()
-      }
+      await toast.promise(
+        async () => {
+          if (content !== (task.translated_content ?? '')) {
+            await updateTask({ taskId: task.id, translated_content: content }).unwrap()
+          }
 
-      await publishTask(task.id).unwrap()
+          return publishTask(task.id).unwrap()
+        },
+        {
+          loading: `${t('actions.publish')}...`,
+          success: t('actions.publish_success'),
+          error: (error) => (isConflictError(error) ? null : translateApiError(error)),
+        },
+      )
+
       setDiffDraft(null)
       setConflictDraft(null)
-      toast.success(t('actions.publish_success'))
       await onRefresh()
     } catch (publishError) {
       if (isConflictError(publishError)) {
@@ -490,8 +512,16 @@ function TaskDetailContent({
         await refreshTaskAndOpenConflictIfNeeded()
         return
       }
+    }
+  }
 
-      toast.error(translateApiError(publishError))
+  async function handleRemoveFromQueue() {
+    try {
+      await deleteTask(task.id).unwrap()
+      toast.success(t('actions.remove_success'))
+      void navigate('/tasks')
+    } catch (removeError) {
+      toast.error(translateApiError(removeError))
     }
   }
 
@@ -518,6 +548,17 @@ function TaskDetailContent({
           onClick={() => void handleRetry()}
         >
           {t('actions.retry')}
+        </Button>
+      ) : null}
+
+      {task.status === 'queued' ? (
+        <Button
+          size="sm"
+          variant="danger"
+          loading={isDeleting}
+          onClick={() => setRemoveConfirmOpen(true)}
+        >
+          {t('actions.remove_from_queue')}
         </Button>
       ) : null}
 
@@ -650,6 +691,17 @@ function TaskDetailContent({
             onTabChange('conflict')
           }
         }}
+      />
+
+      <ConfirmDialog
+        open={removeConfirmOpen}
+        onOpenChange={setRemoveConfirmOpen}
+        title={t('remove_from_queue.title')}
+        description={t('remove_from_queue.description', { file: task.file_path })}
+        confirmText={t('actions.remove_from_queue')}
+        confirmVariant="danger"
+        loading={isDeleting}
+        onConfirm={() => void handleRemoveFromQueue()}
       />
     </>
   )

@@ -4,8 +4,9 @@ from typing import Annotated, AsyncIterator
 from uuid import UUID
 
 import asyncio
+import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +31,8 @@ from app.services.tasks import (
     SourceFileChangedError,
     create_manual_task_from_upload,
     create_manual_tasks_from_repo,
+    delete_queued_task,
+    ensure_task_removable,
     get_task_or_404,
     list_tasks,
     parse_manual_repo_payload,
@@ -41,6 +44,7 @@ from app.services.tasks import (
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+logger = logging.getLogger(__name__)
 
 
 async def _single_status_event(status_value: str) -> AsyncIterator[str]:
@@ -249,7 +253,6 @@ async def patch_task(
 )
 async def create_manual_tasks(
     request: Request,
-    background_tasks: BackgroundTasks,
     session: DbSession,
     current_user: CurrentUser,
 ) -> TaskCreateResponse:
@@ -273,7 +276,7 @@ async def create_manual_tasks(
         result = await create_manual_task_from_upload(session, current_user, upload_payload)
 
     for task in result.created_tasks:
-        background_tasks.add_task(pipeline_runner.run_task, task.id)
+        await pipeline_runner.schedule_task(task.id)
 
     return TaskCreateResponse(
         created=len(result.created_tasks),
@@ -302,7 +305,6 @@ async def create_manual_tasks(
 )
 async def retry_task(
     task_id: UUID,
-    background_tasks: BackgroundTasks,
     session: DbSession,
     current_user: CurrentUser,
     payload: RetryRequest | None = None,
@@ -328,8 +330,32 @@ async def retry_task(
             },
         )
 
-    background_tasks.add_task(pipeline_runner.run_task, reset_task.id)
+    await pipeline_runner.schedule_task(reset_task.id)
     return {"id": str(reset_task.id), "status": reset_task.status}
+
+
+@router.delete(
+    "/{task_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Убрать задачу из очереди",
+    description="Удаляет зависшую задачу из статуса `queued`, не отправляя её в pipeline.",
+    responses={
+        204: {"description": "Задача удалена"},
+        400: {"description": "Удалять можно только задачи со статусом `queued`"},
+        404: {"description": "Задача не найдена"},
+    },
+)
+async def delete_task_route(
+    task_id: UUID,
+    session: DbSession,
+    current_user: CurrentUser,
+) -> Response:
+    task = await get_task_or_404(session, task_id, current_user)
+    ensure_task_removable(task)
+    await pipeline_runner.cancel_scheduled_task(task.id)
+    await delete_queued_task(session, task)
+    logger.info("task_deleted_from_queue", extra={"task_id": str(task_id)})
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

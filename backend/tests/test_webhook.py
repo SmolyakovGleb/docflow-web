@@ -56,8 +56,8 @@ async def test_webhook_creates_tasks(client, db_session, test_project, test_user
     )
     github_client.get_file_sha = mocker.AsyncMock(return_value="target-sha")
     mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
-    run_task = mocker.patch(
-        "app.api.routes.webhook.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.webhook.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -110,7 +110,7 @@ async def test_webhook_creates_tasks(client, db_session, test_project, test_user
         "docs/index.md",
         test_project.target_branch,
     )
-    assert run_task.await_count == 2
+    assert schedule_task.await_count == 2
 
 
 async def test_webhook_invalid_signature(client, test_project):
@@ -190,8 +190,8 @@ async def test_webhook_deduplication_queued(client, db_session, test_project, te
     github_client.get_file_content = mocker.AsyncMock()
     github_client.get_file_sha = mocker.AsyncMock()
     mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
-    run_task = mocker.patch(
-        "app.api.routes.webhook.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.webhook.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -216,7 +216,7 @@ async def test_webhook_deduplication_queued(client, db_session, test_project, te
     ]
     github_client.get_file_content.assert_not_called()
     github_client.get_file_sha.assert_not_called()
-    run_task.assert_not_awaited()
+    schedule_task.assert_not_awaited()
 
 
 async def test_webhook_deduplication_running(client, db_session, test_project, test_user, mocker):
@@ -240,7 +240,7 @@ async def test_webhook_deduplication_running(client, db_session, test_project, t
     await db_session.commit()
 
     mocker.patch("app.api.routes.webhook.GitHubClient", return_value=mocker.Mock())
-    mocker.patch("app.api.routes.webhook.pipeline_runner.run_task", new=mocker.AsyncMock())
+    mocker.patch("app.api.routes.webhook.pipeline_runner.schedule_task", new=mocker.AsyncMock())
 
     payload = {
         "ref": "refs/heads/main",
@@ -274,8 +274,8 @@ async def test_webhook_exclude_patterns(client, db_session, test_project, test_u
     github_client.get_file_content = mocker.AsyncMock()
     github_client.get_file_sha = mocker.AsyncMock()
     mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
-    run_task = mocker.patch(
-        "app.api.routes.webhook.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.webhook.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -300,7 +300,7 @@ async def test_webhook_exclude_patterns(client, db_session, test_project, test_u
     ]
     github_client.get_file_content.assert_not_called()
     github_client.get_file_sha.assert_not_called()
-    run_task.assert_not_awaited()
+    schedule_task.assert_not_awaited()
 
 
 async def test_webhook_multiple_files(client, db_session, test_project, test_user, mocker):
@@ -319,8 +319,8 @@ async def test_webhook_multiple_files(client, db_session, test_project, test_use
     )
     github_client.get_file_sha = mocker.AsyncMock(side_effect=["target-1", "target-2", None])
     mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
-    run_task = mocker.patch(
-        "app.api.routes.webhook.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.webhook.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -342,7 +342,7 @@ async def test_webhook_multiple_files(client, db_session, test_project, test_use
     assert response.status_code == 202
     assert response.json()["created"] == 3
     assert len(response.json()["task_ids"]) == 3
-    assert run_task.await_count == 3
+    assert schedule_task.await_count == 3
 
 
 async def test_webhook_requires_github_link(client, db_session, test_project, test_user):
@@ -388,8 +388,8 @@ async def test_webhook_is_atomic_if_github_download_fails(
     )
     github_client.get_file_sha = mocker.AsyncMock(return_value="target-sha")
     mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
-    run_task = mocker.patch(
-        "app.api.routes.webhook.pipeline_runner.run_task",
+    schedule_task = mocker.patch(
+        "app.api.routes.webhook.pipeline_runner.schedule_task",
         new=mocker.AsyncMock(),
     )
 
@@ -413,4 +413,4 @@ async def test_webhook_is_atomic_if_github_download_fails(
 
     tasks = (await db_session.scalars(select(Task).where(Task.project_id == test_project.id))).all()
     assert tasks == []
-    run_task.assert_not_awaited()
+    schedule_task.assert_not_awaited()

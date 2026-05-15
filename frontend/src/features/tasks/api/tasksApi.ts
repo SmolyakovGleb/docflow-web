@@ -111,6 +111,17 @@ export const tasksApi = baseApi.injectEndpoints({
         { type: 'TaskLog', id: taskId },
       ],
     }),
+    deleteTask: builder.mutation<void, string>({
+      query: (taskId) => ({
+        url: `/tasks/${taskId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_result, _error, taskId) => [
+        'Task',
+        { type: 'Task', id: taskId },
+        { type: 'TaskLog', id: taskId },
+      ],
+    }),
     publishTask: builder.mutation<TaskPublishResponse, string>({
       query: (taskId) => ({
         url: `/tasks/${taskId}/publish`,
@@ -127,6 +138,7 @@ export const tasksApi = baseApi.injectEndpoints({
 
 export const {
   useCreateManualRepoTasksMutation,
+  useDeleteTaskMutation,
   useGetTaskLogQuery,
   useGetTaskQuery,
   useGetTasksQuery,

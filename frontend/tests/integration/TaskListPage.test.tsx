@@ -468,4 +468,107 @@ describe('TaskListPage', () => {
     )
     expect(within(dialog).getByRole('button', { name: 'Запустить' })).toBeEnabled()
   })
+  it('removes a queued task from the list after confirmation', async () => {
+    const user = userEvent.setup()
+    const tasks = [
+      {
+        id: 'task-1',
+        project_id: 'project-1',
+        project_name: 'CRM Docs',
+        file_path: 'docs/queued.md',
+        github_sha: 'abcdef123456',
+        commit_message: 'Queue test',
+        commit_author_name: 'Anna',
+        commit_author_login: 'anna',
+        status: 'queued',
+        current_stage: null,
+        created_at: '2026-05-12T09:50:00Z',
+        completed_at: null,
+        updated_at: '2026-05-12T09:55:00Z',
+      },
+    ]
+
+    server.use(
+      http.get('/api/projects', () =>
+        HttpResponse.json([
+          {
+            id: 'project-1',
+            name: 'CRM Docs',
+            source_repo: 'team/docs-ru',
+            source_branch: 'main',
+            target_repo: 'team/docs-en',
+            target_branch: 'main',
+            exclude_patterns: [],
+            webhook_url: 'http://localhost:8000/webhook/project-1',
+            version: 1,
+            created_at: '2026-05-10T09:00:00Z',
+          },
+        ]),
+      ),
+      http.get('/api/health', () =>
+        HttpResponse.json({
+          status: 'ok',
+          pipeline_version: 'abc1234',
+          last_webhook_at: '2026-05-12T10:00:00Z',
+        }),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          done: 0,
+          failed: 0,
+          published: 0,
+          running: 0,
+        }),
+      ),
+      http.get('/api/tasks', () =>
+        HttpResponse.json({
+          items: tasks,
+          total: tasks.length,
+          limit: 50,
+          offset: 0,
+          status_counts: {
+            queued: tasks.length,
+            running: 0,
+            done: 0,
+            failed: 0,
+            published: 0,
+            conflict: 0,
+          },
+        }),
+      ),
+      http.delete('/api/tasks/:taskId', ({ params }) => {
+        const taskIndex = tasks.findIndex((task) => task.id === params.taskId)
+        if (taskIndex >= 0) {
+          tasks.splice(taskIndex, 1)
+        }
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    const store = createAppStore()
+    store.dispatch(
+      setUser({
+        id: 'user-1',
+        email: 'anna@example.com',
+        display_name: 'Anna',
+        github_linked: true,
+        github_login: 'anna',
+      }),
+    )
+
+    renderWithProviders(
+      <MemoryRouter>
+        <TaskListPage />
+      </MemoryRouter>,
+      { store },
+    )
+
+    expect(await screen.findByText('Queue test')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Убрать из очереди' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Убрать из очереди' }))
+
+    expect(await screen.findByText('Нет задач')).toBeInTheDocument()
+  })
 })

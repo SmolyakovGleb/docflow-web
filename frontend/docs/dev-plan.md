@@ -744,30 +744,61 @@ curl -X POST http://localhost:8000/webhook/{project_id} \
 ### Зависимости
 
 - Этап 4
+- Этап 8 (переиспользуем паттерн фильтров, layout и состояний из `HistoryPage`)
+- Backend prerequisite: сначала расширить контракт `GET /analytics`, только потом собирать UI
 
 ### Файлы
 
-- `src/features/analytics/api/analyticsApi.ts`
+- `src/features/analytics/api/analyticsApi.ts` — единая точка для analytics query + stats query
+- `src/shared/api/analyticsApi.ts` — временный re-export на feature api, чтобы не дублировать endpoints
+- `src/features/analytics/model/types.ts`
+- `src/features/analytics/hooks/useAnalyticsFilters.ts`
+- `src/features/analytics/lib/buildTasksPerDaySeries.ts`
+- `src/features/analytics/lib/buildSuccessRateSeries.ts`
+- `src/features/analytics/lib/buildAnalyticsCsvRows.ts`
 - `src/features/analytics/ui/AnalyticsPage.tsx`
+- `src/features/analytics/ui/AnalyticsToolbar.tsx`
 - `src/features/analytics/ui/StatCard.tsx` — 4 карточки сверху
 - `src/features/analytics/ui/TasksPerDayChart.tsx` — recharts stacked bar
 - `src/features/analytics/ui/SuccessRateChart.tsx` — recharts line
 - `src/features/analytics/ui/TopErrorsTable.tsx`
 - `src/features/analytics/ui/ExportCsvButton.tsx` — papaparse blob download
-- `src/pages/AnalyticsPage.tsx`
+- `src/pages/AnalyticsPage/index.tsx`
+- `src/locales/ru/analytics.json`
+- `src/shared/lib/i18n.ts`
 
 ### Детали реализации
 
-- `useGetAnalyticsQuery({ project_id, from, to })`
-- StatCards: total, success rate, avg duration, опубликовано в диапазоне
-- Stacked bar: tasks_per_day по статусам с цветами из палитры
-- Line chart: success rate per day (агрегация на фронте — backend возвращает per_day, считаем rate из bar-данных)
-- TopErrorsTable: ряды с visual proportion bar
-- CSV экспорт: формат `date,total,done,failed,published,success_rate`
+- Не создавать второй analytics api рядом с существующим shared-запросом. Текущий `shared/api/analyticsApi.ts`, который уже используют `StatChips` и `TaskDetailPage`, переводим в feature-слой и оставляем совместимый re-export на время миграции.
+- `useGetAnalyticsQuery({ project_id, from, to })` — основной запрос страницы аналитики, query params собираются без пустых значений.
+- `useGetAnalyticsStatsQuery()` сохраняется для dashboard stat-chips и queued countdown, но живёт в том же analytics api module.
+- Фильтры страницы хранятся в URL через `useSearchParams` по образцу `useHistoryFilters`: `project_id`, `from`, `to`.
+- Визуальный стиль страницы — только через существующие shared-компоненты и соседние паттерны:
+  - toolbar как в `HistoryPage`
+  - `Select`, `DateRangePicker`, `Button`
+  - контейнеры графиков и таблицы через `SectionCard`
+  - состояния через `EmptyState` и `Skeleton`
+- StatCards: total tasks, success rate, avg duration, published count в выбранном диапазоне.
+- Stacked bar: `tasks_per_day` по статусам с цветами из палитры `StatusPill`.
+- Line chart: success rate per day считается на фронте из тех же per-day status buckets, отдельный backend field не нужен.
+- TopErrorsTable: строки `error_type | count | visual proportion bar`.
+- CSV экспорт строится не из raw response, а из нормализованной per-day серии. Формат: `date,total,done,failed,published,success_rate`.
+- Пустое состояние: если в диапазоне нет данных, графики не рендерим, показываем `EmptyState` с кнопкой сброса фильтров.
+- Ошибки запроса — отдельный error state, без silent fail.
 
 ### Используемые API
 
 - `GET /analytics?project_id=&from=&to=`
+
+Минимальный backend contract для этапа:
+
+- `total_tasks`
+- `success_rate`
+- `avg_duration_seconds`
+- `published_count`
+- `tasks_by_status`
+- `tasks_per_day: [{ date, queued, running, done, failed, published, conflict }]`
+- `top_errors`
 
 ### Локализация
 
@@ -777,15 +808,17 @@ curl -X POST http://localhost:8000/webhook/{project_id} \
 
 **Unit:**
 
+- `buildSuccessRateSeries.test.ts` — расчёт процента успеха по дневным bucket-данным
 - `csvExport.test.ts` — генерация CSV корректная
 
 **Integration:**
 
-- `AnalyticsPage.test.tsx` — графики получают данные из мока
+- `AnalyticsPage.test.tsx` — графики получают данные из мока, фильтры меняют query args, empty/error states отображаются корректно
 
 ### Проверка
 
 - Графики отображаются, фильтры работают
+- Фильтры живут в URL и переживают reload
 - CSV экспортируется с правильным содержимым
 
 ---
@@ -891,71 +924,17 @@ Read-only просмотр словарей.
 
 ---
 
-## Этап 12 — Onboarding + Command Palette + 404 + Polish
+## Этап 12 — Cross-cutting features
 
-Финальные сборки и cross-cutting фичи.
+Большой финальный блок разбиваем на небольшие независимые подэтапы, чтобы их можно было брать в работу и выкатывать по одному.
 
-### Зависимости
+### Разбивка
 
-- Этапы 5, 6 (нужны Projects и Tasks для cmdk)
-
-### Файлы
-
-- `src/app/OnboardingDialog.tsx` — модалка с 3 шагами
-- `src/app/OnboardingDialog.module.css`
-- `src/features/cmdk/ui/CommandPalette.tsx` — cmdk Dialog
-- `src/features/cmdk/hooks/useCmdkData.ts` — поиск по tasks/projects/actions
-- `src/pages/NotFoundPage.tsx`
-- `src/app/ErrorBoundary.tsx` — Sentry catch + fallback UI
-- `src/shared/ui/Toast/setup.tsx` — расширить, добавить promise-toasts
-
-### Детали реализации
-
-- **OnboardingDialog**: показывается в `App.tsx` при условии `user.github_linked === false || projects.length === 0`. Skip → localStorage флаг `onboarding_skipped=true`. На init компонента — проверка флага, если true → не рендерится
-- **3 шага** в state machine `currentStep: 1 | 2 | 3`:
-  - **Шаг 1 «Привязать GitHub»** — иконка `lucide:github`, описание, primary-кнопка «Привязать GitHub» (`window.location.href = '/api/auth/github/connect'`). При возврате с callback (`user.github_linked === true`) → автоматический переход на шаг 2
-  - **Шаг 2 «Создать проект»** — иконка `lucide:folder-git`, описание, primary-кнопка «Создать проект» (закрывает dialog + `navigate('/repositories/new')`). Если проектов > 0 — автоматический переход на шаг 3
-  - **Шаг 3 «Настроить webhook»** — иконка `lucide:webhook`, текст «Скопируйте URL и секрет в GitHub Webhook Settings», ссылка «Открыть GitHub Webhook docs» + primary-кнопка «Готово» (закрывает + ставит флаг)
-- Stepper-индикатор сверху: 3 круга соединённых линиями. Текущий highlighted (border белым), пройденные с галочкой, будущие dim
-- Footer: «Пропустить онбординг» (ghost) + primary-action текущего шага
-- **CommandPalette**: открывается через `useSelector(cmdkSlice.selectors.isOpen)` (слайс был создан в Этапе 4). `Cmd+K` уже зарегистрирован в Layout. Radix Dialog 640px вверху
-- Поиск группированный: задачи (последние 5 совпадений) / проекты / действия (статичный список)
-- 404: «404» большой + «На главную»
-- ErrorBoundary вокруг всего App, catch unhandled errors → Sentry + fallback
-- Beforeunload warning только когда есть dirty где-то (вынести в `useDirty` хук, использован в Этапе 7)
-
-### Используемые API
-
-- `GET /tasks` (для cmdk поиска — последние 50)
-- `GET /projects` (для cmdk)
-
-### Локализация
-
-- `onboarding.*`
-- `cmdk.*`
-- `notFound.*`
-
-### Тесты
-
-**Unit:**
-
-- `useCmdkData.test.ts` — фильтрация по поисковому запросу
-
-**Integration:**
-
-- `OnboardingDialog.test.tsx` — рендерится при условиях, Skip → localStorage
-- `CommandPalette.test.tsx` — поиск работает, навигация по результатам
-
-**E2E (`e2e/onboarding_flow.spec.ts`):**
-
-- Newly registered user → onboarding modal появляется → Skip → modal закрыт + localStorage флаг
-
-### Проверка
-
-1. Новый пользователь видит onboarding после регистрации
-2. `Cmd+K` открывает палитру
-3. 404 для несуществующего URL
-4. Sentry получает события (с тестовым DSN)
+- **12a** — служебные заглушки для неготовых страниц
+- **12b** — onboarding для первого входа
+- **12c** — command palette (`Cmd+K`)
+- **12d** — `404` и глобальный `ErrorBoundary`
+- **12e** — UX-polish: `beforeunload` для dirty-состояния и promise-toasts
 
 ---
 
@@ -986,6 +965,172 @@ Read-only просмотр словарей.
 
 1. Переход на `/terms` и `/privacy` не приводит на пустой экран или 404
 2. Пользователь понимает, что страница ещё не готова, и может вернуться назад
+
+---
+
+## Этап 12b — Onboarding для первого входа
+
+Показываем новый пользовательский сценарий пошагово, не смешивая его с остальными cross-cutting задачами.
+
+### Зависимости
+
+- Этапы 5, 11
+
+### Файлы
+
+- `src/app/OnboardingDialog.tsx` — модалка с 3 шагами
+- `src/app/OnboardingDialog.module.css`
+- `src/app/App.tsx` или точка подключения onboarding в app-shell
+
+### Детали реализации
+
+- `OnboardingDialog` показывается при условии `user.github_linked === false || projects.length === 0`
+- Skip ставит `localStorage`-флаг `onboarding_skipped=true`; при следующем входе диалог не открывается
+- Внутри — state machine `currentStep: 1 | 2 | 3`
+- **Шаг 1 «Привязать GitHub»**: иконка `lucide:github`, CTA ведёт на `/api/auth/github/connect`; после успешного возврата пользователь автоматически попадает на шаг 2
+- **Шаг 2 «Создать проект»**: иконка `lucide:folder-git`, CTA закрывает диалог и ведёт на `/repositories/new`; если проект уже появился, автоматически открывается шаг 3
+- **Шаг 3 «Настроить webhook»**: иконка `lucide:webhook`, текст с инструкцией про URL и secret, ссылка на GitHub Webhook docs, кнопка «Готово» завершает onboarding
+- Сверху stepper на 3 шага, снизу — `Пропустить онбординг` и primary-action текущего шага
+
+### Локализация
+
+- `onboarding.*`
+
+### Тесты
+
+**Integration:**
+
+- `OnboardingDialog.test.tsx` — показывается при нужных условиях, Skip сохраняет флаг
+
+**E2E (`e2e/onboarding_flow.spec.ts`):**
+
+- Newly registered user → onboarding modal появляется → Skip → modal закрыт + localStorage флаг
+
+### Проверка
+
+1. Новый пользователь видит onboarding после регистрации
+2. Skip скрывает диалог и не даёт ему открываться повторно на следующем reload
+3. При уже привязанном GitHub и существующем проекте onboarding не показывается
+
+---
+
+## Этап 12c — Command Palette (`Cmd+K`)
+
+Быстрый доступ к задачам, проектам и системным действиям отдельным этапом, без смешения с onboarding и обработкой ошибок.
+
+### Зависимости
+
+- Этапы 4, 5, 6
+
+### Файлы
+
+- `src/features/cmdk/ui/CommandPalette.tsx` — `cmdk` Dialog
+- `src/features/cmdk/hooks/useCmdkData.ts` — поиск по tasks / projects / actions
+
+### Детали реализации
+
+- Палитра открывается через `useSelector(cmdkSlice.selectors.isOpen)`; хоткей `Cmd+K` уже зарегистрирован в layout
+- Основа — `Radix Dialog` шириной около 640px с полем поиска и секциями результатов
+- Поиск группированный: задачи, проекты, действия
+- Для задач достаточно последних 50 элементов с ограничением до 5 совпадений в выдаче
+- Действия — статический список быстрых переходов (`создать проект`, `перейти к задачам`, `открыть настройки` и т.д.)
+- Навигация по Enter ведёт сразу на выбранный маршрут и закрывает палитру
+
+### Используемые API
+
+- `GET /tasks`
+- `GET /projects`
+
+### Локализация
+
+- `cmdk.*`
+
+### Тесты
+
+**Unit:**
+
+- `useCmdkData.test.ts` — фильтрация по поисковому запросу
+
+**Integration:**
+
+- `CommandPalette.test.tsx` — поиск работает, навигация по результатам корректна
+
+### Проверка
+
+1. `Cmd+K` открывает палитру из любой основной страницы
+2. Поиск находит задачи и проекты
+3. Выбор результата переводит на нужный экран и закрывает диалог
+
+---
+
+## Этап 12d — `404` и глобальный `ErrorBoundary`
+
+Изолируем обработку несуществующих маршрутов и необработанных ошибок в отдельный шаг, чтобы не связывать его с UX-улучшениями.
+
+### Зависимости
+
+- Этап 4
+
+### Файлы
+
+- `src/pages/NotFoundPage.tsx`
+- `src/app/ErrorBoundary.tsx` — Sentry catch + fallback UI
+- `src/app/router/index.tsx`
+- точка оборачивания всего приложения в `ErrorBoundary`
+
+### Детали реализации
+
+- Для несуществующих URL появляется отдельная `404`-страница с крупным кодом ошибки и CTA «На главную»
+- `ErrorBoundary` оборачивает всё приложение, перехватывает unhandled errors и отправляет их в Sentry
+- Пользователь вместо white screen получает безопасный fallback с коротким пояснением и кнопкой возврата
+- Fallback UI не должен ломать базовую навигацию и повторный вход в приложение после reload
+
+### Локализация
+
+- `notFound.*`
+- при необходимости `errors.boundary_*`
+
+### Проверка
+
+1. Переход на несуществующий URL показывает `404`, а не пустой экран
+2. Искусственно брошенная ошибка рендерит fallback и не валит всё приложение бесконечным циклом
+3. Событие ошибки уходит в Sentry при включённом DSN
+
+---
+
+## Этап 12e — UX-polish для асинхронных и dirty-сценариев
+
+Мелкие, но полезные улучшения поведения интерфейса, которые не должны блокировать остальные подпункты этапа 12.
+
+### Зависимости
+
+- Этапы 1, 7
+
+### Файлы
+
+- `src/shared/ui/Toast/setup.tsx` — расширить, добавить promise-toasts
+- `src/shared/hooks/useDirty.ts` или существующая точка хранения dirty-состояния
+- экраны с редактированием, где уже есть unsaved changes
+
+### Детали реализации
+
+- Добавить promise-toasts для длинных асинхронных действий, где пользователю полезно видеть стадии `loading / success / error`
+- Вынести `beforeunload`-логику в переиспользуемый `useDirty`-механизм
+- Предупреждение о закрытии вкладки показывать только когда в приложении действительно есть несохранённые изменения
+- Подключать dirty-проверку только в тех местах, где уже есть редактируемое состояние, без искусственного расширения на весь проект
+
+### Тесты
+
+**Unit / Integration:**
+
+- `useDirty.test.ts` — флаг включается и снимается корректно
+- smoke-тест для promise-toast обвязки на success/error сценариях
+
+### Проверка
+
+1. При наличии несохранённых изменений браузер предупреждает о закрытии вкладки
+2. Без dirty-состояния предупреждение не появляется
+3. Длинные асинхронные операции показывают последовательный toast-статус
 
 ---
 
@@ -1033,8 +1178,12 @@ Read-only просмотр словарей.
 9   Analytics
 10  Dictionaries
 11  Settings
-12  Onboarding + Cmdk + 404 + ErrorBoundary
+12  Cross-cutting features (umbrella)
 12a Заглушки для служебных страниц
+12b Onboarding для первого входа
+12c Command Palette (`Cmd+K`)
+12d 404 + ErrorBoundary
+12e UX-polish: beforeunload + promise-toasts
 13  Финальная сборка
 ```
 
@@ -1042,7 +1191,7 @@ Read-only просмотр словарей.
 Этапы 5–5а — подготовка: создание проекта + туннель для реального webhook.
 Этапы 6–7 — основной MVP-флоу: задача → детали → публикация.
 Этапы 8–11 — вспомогательные экраны.
-Этап 12 — cross-cutting features.
+Этапы 12a–12e — cross-cutting features.
 Этап 13 — polish.
 
 ---
@@ -1054,5 +1203,6 @@ Read-only просмотр словарей.
 | 5    | + `POST /projects/{id}/regenerate-webhook-secret`, + `GET /me/github-repos` (обёртка над `GitHubClient.get_user_repos()`)                                                                                                                                                                                                                                                                                                                                                                   |
 | 6    | Расширить `TaskSummary`: `github_sha`, `commit_message`, `commit_author_name`, `commit_author_login`, `project_name`, `current_stage`. Расширить `Task` модель: `commit_author_name`, `commit_author_login`, `current_stage`. Миграция. Заполнение `commit_author_*` в webhook, `current_stage` в `pipeline_runner` на каждом stage_update. + `?search=` (ILIKE по `file_path` и `commit_message`) в `GET /tasks`. Расширить `GET /health` до `{status, pipeline_version, last_webhook_at}` |
 | 7    | + статус `conflict` в Task (CHECK constraint обновить) + поля `conflict_base/ours/theirs` (text nullable) + миграция. `pipeline_runner` сбрасывает их на `null` при старте. На успешный publish — обратно `null` + `status='published'`                                                                                                                                                                                                                                                     |
+| 9    | Расширить `GET /analytics`: добавить `published_count`; изменить `tasks_per_day` с массива `{date, count}` на массив дневных bucket-ов по статусам `{date, queued, running, done, failed, published, conflict}`. Текущие агрегаты (`total_tasks`, `success_rate`, `avg_duration_seconds`, `tasks_by_status`, `top_errors`) сохранить без breaking changes                                                                                                                                   |
 
 Все остальные этапы используют существующее API без изменений.

@@ -28,3 +28,7 @@
   justify-content: flex-end;
   padding-top: 6px;
 }
+
+.logoutButton {
+  min-width: 120px;
+}
