@@ -4,8 +4,16 @@
   place-items: center;
   padding: 40px 24px;
   background:
-    radial-gradient(ellipse 800px 500px at 50% 0%, rgba(255, 255, 255, 0.018), transparent 70%),
-    radial-gradient(ellipse 600px 400px at 50% 100%, rgba(255, 255, 255, 0.015), transparent 70%),
+    radial-gradient(
+      ellipse 800px 500px at 50% 0%,
+      color-mix(in srgb, var(--text) 1.8%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 600px 400px at 50% 100%,
+      color-mix(in srgb, var(--text) 1.5%, transparent),
+      transparent 70%
+    ),
     var(--bg);
 }
 
@@ -22,7 +30,7 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-card-strong);
 }
 
 .title {
@@ -59,9 +67,9 @@
 }
 
 .footer :global(a:hover) {
-  color: #fff;
+  color: var(--accent);
   text-decoration: underline;
-  text-decoration-color: rgba(255, 255, 255, 0.3);
+  text-decoration-color: var(--link-underline);
   text-underline-offset: 3px;
 }
 

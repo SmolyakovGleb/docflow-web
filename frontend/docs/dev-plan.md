@@ -1206,3 +1206,81 @@ Read-only просмотр словарей.
 | 9    | Расширить `GET /analytics`: добавить `published_count`; изменить `tasks_per_day` с массива `{date, count}` на массив дневных bucket-ов по статусам `{date, queued, running, done, failed, published, conflict}`. Текущие агрегаты (`total_tasks`, `success_rate`, `avg_duration_seconds`, `tasks_by_status`, `top_errors`) сохранить без breaking changes                                                                                                                                   |
 
 Все остальные этапы используют существующее API без изменений.
+
+---
+
+## Этап 14 — Admin Panel
+
+Реализация разбита на 4 подэтапа.
+
+### 14.1 — Backend: миграции + invite-система + CLI
+
+**Модели:**
+
+- `User`: добавить `is_admin: bool = False` + миграция
+- Новая таблица `invite_tokens`: `id` UUID PK, `token` UUID unique, `created_by_id FK users`, `used_by_id FK users nullable`, `expires_at datetime nullable`, `created_at datetime`
+
+**Регистрация:**
+
+- `UserRegister` + `UserRead` расширить полем `is_admin`
+- `POST /auth/register` принимает опц. `invite_token: str | None`
+- Если таблица `invite_tokens` не пуста → токен обязателен (400 если не передан или недействителен)
+- Действителен: существует, `used_by_id IS NULL`, `expires_at IS NULL OR expires_at > now()`
+- После создания пользователя → `token.used_by_id = new_user.id`
+
+**CLI:**
+
+- `backend/app/cli.py` — команда `create-admin --email --password`
+- Создаёт User с `is_admin=True`, обходит invite-проверку
+
+**Auth dependency:**
+
+- `require_admin` в `app/services/auth.py` — проверяет `current_user.is_admin`, иначе 403
+
+### 14.2 — Backend: Admin API
+
+Все маршруты в `backend/app/api/routes/admin.py`, prefix `/admin`, зависимость `require_admin`.
+
+| Метод    | URL                         | Что делает                                                   |
+| -------- | --------------------------- | ------------------------------------------------------------ |
+| `GET`    | `/admin/users`              | Список всех пользователей с task_count                       |
+| `PATCH`  | `/admin/users/{id}`         | Обновить `is_admin`                                          |
+| `DELETE` | `/admin/users/{id}`         | Удалить пользователя и его задачи                            |
+| `GET`    | `/admin/invite-tokens`      | Список токенов                                               |
+| `POST`   | `/admin/invite-tokens`      | Создать токен (`expires_in_days` опц.)                       |
+| `DELETE` | `/admin/invite-tokens/{id}` | Отозвать (expires_at = now)                                  |
+| `GET`    | `/admin/tasks`              | Все задачи всех пользователей (фильтры: `user_id`, `status`) |
+
+Схемы: `backend/app/schemas/admin.py` — `AdminUserRead`, `AdminUserUpdate`, `AdminTaskRead`, `InviteTokenRead`, `InviteTokenCreate`
+
+### 14.3 — Frontend: routing + guard + sidebar + register invite
+
+**Файлы:**
+
+- `src/features/admin/model/AdminRoute.tsx` — если `!user?.is_admin` → redirect `/tasks`
+- `src/app/router/index.tsx` — добавить `/admin` под `<AdminRoute>`
+- `src/shared/ui/Sidebar/Sidebar.tsx` — секция «АДМИНИСТРИРОВАНИЕ» при `user.is_admin`, пункт «Панель» (иконка звезды, indigo-подсветка при active)
+- `src/shared/ui/Sidebar/UserBlock.tsx` — бейдж «admin» (indigo pill) при `user.is_admin`
+- `src/features/auth/ui/RegisterForm.tsx` — читать `?invite=<token>` из URL, передавать в `POST /auth/register`
+- `src/locales/ru/admin.json`
+
+### 14.4 — Frontend: Admin page + секции
+
+**Файлы:**
+
+- `src/features/admin/api/adminApi.ts` — RTK Query: getAdminUsers, promoteUser, deleteUser, getAdminTasks, getInviteTokens, createInviteToken, revokeInviteToken
+- `src/features/admin/ui/AdminPage/AdminPage.tsx` — страница: заголовок + три секции (скролл)
+- `src/features/admin/ui/AdminPage/AdminPage.module.css`
+- `src/features/admin/ui/UsersSection/UsersSection.tsx` — таблица пользователей с действиями
+- `src/features/admin/ui/InvitesSection/InvitesSection.tsx` — таблица токенов + создание + copy ссылки
+- `src/features/admin/ui/TasksSection/TasksSection.tsx` — таблица всех задач с фильтрами
+- `src/pages/AdminPage/index.tsx`
+
+**Порядок:**
+
+```
+14.1  backend: модели + миграция + invite в register + CLI + require_admin
+14.2  backend: /admin/* endpoints + схемы
+14.3  frontend: AdminRoute + sidebar + RegisterForm invite
+14.4  frontend: adminApi + AdminPage + три секции
+```

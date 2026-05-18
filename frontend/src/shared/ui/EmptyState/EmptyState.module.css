@@ -5,7 +5,7 @@
   padding: 60px 40px;
   border: 1px dashed var(--border);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.005);
+  background: var(--surface-tint-faint);
 }
 
 .icon {

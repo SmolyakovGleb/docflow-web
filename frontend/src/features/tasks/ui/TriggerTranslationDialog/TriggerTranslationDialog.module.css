@@ -2,7 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--overlay-scrim-mid);
   backdrop-filter: blur(2px);
 }
 
@@ -75,7 +75,7 @@
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 6px 10px;
-  color: #888;
+  color: var(--text-ghost);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -87,13 +87,13 @@
 }
 
 .tabButton:hover {
-  border-color: #3a3a3a;
+  border-color: var(--control-border-active);
   color: var(--text);
 }
 
 .tabButtonActive {
-  border-color: #3a3a3a;
-  background: #1a1a1a;
+  border-color: var(--control-border-active);
+  background: var(--surface-emphasis);
   color: var(--text);
 }
 
@@ -177,7 +177,7 @@
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 5px;
-  background: #0f0f0f;
+  background: var(--bg);
   padding: 9px 11px;
   color: var(--text);
   font-size: 13px;
@@ -205,7 +205,7 @@
   margin-bottom: 18px;
   border: 1px solid var(--border);
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--surface-tint-muted);
   padding: 11px 12px;
   color: var(--text-dim);
   font-size: 12px;
@@ -225,7 +225,7 @@
   gap: 8px;
   border-bottom: 1px solid var(--border-soft);
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--surface-tint-subtle);
 }
 
 .breadcrumb {
@@ -248,7 +248,7 @@
 }
 
 .breadcrumbSeg:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--surface-tint-strongest);
   color: var(--text);
 }
 
@@ -288,7 +288,7 @@
 }
 
 .folderRow:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-tint-strong);
   color: var(--text);
 }
 
@@ -306,7 +306,7 @@
 }
 
 .fileRow:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-tint);
 }
 
 .rowIcon {
@@ -342,7 +342,7 @@
 }
 
 .uploadFileSelected {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-tint-strong);
   color: var(--text);
 }
 
@@ -400,7 +400,7 @@
   gap: 10px;
   border: 1px dashed var(--border);
   border-radius: 5px;
-  background: #0f0f0f;
+  background: var(--bg);
   color: var(--text-dim);
   cursor: pointer;
   transition:
@@ -410,8 +410,8 @@
 }
 
 .uploadDropzone:hover {
-  border-color: #3a3a3a;
-  background: rgba(255, 255, 255, 0.02);
+  border-color: var(--control-border-active);
+  background: var(--surface-tint-muted);
 }
 
 .uploadDropzone:focus-within {
@@ -428,7 +428,7 @@
   justify-content: space-between;
   gap: 16px;
   border-top: 1px solid var(--border);
-  background: #131313;
+  background: var(--surface-canvas);
   padding: 14px 22px 18px;
 }
 

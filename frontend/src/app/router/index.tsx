@@ -16,8 +16,10 @@ import { ProfilePage } from '@/features/settings/ui/ProfilePage/ProfilePage'
 import { GithubPage } from '@/features/settings/ui/GithubPage/GithubPage'
 import { NotificationsPage } from '@/features/settings/ui/NotificationsPage/NotificationsPage'
 import { DevShowcasePage } from '@/pages/DevShowcasePage'
+import AdminPage from '@/pages/AdminPage'
 import i18n from '@/shared/lib/i18n'
 import { AppLayout } from '../layouts/AppLayout'
+import { AdminRoute } from '../auth/AdminRoute'
 import { ProtectedRoute } from '../auth/ProtectedRoute'
 import { PublicRoute } from '../auth/PublicRoute'
 
@@ -116,6 +118,14 @@ const router = createBrowserRouter([
           { path: 'github', element: <GithubPage /> },
           { path: 'notifications', element: <NotificationsPage /> },
         ],
+      },
+      {
+        path: '/admin',
+        element: (
+          <AdminRoute>
+            <AdminPage />
+          </AdminRoute>
+        ),
       },
     ],
   },

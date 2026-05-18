@@ -24,6 +24,7 @@ export const registerSchema = z.object({
   email: emailSchema,
   display_name: z.string().trim().optional(),
   password: registerPasswordSchema,
+  invite_token: z.string().trim().optional(),
 })
 
 export type LoginFormValues = z.infer<typeof loginSchema>

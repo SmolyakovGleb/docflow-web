@@ -1,6 +1,6 @@
 /* Row */
 .row:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--surface-tint-muted);
 }
 
 /* Name cell */
@@ -108,17 +108,17 @@
 
 .actionsTrigger:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-tint);
 }
 
 /* Dropdown */
 .dropdownContent {
   min-width: 160px;
-  background: #1a1a1a;
+  background: var(--surface-emphasis);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-floating);
   z-index: 50;
 }
 
@@ -136,7 +136,7 @@
 }
 
 .menuItem[data-highlighted] {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-tint-strong);
   outline: none;
 }
 
@@ -154,7 +154,7 @@
 }
 
 .menuItemDanger[data-highlighted] {
-  background: rgba(217, 119, 87, 0.08);
+  background: var(--danger-surface-soft);
   outline: none;
 }
 

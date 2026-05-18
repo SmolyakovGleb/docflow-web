@@ -5,11 +5,11 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  border: 1px solid #2e2e2e;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: rgba(26, 26, 26, 0.92);
+  background: var(--surface-frosted);
   padding: 10px 14px 10px 18px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-floating-strong);
   opacity: 0;
   pointer-events: none;
   transition:
@@ -55,7 +55,7 @@
 .divider {
   width: 1px;
   height: 20px;
-  background: #2e2e2e;
+  background: var(--border-strong);
 }
 
 .actions {

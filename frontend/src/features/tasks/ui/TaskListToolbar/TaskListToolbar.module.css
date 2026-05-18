@@ -31,7 +31,7 @@
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 4px 9px;
-  color: #888;
+  color: var(--text-ghost);
   font-size: 12px;
   font-weight: 500;
   transition:
@@ -41,7 +41,7 @@
 }
 
 .chip:hover {
-  border-color: #3a3a3a;
+  border-color: var(--control-border-active);
   color: var(--text);
 }
 
@@ -57,7 +57,7 @@
 .selectChipActive {
   border-color: var(--accent);
   background: var(--accent);
-  color: #0f0f0f;
+  color: var(--text-on-accent);
 }
 
 .webhook {
@@ -85,13 +85,13 @@
 }
 
 .webhookDotActive {
-  background: #77e0a0;
-  box-shadow: 0 0 0 4px rgb(119 224 160 / 0.14);
+  background: var(--success-bright);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--success-bright) 14%, transparent);
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
 .webhookDotInactive {
-  background: rgba(255, 255, 255, 0.34);
+  background: color-mix(in srgb, var(--text) 34%, transparent);
 }
 
 @media (max-width: 1280px) {

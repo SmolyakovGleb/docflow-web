@@ -134,7 +134,7 @@
 }
 
 .taskItem:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--surface-tint-muted);
 }
 
 .taskMain {

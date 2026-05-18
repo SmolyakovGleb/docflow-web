@@ -6,7 +6,7 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app/pipeline
+ENV PYTHONPATH=/app/pipeline:/app/backend
 
 COPY pipeline/ ./pipeline/
 

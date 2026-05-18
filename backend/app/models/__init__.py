@@ -1,4 +1,5 @@
 from app.models.dictionary_entry import DictionaryEntry  # noqa: F401
+from app.models.invite_token import InviteToken  # noqa: F401
 from app.models.notification_channel import NotificationChannel  # noqa: F401
 from app.models.project import Project  # noqa: F401
 from app.models.publication import Publication  # noqa: F401

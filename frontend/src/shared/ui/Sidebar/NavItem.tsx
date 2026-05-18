@@ -8,12 +8,20 @@ interface NavItemProps {
   label: string
   icon: LucideIcon
   end?: boolean
+  variant?: 'default' | 'admin'
 }
 
-export function NavItem({ to, label, icon: Icon, end = false }: NavItemProps) {
+export function NavItem({ to, label, icon: Icon, end = false, variant = 'default' }: NavItemProps) {
   return (
     <NavLink
-      className={({ isActive }) => cn(styles.navItem, isActive && styles.navItemActive)}
+      className={({ isActive }) =>
+        cn(
+          styles.navItem,
+          isActive && styles.navItemActive,
+          variant === 'admin' && styles.navItemAdmin,
+          isActive && variant === 'admin' && styles.navItemAdminActive,
+        )
+      }
       end={end}
       to={to}
     >

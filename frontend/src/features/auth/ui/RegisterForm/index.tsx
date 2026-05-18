@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useRegisterMutation } from '@/features/auth/api/authApi'
 import { setUser } from '@/features/auth/model/authSlice'
 import { type RegisterFormValues, registerSchema } from '@/features/auth/lib/schemas'
@@ -15,9 +15,11 @@ import { useAppDispatch } from '@/shared/store/hooks'
 import styles from '../AuthForm.module.css'
 
 export function RegisterForm() {
-  const { t } = useTranslation('auth')
+  const { t } = useTranslation(['auth', 'admin'])
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const inviteFromUrl = searchParams.get('invite') ?? ''
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [registerUser, { isLoading }] = useRegisterMutation()
   const {
@@ -30,6 +32,7 @@ export function RegisterForm() {
       email: '',
       display_name: '',
       password: '',
+      invite_token: inviteFromUrl,
     },
   })
 
@@ -41,6 +44,7 @@ export function RegisterForm() {
         email: values.email,
         password: values.password,
         display_name: values.display_name?.trim() ? values.display_name.trim() : null,
+        invite_token: values.invite_token?.trim() || null,
       }).unwrap()
       dispatch(setUser(user))
       void navigate('/tasks')
@@ -106,6 +110,22 @@ export function RegisterForm() {
             error={Boolean(errors.password)}
             aria-invalid={Boolean(errors.password)}
             {...register('password')}
+          />
+        </Field>
+
+        <Field
+          label={t('admin:invite_field_label')}
+          htmlFor="register-invite"
+          hint={t('admin:invite_field_hint')}
+          error={errors.invite_token?.message}
+        >
+          <Input
+            id="register-invite"
+            autoComplete="off"
+            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            error={Boolean(errors.invite_token)}
+            aria-invalid={Boolean(errors.invite_token)}
+            {...register('invite_token')}
           />
         </Field>
 

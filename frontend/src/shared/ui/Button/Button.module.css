@@ -46,7 +46,7 @@
 }
 
 .primary:hover:not(.disabled) {
-  background: #f5f5f5;
+  background: var(--accent-hover);
 }
 
 .secondary {
@@ -57,7 +57,7 @@
 
 .secondary:hover:not(.disabled) {
   border-color: var(--border-strong);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-tint-soft);
 }
 
 .ghost {
@@ -68,18 +68,18 @@
 
 .ghost:hover:not(.disabled) {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-tint);
 }
 
 .danger {
-  color: #fff4f2;
-  background: #d97757;
-  border-color: #d97757;
+  color: var(--danger-contrast);
+  background: var(--danger-strong);
+  border-color: var(--danger-strong);
 }
 
 .danger:hover:not(.disabled) {
-  background: #e08466;
-  border-color: #e08466;
+  background: var(--danger-strong-hover);
+  border-color: var(--danger-strong-hover);
 }
 
 .disabled {
@@ -87,8 +87,8 @@
 }
 
 .primary.disabled {
-  border-color: #2a2a2a;
-  background: #2a2a2a;
+  border-color: var(--surface-active);
+  background: var(--surface-active);
   color: var(--text-faint);
 }
 

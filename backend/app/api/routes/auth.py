@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.session import get_db_session
+from app.models.invite_token import InviteToken
 from app.models.user import User
 from app.schemas.user import ChangePasswordRequest, UserLogin, UserRead, UserRegister
 from app.services.auth import (
@@ -205,14 +206,35 @@ async def register(
             detail="Email already registered",
         )
 
+    # Registration is invite-only: a valid token is always required
+    if not payload.invite_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invite token required",
+        )
+    now = datetime.now(timezone.utc)
+    invite_record = await session.scalar(
+        select(InviteToken).where(
+            InviteToken.token == payload.invite_token,
+            InviteToken.used_by_id.is_(None),
+            (InviteToken.expires_at.is_(None)) | (InviteToken.expires_at > now),
+        )
+    )
+    if invite_record is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired invite token",
+        )
+
     user = User(
         email=payload.email,
         password_hash=await hash_password_async(payload.password),
         display_name=payload.display_name,
+        invite_token_id=invite_record.id,
     )
     session.add(user)
     try:
-        await session.commit()
+        await session.flush()
     except IntegrityError as exc:
         await session.rollback()
         raise HTTPException(
@@ -220,6 +242,9 @@ async def register(
             detail="Email already registered",
         ) from exc
 
+    invite_record.used_by_id = user.id
+
+    await session.commit()
     await session.refresh(user)
 
     set_session_cookie(response, create_jwt(user.id, user.token_version))

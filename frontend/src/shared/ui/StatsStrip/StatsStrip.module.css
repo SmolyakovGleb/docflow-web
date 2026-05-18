@@ -40,7 +40,7 @@
 }
 
 .numberBright {
-  color: #fff;
+  color: var(--accent);
 }
 
 .pulse {

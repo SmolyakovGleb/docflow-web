@@ -72,5 +72,5 @@
 }
 
 .detail .icon {
-  color: #d97757;
+  color: var(--danger-strong);
 }

@@ -4,7 +4,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--surface-tint-muted);
   color: var(--text-dim);
   font-family: var(--font-mono);
   font-size: 12px;

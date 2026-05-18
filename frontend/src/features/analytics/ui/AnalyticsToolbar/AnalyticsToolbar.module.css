@@ -59,7 +59,7 @@
   border-radius: 4px;
   padding: 4px 9px;
   background: transparent;
-  color: #888;
+  color: var(--text-ghost);
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -74,7 +74,7 @@
   border-radius: 4px;
   padding: 0 10px;
   background: transparent;
-  color: #888;
+  color: var(--text-ghost);
   font-family: inherit;
   font-size: 12px;
   font-weight: 500;
@@ -86,8 +86,8 @@
 }
 
 .reset:hover {
-  border-color: #3a3a3a;
-  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--control-border-active);
+  background: var(--surface-tint);
   color: var(--text);
 }
 

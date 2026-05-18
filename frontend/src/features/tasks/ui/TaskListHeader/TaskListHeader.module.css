@@ -38,7 +38,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 7px 11px;
-  background: #101010;
+  background: var(--control-bg);
   transition:
     border-color 120ms ease,
     background 120ms ease,
@@ -46,13 +46,13 @@
 }
 
 .search:hover {
-  border-color: #2e2e2e;
-  background: #121212;
+  border-color: var(--border-muted);
+  background: var(--control-bg-hover);
 }
 
 .search:focus-within {
-  border-color: #3a3a3a;
-  background: #131313;
+  border-color: var(--control-border-active);
+  background: var(--control-bg-active);
   box-shadow: var(--shadow-focus);
 }
 
@@ -105,7 +105,7 @@
 
 .triggerButton:hover {
   background: var(--accent);
-  color: #0f0f0f;
+  color: var(--text-on-accent);
 }
 
 .triggerButton:focus-visible {

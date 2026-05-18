@@ -1,13 +1,13 @@
 .overlay {
-  background: rgba(0, 0, 0, 0.72);
+  background: var(--overlay-scrim-strong);
   backdrop-filter: blur(6px);
 }
 
 .content {
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: #161616;
-  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
 }
 
 .header {
@@ -60,20 +60,20 @@
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--text-dim);
-  background: #222;
+  background: var(--surface-emphasis-strong);
   flex-shrink: 0;
 }
 
 .stepperNode[data-state='active'] {
   border-color: var(--accent);
   color: var(--text);
-  background: #202020;
+  background: var(--surface-emphasis-active);
 }
 
 .stepperNode[data-state='done'] {
   border-color: var(--border-strong);
   color: var(--text);
-  background: #242424;
+  background: var(--surface-active);
 }
 
 .stepperLine {
@@ -151,7 +151,7 @@
   padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.01);
+  background: var(--surface-tint-quiet);
 }
 
 .noteTitle {

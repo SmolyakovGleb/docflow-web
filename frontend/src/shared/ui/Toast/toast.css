@@ -1,8 +1,8 @@
 .docflow-toast {
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: #1a1a1a;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-floating);
   color: var(--text);
 }
 

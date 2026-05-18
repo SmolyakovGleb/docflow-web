@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid as uuid_module
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -18,6 +19,7 @@ class UserRegister(BaseModel):
         pattern=PASSWORD_REQUIRES_DIGIT_PATTERN,
     )
     display_name: str | None = None
+    invite_token: uuid_module.UUID | None = None
 
 
 class UserLogin(BaseModel):
@@ -35,6 +37,7 @@ class UserRead(BaseModel):
     display_name: str | None
     github_linked: bool
     github_login: str | None
+    is_admin: bool
 
 
 class ChangePasswordRequest(BaseModel):

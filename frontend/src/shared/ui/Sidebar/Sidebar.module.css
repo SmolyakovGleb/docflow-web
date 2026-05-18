@@ -22,7 +22,7 @@
 
 .navSectionLabel {
   padding: 0 10px 6px;
-  color: #333333;
+  color: var(--text-subtle);
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.1em;
@@ -50,11 +50,11 @@
 }
 
 .navItem:hover {
-  color: #aaaaaa;
+  color: var(--text-muted);
 }
 
 .navItemActive {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-tint-strong);
   color: var(--text);
 }
 
@@ -83,7 +83,7 @@
 }
 
 .userButton:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-tint-soft);
 }
 
 .userMeta {
@@ -120,10 +120,37 @@
 }
 
 .githubDot {
-  background: #4ade80;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+  background: var(--success-strong);
+  box-shadow: 0 0 6px var(--success-shadow);
 }
 
 .githubDotOff {
-  background: #444444;
+  background: var(--text-path-dim);
+}
+
+.navItemAdmin {
+  color: var(--indigo-dim, #818cf8);
+}
+
+.navItemAdmin:hover {
+  color: var(--indigo-muted, #a5b4fc);
+}
+
+.navItemAdminActive {
+  background: color-mix(in srgb, var(--indigo-dim, #818cf8) 12%, transparent);
+  color: var(--indigo-text, #a5b4fc);
+}
+
+.adminBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--indigo-dim, #818cf8) 15%, transparent);
+  color: var(--indigo-dim, #818cf8);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  flex-shrink: 0;
 }

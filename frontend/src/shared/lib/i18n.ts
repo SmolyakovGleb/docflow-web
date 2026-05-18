@@ -2,6 +2,7 @@ import i18n from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
 
+import adminRu from '@/locales/ru/admin.json'
 import authRu from '@/locales/ru/auth.json'
 import commonRu from '@/locales/ru/common.json'
 import errorsRu from '@/locales/ru/errors.json'
@@ -22,6 +23,7 @@ void i18n
   .init({
     resources: {
       ru: {
+        admin: adminRu,
         common: commonRu,
         nav: navRu,
         auth: authRu,
@@ -38,6 +40,7 @@ void i18n
       },
     },
     ns: [
+      'admin',
       'common',
       'nav',
       'auth',

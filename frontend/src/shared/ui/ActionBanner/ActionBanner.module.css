@@ -4,9 +4,9 @@
   gap: 10px;
   margin: 12px 14px 0;
   padding: 6px 14px;
-  border: 1px solid rgba(109, 184, 255, 0.25);
+  border: 1px solid var(--accent-border-soft);
   border-radius: 6px;
-  background: rgba(109, 184, 255, 0.08);
+  background: var(--accent-surface-soft);
   color: var(--text);
   font-size: 12.5px;
 }

@@ -120,7 +120,7 @@
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 11.5px;
-  background: #1c1c1c;
+  background: var(--surface-elevated);
   padding: 1px 6px;
   border-radius: 3px;
 }
@@ -211,7 +211,7 @@
 
 .tabConflictIcon {
   display: inline-flex;
-  color: #d97757;
+  color: var(--danger-strong);
 }
 
 .body {
@@ -246,7 +246,7 @@
 .conflictEditorToolbar,
 .columnFooter,
 .conflictEditorBar {
-  background: #121212;
+  background: var(--surface-panel);
 }
 
 .columnHeader {
@@ -279,8 +279,8 @@
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: #4ade80;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.5);
+  background: var(--success-strong);
+  box-shadow: 0 0 6px var(--success-shadow);
 }
 
 .diffLang {
@@ -333,8 +333,8 @@
 }
 
 .downloadButton:hover {
-  border-color: #3a3a3a;
-  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--control-border-active);
+  background: var(--surface-tint-soft);
 }
 
 .numberedPane {
@@ -371,7 +371,7 @@
 }
 
 .numberedLineChanged {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--surface-tint-selected);
 }
 
 .numberedLineHeading .lineContent {
@@ -380,19 +380,19 @@
 }
 
 .numberedLineChanged .lineNumber {
-  color: #4a4a4a;
+  color: var(--text-ghost-strong);
 }
 
 .lineNumber {
   padding-right: 14px;
-  color: #2e2e2e;
+  color: var(--border-muted);
   text-align: right;
   user-select: none;
   font-variant-numeric: tabular-nums;
 }
 
 .lineContent {
-  color: #c8c8c8;
+  color: var(--text-soft);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -407,7 +407,7 @@
 .editorGutter {
   overflow: hidden;
   padding: 16px 14px 16px 0;
-  color: #2e2e2e;
+  color: var(--border-muted);
   font-family: var(--font-mono);
   font-size: 12.5px;
   line-height: 1.7;
@@ -446,7 +446,7 @@
 }
 
 .footerSeparator {
-  color: #2a2a2a;
+  color: var(--border-divider);
 }
 
 .queuedState {
@@ -484,7 +484,7 @@
   padding: 4px 10px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: #1a1a1a;
+  background: var(--surface-emphasis);
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 11.5px;
@@ -499,10 +499,10 @@
   align-items: center;
   gap: 14px;
   padding: 8px 8px 8px 16px;
-  border: 1px solid #2e2e2e;
+  border: 1px solid var(--border-muted);
   border-radius: 8px;
-  background: rgba(26, 26, 26, 0.92);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  background: var(--surface-frosted);
+  box-shadow: var(--shadow-floating-strong);
   backdrop-filter: blur(12px);
 }
 
@@ -523,7 +523,7 @@
 
 .logsWrap {
   min-height: calc(100vh - 228px);
-  background: #0a0a0a;
+  background: var(--surface-code);
 }
 
 .logsToolbar {
@@ -622,7 +622,7 @@
 }
 
 .logLine {
-  color: #888;
+  color: var(--text-ghost);
   font-family: var(--font-mono);
   font-size: 12.5px;
   line-height: 1.75;
@@ -675,14 +675,14 @@
   height: 13px;
   place-items: center;
   border-radius: 999px;
-  background: #2a2a2a;
+  background: var(--border-divider);
   color: var(--text);
   font-size: 8px;
   font-weight: 600;
 }
 
 .conflictMetaAvatarMuted {
-  background: #1c1c1c;
+  background: var(--surface-elevated);
   color: var(--text-dim);
 }
 
@@ -702,19 +702,19 @@
 }
 
 .conflictLineDiff {
-  background: rgba(217, 119, 87, 0.06);
-  border-left: 2px solid #d97757;
+  background: var(--danger-surface-muted);
+  border-left: 2px solid var(--danger-strong);
   padding-left: 0;
 }
 
 .conflictLineDiff .lineNumber {
-  color: rgba(217, 119, 87, 0.5);
+  color: var(--danger-text-faint);
 }
 
 .conflictEditor {
   display: grid;
   border-top: 1px solid var(--border);
-  background: #0a0a0a;
+  background: var(--surface-code);
 }
 
 .conflictEditorToolbar {
@@ -748,8 +748,8 @@
 }
 
 .sourceOptionActive {
-  border-color: #3a3a3a;
-  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--control-border-active);
+  background: var(--surface-tint);
   color: var(--text);
 }
 
@@ -784,7 +784,7 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgba(0, 0, 0, 0.56);
+  background: var(--overlay-scrim-soft);
   backdrop-filter: blur(6px);
 }
 
@@ -800,7 +800,7 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface);
-  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.38);
+  box-shadow: var(--shadow-card-strong);
 }
 
 .dialogTitle {
@@ -822,7 +822,7 @@
   padding: 12px 14px;
   border: 1px solid var(--border-soft);
   border-radius: 10px;
-  background: rgba(12, 12, 12, 0.72);
+  background: var(--overlay-surface-tooltip);
   color: var(--text);
   font-family: var(--font-mono);
   font-size: 12px;

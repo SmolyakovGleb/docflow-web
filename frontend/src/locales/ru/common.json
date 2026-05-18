@@ -54,5 +54,7 @@
   "dev_loading_label": "Загрузка компонента",
   "dev_toast_title": "Изменения сохранены",
   "dev_toast_description": "Toast-обёртка готова к интеграции в следующих этапах.",
-  "view_on_github": "Открыть на GitHub"
+  "view_on_github": "Открыть на GitHub",
+  "no_data": "Нет данных",
+  "error": "Произошла ошибка"
 }

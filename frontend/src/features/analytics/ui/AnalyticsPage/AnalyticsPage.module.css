@@ -75,7 +75,7 @@
 }
 
 .metaSep {
-  color: #2e2e2e;
+  color: var(--border-muted);
 }
 
 .metaAccent {
@@ -174,7 +174,7 @@
 .errorBarFill {
   height: 100%;
   border-radius: 1px;
-  background: rgba(255, 109, 109, 0.65);
+  background: color-mix(in srgb, var(--status-failed) 65%, transparent);
 }
 
 .errorCount {
@@ -200,7 +200,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px 12px;
-  background: rgba(16, 16, 16, 0.98);
+  background: var(--overlay-surface-strong);
   box-shadow: var(--shadow-card);
   pointer-events: none;
 }

@@ -1,5 +1,7 @@
-import { BarChart3, BookOpen, FolderOpen, History, List, Settings } from 'lucide-react'
+import { BarChart3, BookOpen, FolderOpen, History, List, Settings, ShieldCheck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { selectUser } from '@/features/auth/model/authSlice'
+import { useAppSelector } from '@/shared/store/hooks'
 import styles from './Sidebar.module.css'
 import { NavItem } from './NavItem'
 import { UserBlock } from './UserBlock'
@@ -7,6 +9,7 @@ import { Wordmark } from './Wordmark'
 
 export function Sidebar() {
   const { t } = useTranslation('nav')
+  const user = useAppSelector(selectUser)
 
   return (
     <aside className={styles.sidebar}>
@@ -28,6 +31,16 @@ export function Sidebar() {
           <NavItem icon={BookOpen} label={t('dictionaries')} to="/dictionaries" />
           <NavItem icon={Settings} label={t('settings')} to="/settings" />
         </div>
+
+        {user?.is_admin && (
+          <>
+            <div className={styles.navDivider} />
+            <div className={styles.navGroup}>
+              <div className={styles.navSectionLabel}>{t('admin_section')}</div>
+              <NavItem icon={ShieldCheck} label={t('admin_panel')} to="/admin" variant="admin" />
+            </div>
+          </>
+        )}
       </nav>
 
       <div className={styles.sidebarFooter}>

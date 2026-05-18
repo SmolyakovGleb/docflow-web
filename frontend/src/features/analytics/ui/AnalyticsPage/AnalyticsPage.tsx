@@ -418,7 +418,7 @@ export function AnalyticsPage() {
             <div className={styles.chartBody}>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={tasksSeries} barCategoryGap={16} maxBarSize={28}>
-                  <CartesianGrid stroke="rgba(255, 255, 255, 0.04)" vertical={false} />
+                  <CartesianGrid stroke="var(--surface-tint)" vertical={false} />
                   <XAxis
                     dataKey="label"
                     axisLine={false}
@@ -432,7 +432,7 @@ export function AnalyticsPage() {
                     tick={{ fill: 'var(--text-dim)', fontSize: 11 }}
                   />
                   <Tooltip
-                    cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }}
+                    cursor={{ fill: 'var(--surface-tint-soft)' }}
                     wrapperStyle={{ pointerEvents: 'none', zIndex: 5 }}
                     content={
                       <CustomBarTooltip t={tAnalytics} taskStatusT={(key) => t(`tasks:${key}`)} />
@@ -471,7 +471,7 @@ export function AnalyticsPage() {
               <div className={styles.chartBody}>
                 <ResponsiveContainer width="100%" height={200}>
                   <LineChart data={successSeries} margin={{ right: 28 }}>
-                    <CartesianGrid stroke="rgba(255, 255, 255, 0.04)" vertical={false} />
+                    <CartesianGrid stroke="var(--surface-tint)" vertical={false} />
                     <XAxis
                       dataKey="label"
                       axisLine={false}

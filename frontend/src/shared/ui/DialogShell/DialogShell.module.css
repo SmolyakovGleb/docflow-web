@@ -2,7 +2,7 @@
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: rgba(0, 0, 0, 0.68);
+  background: var(--overlay-scrim);
   backdrop-filter: blur(4px);
 }
 

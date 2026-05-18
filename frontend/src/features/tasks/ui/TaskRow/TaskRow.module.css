@@ -31,10 +31,10 @@
   width: 14px;
   height: 14px;
   place-items: center;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--control-border-active);
   border-radius: 3px;
   background: transparent;
-  color: #0f0f0f;
+  color: var(--text-on-accent);
   opacity: 0;
   pointer-events: none;
   transition:
@@ -145,7 +145,7 @@
 .quickActionSingle {
   min-width: 0;
   padding: 0;
-  color: #888;
+  color: var(--text-ghost);
   font-family: inherit;
   font-size: 13px;
   text-align: right;
@@ -173,7 +173,7 @@
 .divider {
   width: 1px;
   height: 12px;
-  background: #333;
+  background: var(--border-strong);
 }
 
 .arrow {

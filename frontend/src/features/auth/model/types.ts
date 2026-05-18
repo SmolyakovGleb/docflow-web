@@ -4,6 +4,7 @@ export interface UserRead {
   display_name: string | null
   github_linked: boolean
   github_login: string | null
+  is_admin: boolean
 }
 
 export interface LoginPayload {
@@ -13,6 +14,7 @@ export interface LoginPayload {
 
 export interface RegisterPayload extends LoginPayload {
   display_name?: string | null
+  invite_token?: string | null
 }
 
 export interface ChangePasswordPayload {

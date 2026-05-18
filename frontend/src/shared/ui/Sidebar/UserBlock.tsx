@@ -36,6 +36,7 @@ export function UserBlock() {
           <span>{githubStatus}</span>
         </span>
       </span>
+      {user.is_admin && <span className={styles.adminBadge}>{t('admin_badge')}</span>}
     </button>
   )
 }

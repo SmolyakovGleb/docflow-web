@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, Index, Integer, func, text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -25,6 +25,10 @@ class User(Base):
     github_login: Mapped[str | None]
     github_access_token: Mapped[str | None]
     token_version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    invite_token_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("invite_tokens.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -1,12 +1,15 @@
 {
   "work_section": "РАБОТА",
   "config_section": "КОНФИГУРАЦИЯ",
+  "admin_section": "АДМИНИСТРИРОВАНИЕ",
   "tasks": "Задачи",
   "history": "История",
   "analytics": "Аналитика",
   "repositories": "Репозитории",
   "dictionaries": "Словари",
   "settings": "Настройки",
+  "admin_panel": "Панель",
   "github_connected": "GitHub подключён",
-  "github_disconnected": "GitHub не подключён"
+  "github_disconnected": "GitHub не подключён",
+  "admin_badge": "admin"
 }

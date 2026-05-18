@@ -1,13 +1,13 @@
 .overlay {
-  background: rgba(0, 0, 0, 0.72);
+  background: var(--overlay-scrim-strong);
   backdrop-filter: blur(6px);
 }
 
 .content {
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: #161616;
-  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
 }
 
 .header {

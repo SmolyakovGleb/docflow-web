@@ -1,7 +1,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.72);
+  background: var(--overlay-scrim-strong);
   backdrop-filter: blur(6px);
 }
 
@@ -14,7 +14,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
-  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7);
+  box-shadow: var(--shadow-dialog);
   transform: translate(-50%, -50%);
 }
 
