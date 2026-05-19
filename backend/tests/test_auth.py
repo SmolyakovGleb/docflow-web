@@ -2,14 +2,22 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.invite_token import InviteToken
 
-async def test_register_success(client):
+
+async def test_register_success(client, db_session: AsyncSession, test_user):
+    invite = InviteToken(created_by_id=test_user.id)
+    db_session.add(invite)
+    await db_session.commit()
+    await db_session.refresh(invite)
+
     response = await client.post(
         "/auth/register",
         json={
             "email": "new@example.com",
             "password": "strongpassword1",
             "display_name": "New User",
+            "invite_token": str(invite.token),
         },
     )
 

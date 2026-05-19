@@ -22,7 +22,7 @@ from app.services import bitrix_notify
 from app.services import task_list_events
 from app.services.auth import decrypt_github_access_token
 from app.services.github import GitHubClient
-from app.services.projects import get_project_or_404
+from app.services.projects import _get_user_team_id, get_project_or_404, get_project_visible_or_404
 
 ACTIVE_TASK_STATUSES = ("queued", "running")
 ALL_TASK_STATUSES = ("queued", "running", "done", "failed", "published", "conflict")
@@ -85,8 +85,14 @@ def ensure_github_access(user: User) -> str:
     return decrypt_github_access_token(user.github_access_token)
 
 
-def _base_visible_task_query(current_user: User):
-    return select(Task).where(Task.user_id == current_user.id)
+def _visibility_condition(user_id: UUID, team_id: UUID | None):
+    if team_id is not None:
+        return or_(Task.user_id == user_id, Task.team_id == team_id)
+    return Task.user_id == user_id
+
+
+def _base_visible_task_query(user_id: UUID, team_id: UUID | None = None):
+    return select(Task).where(_visibility_condition(user_id, team_id))
 
 
 async def get_task_or_404(
@@ -96,7 +102,8 @@ async def get_task_or_404(
     *,
     with_publications: bool = False,
 ) -> Task:
-    query = _base_visible_task_query(current_user).where(Task.id == task_id)
+    team_id = await _get_user_team_id(session, current_user.id)
+    query = _base_visible_task_query(current_user.id, team_id).where(Task.id == task_id)
     if with_publications:
         query = query.options(
             selectinload(Task.publications),
@@ -122,14 +129,17 @@ async def list_tasks(
     limit: int,
     offset: int,
 ) -> tuple[list[Task], int, dict[str, int]]:
-    if project_id is not None:
-        await get_project_or_404(session, project_id, current_user)
+    team_id = await _get_user_team_id(session, current_user.id)
 
-    query = _base_visible_task_query(current_user).options(selectinload(Task.project))
-    count_query = select(func.count()).select_from(Task).where(Task.user_id == current_user.id)
+    if project_id is not None:
+        await get_project_visible_or_404(session, project_id, current_user)
+
+    vis = _visibility_condition(current_user.id, team_id)
+    query = _base_visible_task_query(current_user.id, team_id).options(selectinload(Task.project))
+    count_query = select(func.count()).select_from(Task).where(vis)
     status_counts_query = (
         select(Task.status, func.count())
-        .where(Task.user_id == current_user.id)
+        .where(vis)
         .group_by(Task.status)
     )
 
@@ -270,13 +280,15 @@ async def _get_active_tasks_by_path(
         return {}
 
     query = select(Task).where(
-        Task.user_id == user_id,
         Task.file_path.in_(file_paths),
         Task.status.in_(ACTIVE_TASK_STATUSES),
     )
     if project_id is None:
-        query = query.where(Task.project_id.is_(None))
+        # No project: scope to this user's upload tasks
+        query = query.where(Task.project_id.is_(None), Task.user_id == user_id)
     else:
+        # Project-scoped: any active task for this project blocks creation,
+        # regardless of which team member created it
         query = query.where(Task.project_id == project_id)
 
     active_tasks = (await session.scalars(query)).all()
@@ -323,6 +335,7 @@ def _build_repo_task(
     return Task(
         user_id=user_id,
         project_id=project.id,
+        team_id=project.team_id,
         file_path=file_path,
         github_ref="manual",
         github_sha=None,
@@ -343,6 +356,7 @@ def _build_upload_task(
     return Task(
         user_id=user_id,
         project_id=project.id if project is not None else None,
+        team_id=project.team_id if project is not None else None,
         file_path=payload.target_path,
         github_ref="manual",
         github_sha=None,
@@ -359,8 +373,10 @@ async def create_manual_tasks_from_repo(
     current_user: User,
     payload: ManualTaskFromRepo,
 ) -> ManualTaskCreationResult:
-    project = await get_project_or_404(session, payload.project_id, current_user)
-    access_token = ensure_github_access(current_user)
+    project = await get_project_visible_or_404(session, payload.project_id, current_user)
+    # Use project owner's GitHub token — team members may not have GitHub linked
+    project_owner = current_user if project.user_id == current_user.id else await session.get(User, project.user_id)
+    access_token = ensure_github_access(project_owner)
     github_client = GitHubClient(access_token)
 
     unique_paths = list(dict.fromkeys(payload.file_paths))
@@ -411,7 +427,7 @@ async def create_manual_task_from_upload(
     payload: UploadTaskPayload,
 ) -> ManualTaskCreationResult:
     project = (
-        await get_project_or_404(session, payload.project_id, current_user)
+        await get_project_visible_or_404(session, payload.project_id, current_user)
         if payload.project_id is not None
         else None
     )

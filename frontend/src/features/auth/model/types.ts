@@ -4,7 +4,7 @@ export interface UserRead {
   display_name: string | null
   github_linked: boolean
   github_login: string | null
-  is_admin: boolean
+  is_admin?: boolean
 }
 
 export interface LoginPayload {

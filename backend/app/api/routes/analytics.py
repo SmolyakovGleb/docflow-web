@@ -5,13 +5,14 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
 from app.models.project import Project
 from app.models.task import Task
+from app.models.team import Team, TeamMember
 from app.models.user import User
 from app.schemas.analytics import AnalyticsResponse, TasksPerDayBucket, TopErrorStat
 from app.services.auth import get_current_user
@@ -47,6 +48,7 @@ async def get_analytics(
     session: DbSession,
     current_user: CurrentUser,
     project_id: UUID | None = None,
+    team_id: UUID | None = None,
     date_from: datetime | None = Query(default=None, alias="from"),
     date_to: datetime | None = Query(default=None, alias="to"),
 ) -> AnalyticsResponse:
@@ -56,9 +58,24 @@ async def get_analytics(
         project = await get_visible_project_or_404(session, project_id, visible_source_repos)
         project_id = project.id
 
+    if team_id is not None:
+        member_exists = await session.scalar(
+            select(TeamMember.id).where(
+                TeamMember.team_id == team_id,
+                TeamMember.user_id == current_user.id,
+            )
+        )
+        team = await session.get(Team, team_id)
+        is_owner = team is not None and team.owner_id == current_user.id
+        if not member_exists and not is_owner:
+            raise HTTPException(status_code=403, detail="Not a team member")
+
     def _q(*cols):
         q = select(*cols).join(Project, Task.project_id == Project.id)
-        q = apply_source_repo_filter(q, visible_source_repos)
+        if team_id is not None:
+            q = q.where(Project.team_id == team_id)
+        else:
+            q = apply_source_repo_filter(q, visible_source_repos)
         if project_id is not None:
             q = q.where(Task.project_id == project_id)
         if date_from is not None:

@@ -1,3 +1,18 @@
+/* Team badge */
+.teamBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 /* Row */
 .row:hover td {
   background: var(--surface-tint-muted);

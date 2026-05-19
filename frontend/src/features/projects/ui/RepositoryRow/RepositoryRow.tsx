@@ -14,6 +14,7 @@ import styles from './RepositoryRow.module.css'
 
 interface RepositoryRowProps {
   project: Project
+  isTeamOwner: boolean
 }
 
 function splitRepo(full: string): [string, string] {
@@ -22,8 +23,8 @@ function splitRepo(full: string): [string, string] {
   return [full.slice(0, slash + 1), full.slice(slash + 1)]
 }
 
-export function RepositoryRow({ project }: RepositoryRowProps) {
-  const { t } = useTranslation(['repositories', 'common'])
+export function RepositoryRow({ project, isTeamOwner }: RepositoryRowProps) {
+  const { t } = useTranslation(['repositories', 'common', 'teams'])
   const navigate = useNavigate()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteProject, { isLoading: isDeleting }] = useDeleteProjectMutation()
@@ -57,6 +58,9 @@ export function RepositoryRow({ project }: RepositoryRowProps) {
               <path d="M9.5 2v3h3" />
             </svg>
             {project.name}
+            {project.is_team_project && (
+              <span className={styles.teamBadge}>{t('teams:team_badge')}</span>
+            )}
           </Link>
         </td>
 
@@ -127,14 +131,18 @@ export function RepositoryRow({ project }: RepositoryRowProps) {
                   <Play size={13} className={styles.menuIcon} />
                   {t('repositories:trigger_translation')}
                 </DropdownMenu.Item>
-                <DropdownMenu.Separator className={styles.menuDivider} />
-                <DropdownMenu.Item
-                  className={styles.menuItemDanger}
-                  onSelect={() => setDeleteOpen(true)}
-                >
-                  <Trash2 size={13} className={styles.menuIcon} />
-                  {t('repositories:delete_project')}
-                </DropdownMenu.Item>
+                {(!project.is_team_project || isTeamOwner) && (
+                  <>
+                    <DropdownMenu.Separator className={styles.menuDivider} />
+                    <DropdownMenu.Item
+                      className={styles.menuItemDanger}
+                      onSelect={() => setDeleteOpen(true)}
+                    >
+                      <Trash2 size={13} className={styles.menuIcon} />
+                      {t('repositories:delete_project')}
+                    </DropdownMenu.Item>
+                  </>
+                )}
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>

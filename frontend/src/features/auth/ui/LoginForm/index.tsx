@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useLoginMutation } from '@/features/auth/api/authApi'
 import { setUser } from '@/features/auth/model/authSlice'
 import { type LoginFormValues, loginSchema } from '@/features/auth/lib/schemas'
@@ -18,6 +18,7 @@ export function LoginForm() {
   const { t } = useTranslation('auth')
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
+  const location = useLocation()
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [login, { isLoading }] = useLoginMutation()
   const {
@@ -31,6 +32,12 @@ export function LoginForm() {
       password: '',
     },
   })
+  const locationState = location.state as {
+    from?: { pathname: string; search?: string; hash?: string }
+  } | null
+  const redirectTo = locationState?.from?.pathname
+    ? `${locationState.from.pathname}${locationState.from.search ?? ''}${locationState.from.hash ?? ''}`
+    : '/tasks'
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null)
@@ -38,7 +45,7 @@ export function LoginForm() {
     try {
       const user = await login(values).unwrap()
       dispatch(setUser(user))
-      void navigate('/tasks')
+      void navigate(redirectTo, { replace: true })
     } catch (error) {
       setSubmitError(translateApiError(error))
     }

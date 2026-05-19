@@ -1,0 +1,236 @@
+.page {
+  display: grid;
+  gap: 24px;
+}
+
+.pageHeader {
+  display: grid;
+  gap: 6px;
+}
+
+.pageTitle {
+  margin: 0;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.pageDescription {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.skeletonColumn {
+  display: grid;
+  gap: 12px;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.overviewGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.overviewItem {
+  display: grid;
+  gap: 4px;
+}
+
+.overviewLabel {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.overviewValue {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.mutedText {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.renameRow {
+  display: grid;
+  gap: 12px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  padding: 10px 0 10px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 0;
+}
+
+.table td {
+  padding: 14px 0 14px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.memberCell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 240px;
+}
+
+.memberMeta {
+  display: grid;
+  gap: 2px;
+}
+
+.memberPrimary {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.memberSecondary {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.memberTertiary {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.roleBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-full);
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.roleBadgeOwner {
+  background: color-mix(in srgb, var(--indigo-dim, #818cf8) 14%, transparent);
+  color: var(--indigo-dim, #818cf8);
+}
+
+.roleBadgeMember {
+  background: color-mix(in srgb, var(--text-dim) 12%, transparent);
+  color: var(--text-dim);
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-full);
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.statusBadgeActive {
+  background: color-mix(in srgb, var(--success-strong) 14%, transparent);
+  color: var(--success-strong);
+}
+
+.statusBadgeUsed {
+  background: color-mix(in srgb, var(--text-dim) 12%, transparent);
+  color: var(--text-dim);
+}
+
+.statusBadgeExpired {
+  background: color-mix(in srgb, var(--status-failed) 12%, transparent);
+  color: var(--status-failed);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inviteToolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.daysInput {
+  width: 140px;
+}
+
+.linkCell {
+  min-width: 320px;
+}
+
+.emptyText {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.dangerActions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .table th,
+  .table td {
+    padding-left: 12px;
+  }
+
+  .pageTitle {
+    font-size: 22px;
+  }
+
+  .linkCell {
+    min-width: 260px;
+  }
+}

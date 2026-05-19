@@ -2,7 +2,8 @@
   "nav": {
     "profile": "Профиль",
     "github": "GitHub",
-    "notifications": "Уведомления"
+    "notifications": "Уведомления",
+    "team": "Команда"
   },
   "profile": {
     "title": "Профиль",

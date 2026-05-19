@@ -20,6 +20,9 @@ class Project(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    team_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("teams.id", ondelete="SET NULL"), nullable=True
+    )
     name: Mapped[str]
     source_repo: Mapped[str]
     source_branch: Mapped[str] = mapped_column(default="main", server_default="main")
@@ -32,6 +35,10 @@ class Project(Base):
 
     user: Mapped[User] = relationship(back_populates="projects")
     tasks: Mapped[list[Task]] = relationship(back_populates="project")
+
+    @property
+    def is_team_project(self) -> bool:
+        return self.team_id is not None
 
     @property
     def webhook_url(self) -> str:

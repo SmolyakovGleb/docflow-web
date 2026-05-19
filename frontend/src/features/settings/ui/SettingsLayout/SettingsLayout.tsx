@@ -27,6 +27,12 @@ export function SettingsLayout() {
         >
           {t('nav.notifications')}
         </NavLink>
+        <NavLink
+          to="/settings/team"
+          className={({ isActive }) => cn(styles.item, isActive && styles.itemActive)}
+        >
+          {t('nav.team')}
+        </NavLink>
       </nav>
       <main className={styles.main}>
         <Outlet />

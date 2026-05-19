@@ -91,3 +91,37 @@
 .submitError {
   margin-bottom: 18px;
 }
+
+.teamToggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.teamToggleCheckbox {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.teamToggleText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.teamToggleLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.teamToggleHint {
+  font-size: 12px;
+  color: var(--text-dim);
+}

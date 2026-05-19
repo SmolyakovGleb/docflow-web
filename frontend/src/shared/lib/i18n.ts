@@ -16,6 +16,7 @@ import onboardingRu from '@/locales/ru/onboarding.json'
 import repositoriesRu from '@/locales/ru/repositories.json'
 import settingsRu from '@/locales/ru/settings.json'
 import tasksRu from '@/locales/ru/tasks.json'
+import teamsRu from '@/locales/ru/teams.json'
 
 void i18n
   .use(LanguageDetector)
@@ -37,6 +38,7 @@ void i18n
         onboarding: onboardingRu,
         repositories: repositoriesRu,
         settings: settingsRu,
+        teams: teamsRu,
       },
     },
     ns: [
@@ -54,6 +56,7 @@ void i18n
       'onboarding',
       'repositories',
       'settings',
+      'teams',
     ],
     defaultNS: 'common',
     lng: 'ru',

@@ -24,6 +24,10 @@ class Task(Base):
         ForeignKey("projects.id", ondelete="SET NULL"),
         nullable=True,
     )
+    team_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("teams.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     file_path: Mapped[str]
     github_ref: Mapped[str]
     github_sha: Mapped[str | None]
@@ -56,6 +60,10 @@ class Task(Base):
     @property
     def project_name(self) -> str | None:
         return self.project.name if self.project is not None else None
+
+    @property
+    def is_team_task(self) -> bool:
+        return self.team_id is not None
 
     __table_args__ = (
         CheckConstraint(

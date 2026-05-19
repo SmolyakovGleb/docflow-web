@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useLogoutMutation } from '@/features/auth/api/authApi'
 import { clearUser, selectUser } from '@/features/auth/model/authSlice'
 import { useGetHealthQuery } from '@/shared/api/healthApi'
+import { translateApiError } from '@/shared/lib/errorMessages'
 import { useAppDispatch, useAppSelector } from '@/shared/store/hooks'
 import { Button } from '@/shared/ui/Button/Button'
 import { SectionCard } from '@/shared/ui/SectionCard/SectionCard'
+import { toast } from '@/shared/ui/Toast/toast'
 import { ChangePasswordForm } from './ChangePasswordForm'
 import styles from './ProfilePage.module.css'
 
@@ -22,8 +24,8 @@ export function ProfilePage() {
       await logout().unwrap()
       dispatch(clearUser())
       void navigate('/login', { replace: true })
-    } catch {
-      // Error handling will be added with global notifications.
+    } catch (error) {
+      toast.error(translateApiError(error))
     }
   }
 

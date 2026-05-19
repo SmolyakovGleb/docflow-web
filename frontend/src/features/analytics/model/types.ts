@@ -40,12 +40,14 @@ export interface AnalyticsFilters {
   projectId: string | null
   from: string | null
   to: string | null
+  teamId: string | null
 }
 
 export interface AnalyticsQueryParams extends Record<string, unknown> {
   project_id?: string
   from?: string
   to?: string
+  team_id?: string
 }
 
 export interface AnalyticsTasksPerDayPoint extends AnalyticsDailyBucket {

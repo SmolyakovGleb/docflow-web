@@ -15,6 +15,8 @@ import PageInDevelopmentPage from '@/pages/PageInDevelopmentPage'
 import { ProfilePage } from '@/features/settings/ui/ProfilePage/ProfilePage'
 import { GithubPage } from '@/features/settings/ui/GithubPage/GithubPage'
 import { NotificationsPage } from '@/features/settings/ui/NotificationsPage/NotificationsPage'
+import { JoinTeamPage } from '@/features/teams/ui/JoinTeamPage/JoinTeamPage'
+import { TeamSettingsPage } from '@/features/teams/ui/TeamSettingsPage/TeamSettingsPage'
 import { DevShowcasePage } from '@/pages/DevShowcasePage'
 import AdminPage from '@/pages/AdminPage'
 import i18n from '@/shared/lib/i18n'
@@ -102,6 +104,10 @@ const router = createBrowserRouter([
         element: <HistoryPage />,
       },
       {
+        path: '/teams/join',
+        element: <JoinTeamPage />,
+      },
+      {
         path: '/dictionaries',
         element: <Navigate to="/dictionaries/dictionary" replace />,
       },
@@ -117,6 +123,7 @@ const router = createBrowserRouter([
           { path: 'profile', element: <ProfilePage /> },
           { path: 'github', element: <GithubPage /> },
           { path: 'notifications', element: <NotificationsPage /> },
+          { path: 'team', element: <TeamSettingsPage /> },
         ],
       },
       {

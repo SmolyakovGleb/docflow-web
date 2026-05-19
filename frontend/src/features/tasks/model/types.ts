@@ -20,6 +20,7 @@ export interface TaskSummary {
   created_at: string
   completed_at: string | null
   updated_at: string
+  is_team_task: boolean
 }
 
 export interface TaskDetail extends TaskSummary {

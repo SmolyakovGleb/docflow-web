@@ -1,0 +1,64 @@
+.page {
+  display: grid;
+  gap: 24px;
+}
+
+.pageHeader {
+  display: grid;
+  gap: 6px;
+}
+
+.pageTitle {
+  margin: 0;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.pageDescription {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.loadingState {
+  display: grid;
+  gap: 14px;
+}
+
+.previewCard {
+  display: grid;
+  gap: 12px;
+}
+
+.previewItem {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.previewLabel {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.previewValue {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .pageTitle {
+    font-size: 22px;
+  }
+}

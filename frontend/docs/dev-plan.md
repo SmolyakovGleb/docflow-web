@@ -1284,3 +1284,290 @@ Read-only просмотр словарей.
 14.3  frontend: AdminRoute + sidebar + RegisterForm invite
 14.4  frontend: adminApi + AdminPage + три секции
 ```
+
+---
+
+## Этап 15 — Команда (совместная работа)
+
+Позволяет объединить нескольких пользователей в команду с общим пространством задач и репозиториев. У каждого пользователя не более одной команды плюс личное пространство. Задачи видны всем участникам. Репозитории создаёт только владелец.
+
+Реализация разбита на 5 подэтапов.
+
+### Ключевые решения
+
+| Вопрос                      | Решение                                                                    |
+| --------------------------- | -------------------------------------------------------------------------- |
+| Название                    | «Команда» (не «группа») — везде в UI и коде                                |
+| Ролей                       | Две: `owner` (владелец) и `member` (участник)                              |
+| Команд на пользователя      | Максимум одна + личное пространство                                        |
+| Видимость задач             | Все участники видят все задачи команды                                     |
+| Управление репозиториями    | Только владелец создаёт / редактирует / удаляет проекты                    |
+| GitHub-токен при запуске    | Всегда токен владельца проекта; участник может опционально подключить свой |
+| Авторство задачи из webhook | Задача принадлежит владельцу проекта                                       |
+| Приглашение                 | Владелец генерирует group-invite ссылку                                    |
+| Аналитика                   | Фильтр по команде — нужен                                                  |
+| Уведомления                 | Post-MVP                                                                   |
+| Существующие данные         | Все старые пользователи и проекты становятся личными (`team_id = NULL`)    |
+
+### Матрица прав
+
+| Действие                                    | Владелец | Участник |
+| ------------------------------------------- | :------: | :------: |
+| Видеть задачи команды                       |    ✓     |    ✓     |
+| Редактировать / публиковать задачи          |    ✓     |    ✓     |
+| Создавать / редактировать / удалять проекты |    ✓     |    —     |
+| Просматривать репозитории команды           |    ✓     |    ✓     |
+| Управлять участниками                       |    ✓     |    —     |
+| Генерировать invite-ссылки                  |    ✓     |    —     |
+| Переименовывать команду                     |    ✓     |    —     |
+| Удалять команду                             |    ✓     |    —     |
+| Покинуть команду                            |    —     |    ✓     |
+
+---
+
+### 15.1 — Backend: модели + миграции + Team API
+
+**Новые таблицы:**
+
+- `teams`: `id` UUID PK, `name` str(100) not null, `owner_id` FK users not null, `created_at` datetime
+- `team_members`: `id` UUID PK, `team_id` FK teams, `user_id` FK users, `joined_at` datetime; UNIQUE(team_id, user_id); FK `user_id` с `ON DELETE CASCADE`
+- `team_invites`: `id` UUID PK, `team_id` FK teams, `token` UUID unique not null, `created_by` FK users, `used_by_id` FK users nullable, `expires_at` datetime nullable, `created_at` datetime
+
+**Расширение существующих таблиц:**
+
+- `projects`: добавить `team_id` UUID nullable FK teams `ON DELETE SET NULL`; NULL = личный проект
+- `tasks`: добавить `team_id` UUID nullable FK teams `ON DELETE SET NULL`; заполняется из `project.team_id` при создании задачи
+
+**Миграция:**
+
+- Добавить новые таблицы в указанном порядке (сначала `teams`, затем `team_members`, затем `team_invites`)
+- Добавить колонки `team_id` в `projects` и `tasks` (nullable, дефолт NULL)
+- Существующие строки получают `team_id = NULL`
+
+**Схемы (`backend/app/schemas/team.py`):**
+
+```
+TeamCreate      { name: str }
+TeamRead        { id, name, owner_id, created_at, member_count: int }
+TeamMemberRead  { user_id, email, display_name, github_linked, joined_at, role: 'owner'|'member' }
+TeamDetail      { ...TeamRead, members: list[TeamMemberRead] }
+TeamInviteRead  { id, token, created_by_email, used_by_email|None, expires_at|None, created_at, status: 'active'|'used'|'expired' }
+TeamInviteCreate { expires_in_days: int | None = Field(None, ge=1) }
+TeamJoin        { token: UUID }
+```
+
+**API (`backend/app/api/routes/teams.py`, prefix `/teams`):**
+
+| Метод    | URL                           | Что делает                                                                                           | Кто может                                     |
+| -------- | ----------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `POST`   | `/teams`                      | Создать команду (текущий user становится владельцем и первым участником)                             | Любой аутентифицированный, у кого нет команды |
+| `GET`    | `/teams/me`                   | Информация о своей команде + участники                                                               | Любой участник команды                        |
+| `PATCH`  | `/teams/me`                   | Переименовать команду                                                                                | Только владелец                               |
+| `DELETE` | `/teams/me`                   | Удалить команду (каскадно удаляет team_members и team_invites; проекты/задачи получают team_id=NULL) | Только владелец                               |
+| `DELETE` | `/teams/me/members/{user_id}` | Исключить участника                                                                                  | Только владелец                               |
+| `POST`   | `/teams/me/leave`             | Покинуть команду                                                                                     | Только участник (не владелец)                 |
+| `GET`    | `/teams/me/invites`           | Список invite-токенов команды                                                                        | Только владелец                               |
+| `POST`   | `/teams/me/invites`           | Создать invite-токен                                                                                 | Только владелец                               |
+| `DELETE` | `/teams/me/invites/{id}`      | Отозвать invite-токен (expires_at = now)                                                             | Только владелец                               |
+| `POST`   | `/teams/join`                 | Вступить в команду по токену                                                                         | Любой аутентифицированный, у кого нет команды |
+
+**Dependency `require_no_team`** — 400 если пользователь уже состоит в команде (для `POST /teams` и `POST /teams/join`).
+
+**Dependency `require_team_member`** — проверяет что `current_user` состоит в `team_members` для запрошенной команды (через `teams/me` маршрут — достаточно проверить что у пользователя есть команда).
+
+**Dependency `require_team_owner`** — дополнительно проверяет `team.owner_id == current_user.id`.
+
+**Файлы:**
+
+- `backend/app/models/team.py` — модели `Team`, `TeamMember`, `TeamInvite`
+- `backend/app/schemas/team.py` — схемы выше
+- `backend/app/api/routes/teams.py` — маршруты выше
+- `backend/app/api/router.py` — подключить `teams_router`
+- `backend/migrations/versions/XXXX_add_teams.py`
+
+---
+
+### 15.2 — Backend: расширение Projects + Tasks для командного контекста
+
+**`GET /projects`** — возвращать проекты текущего пользователя (личные, `team_id=NULL`) + проекты его команды (если состоит). Добавить поле `team_id: UUID | None` и `is_team_project: bool` в `ProjectRead`.
+
+**`POST /projects`** — добавить опц. поле `team_id` в `ProjectCreate`. Если указан и пользователь состоит в этой команде → проект создаётся с `team_id`. Если `team_id` не `None` и пользователь не владелец — 403. Владелец проекта = тот, кто его создал (`user_id`).
+
+**`GET /tasks`** — если `team_id` пользователя не NULL, возвращать задачи где `task.user_id = current_user.id OR task.team_id = current_user.team_id`. Добавить поля `team_id` и `is_team_task: bool` в `TaskSummary`.
+
+**Webhook**: при создании задачи через webhook — `task.team_id = project.team_id`.
+
+**GitHub-токен при запуске задачи**: `pipeline_runner` берёт `github_token` владельца проекта (`project.user_id`), не запускающего пользователя. Это гарантирует что у pipeline всегда есть доступ к репозиторию.
+
+**Расширить `ProjectRead`:**
+
+```python
+team_id: UUID | None
+is_team_project: bool
+```
+
+**Расширить `TaskSummary`:**
+
+```python
+team_id: UUID | None
+is_team_task: bool
+```
+
+**Файлы:**
+
+- `backend/app/api/routes/projects.py` — изменить `get_projects`, `create_project`
+- `backend/app/api/routes/tasks.py` — изменить `get_tasks` (расширить WHERE)
+- `backend/app/schemas/project.py` — добавить поля в `ProjectRead`, `ProjectCreate`
+- `backend/app/schemas/task.py` — добавить поля в `TaskSummary`
+
+---
+
+### 15.3 — Frontend: страница управления командой в Settings
+
+**Новый раздел в Settings:** `/settings/team`
+
+**Если пользователь не состоит в команде:**
+
+- Форма создания: поле `name` (required) + кнопка «Создать команду»
+- После успеха — страница переходит в режим «команда создана»
+
+**Если пользователь — владелец команды:**
+
+- Название команды (редактируемое, inline-edit)
+- Список участников (таблица: avatar + email + display_name + дата + кнопка «Исключить» с ConfirmDialog)
+- Блок invite-токенов: список активных токенов с «Копировать ссылку», «Отозвать»; форма создания нового токена с полем `expires_in_days`
+- Опасная зона: «Удалить команду» (ConfirmDialog с вводом названия команды)
+
+**Если пользователь — участник (не владелец):**
+
+- Название команды (read-only), имя владельца
+- Список участников (read-only, без кнопок)
+- Кнопка «Покинуть команду» с ConfirmDialog
+
+**Файлы:**
+
+- `frontend/src/features/teams/api/teamsApi.ts` — RTK Query: `getMyTeam`, `createTeam`, `renameTeam`, `deleteTeam`, `removeMember`, `leaveTeam`, `getTeamInvites`, `createTeamInvite`, `revokeTeamInvite`
+- `frontend/src/features/teams/model/types.ts` — `TeamRead`, `TeamDetail`, `TeamMemberRead`, `TeamInviteRead`, `TeamInviteCreate`
+- `frontend/src/features/teams/ui/TeamSettingsPage/TeamSettingsPage.tsx`
+- `frontend/src/features/teams/ui/TeamSettingsPage/TeamSettingsPage.module.css`
+- `frontend/src/features/teams/ui/CreateTeamForm/CreateTeamForm.tsx`
+- `frontend/src/features/teams/ui/MembersTable/MembersTable.tsx`
+- `frontend/src/features/teams/ui/TeamInvitesSection/TeamInvitesSection.tsx`
+- `frontend/src/app/router/index.tsx` — добавить `/settings/team`
+- `frontend/src/features/settings/ui/SettingsLayout.tsx` — добавить пункт «Команда» в sub-nav
+- `frontend/src/locales/ru/teams.json`
+
+**Локализация (`teams.json`):**
+
+```json
+{
+  "section_title": "Команда",
+  "no_team_title": "Вы не состоите в команде",
+  "create_team": "Создать команду",
+  "team_name_label": "Название команды",
+  "members_section": "Участники",
+  "invites_section": "Приглашения",
+  "invite_copy": "Копировать ссылку",
+  "invite_revoke": "Отозвать",
+  "invite_create": "Создать приглашение",
+  "invite_expires_days": "Срок действия (дней)",
+  "invite_expires_never": "Бессрочно",
+  "remove_member": "Исключить",
+  "remove_member_confirm": "Исключить участника {{email}} из команды?",
+  "leave_team": "Покинуть команду",
+  "leave_team_confirm": "Покинуть команду «{{name}}»? Ваши личные задачи и репозитории сохранятся.",
+  "delete_team": "Удалить команду",
+  "delete_team_confirm": "Удалить команду «{{name}}»? Все участники потеряют доступ. Репозитории и задачи станут личными.",
+  "owner_badge": "Владелец",
+  "member_badge": "Участник",
+  "invite_copied": "Ссылка скопирована"
+}
+```
+
+---
+
+### 15.4 — Frontend: страница вступления в команду
+
+**Маршрут:** `/teams/join?token=XXX`
+
+Доступен только для авторизованных пользователей без команды.
+
+**Сценарии:**
+
+- **Токен валидный, пользователь без команды** — показать карточку с названием команды и кнопкой «Вступить». По клику → `POST /teams/join { token }` → редирект `/settings/team`
+- **Токен невалидный / истёк / использован** — показать ошибку «Ссылка недействительна или устарела» с кнопкой «На главную»
+- **Пользователь уже состоит в команде** — показать предупреждение «Вы уже состоите в команде «X»» с кнопкой «Перейти к команде»
+- **Пользователь не авторизован** — редирект `/login?redirect=/teams/join?token=XXX`
+
+**Файлы:**
+
+- `frontend/src/features/teams/api/teamsApi.ts` — добавить `joinTeam`, `getTeamByInviteToken` (preview для отображения имени команды)
+- `frontend/src/features/teams/ui/JoinTeamPage/JoinTeamPage.tsx`
+- `frontend/src/features/teams/ui/JoinTeamPage/JoinTeamPage.module.css`
+- `frontend/src/app/router/index.tsx` — добавить `/teams/join` (protected route)
+- `frontend/src/locales/ru/teams.json` — добавить ключи `join_title`, `join_cta`, `join_invalid_token`, `join_already_member`
+
+**Бэкенд prerequisite:**
+
+- `GET /teams/invite-preview?token=XXX` — публичный (не требует авторизации) эндпоинт, возвращает `{ team_name, member_count }` или 404 если токен недействителен. Нужен чтобы страница вступления могла показать название команды до клика
+
+---
+
+### 15.5 — Frontend: UI-метки, фильтр команды, командная аналитика
+
+**Репозитории (`/repositories`):**
+
+- Новая колонка «Команда» или badge «Команда» в строке RepositoryRow при `project.is_team_project === true`
+- Фильтр «Показать: Личные / Команда / Все» (select или три кнопки-переключателя)
+- При `is_team_project` скрыть кнопки редактирования/удаления для участников (оставить только владельцу)
+
+**Задачи (`/tasks`):**
+
+- Badge «Команда» в TaskRow при `task.is_team_task === true`
+- Фильтр по источнику: «Все / Личные / Команда» в TaskListToolbar
+
+**Sidebar:**
+
+- Под UserBlock добавить строку с иконкой `Users` и названием команды (если пользователь состоит). Клик ведёт на `/settings/team`
+
+**Аналитика (`/analytics`):**
+
+- Добавить фильтр «Пространство: Личное / Команда / Всё» в AnalyticsToolbar
+- При выборе «Команда» — передавать `team_id` в запрос `GET /analytics?team_id=...`
+- Бэкенд добавляет `team_id` как необязательный query param к `GET /analytics` — фильтрует задачи по `team_id`
+
+**Файлы:**
+
+- `frontend/src/features/projects/ui/RepositoriesPage/RepositoriesPage.tsx` — фильтр + колонка
+- `frontend/src/features/projects/ui/RepositoryRow/RepositoryRow.tsx` — badge, скрыть кнопки
+- `frontend/src/features/tasks/ui/TaskListToolbar/TaskListToolbar.tsx` — фильтр Личные/Команда
+- `frontend/src/features/tasks/ui/TaskRow/TaskRow.tsx` — badge «Команда»
+- `frontend/src/shared/ui/Sidebar/Sidebar.tsx` — строка с названием команды
+- `frontend/src/features/analytics/ui/AnalyticsToolbar/AnalyticsToolbar.tsx` — фильтр по команде
+- `frontend/src/features/analytics/api/analyticsApi.ts` — добавить `team_id` в query params
+- `frontend/src/locales/ru/teams.json` — добавить `team_badge`, `filter_personal`, `filter_team`, `filter_all`
+
+**Бэкенд prerequisite для аналитики:**
+
+- `GET /analytics` принимает опц. query param `team_id: UUID | None`; если указан — фильтрует задачи только по этой команде (доступ проверяется: пользователь должен состоять в команде)
+
+---
+
+### Порядок подэтапов 15
+
+```
+15.1  backend: модели Team/TeamMember/TeamInvite + миграции + API /teams/*
+15.2  backend: расширить Projects + Tasks (team_id, is_team_project/task, токен владельца)
+15.3  frontend: Settings/Team — создание команды, участники, invite-ссылки
+15.4  frontend: /teams/join — страница вступления
+15.5  frontend: UI-метки в Repos/Tasks/Sidebar + фильтр командной аналитики
+```
+
+### Изменения в бэкенде по подэтапам 15
+
+| Подэтап | Изменения в API/моделях                                                                                                                                                                                                                                                                                 |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 15.1    | Новые таблицы `teams`, `team_members`, `team_invites` + миграция + все `/teams/*` endpoints                                                                                                                                                                                                             |
+| 15.2    | Колонки `team_id` в `projects` и `tasks` + миграция. Изменить `GET /projects`, `POST /projects`, `GET /tasks` (добавить командные записи в выборку). Добавить `team_id`, `is_team_project` в `ProjectRead`, `is_team_task` в `TaskSummary`. GitHub-токен в pipeline_runner берётся от владельца проекта |
+| 15.4    | Добавить `GET /teams/invite-preview?token=XXX` (публичный)                                                                                                                                                                                                                                              |
+| 15.5    | Добавить `team_id` query param в `GET /analytics`                                                                                                                                                                                                                                                       |

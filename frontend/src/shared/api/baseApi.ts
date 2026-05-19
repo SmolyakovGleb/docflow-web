@@ -9,6 +9,8 @@ export const baseApi = createApi({
     'Task',
     'TaskLog',
     'Project',
+    'Team',
+    'TeamInvite',
     'History',
     'Dictionary',
     'NotificationChannel',

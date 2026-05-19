@@ -31,7 +31,7 @@ export function TaskRow({
   onRemove,
   onPublish,
 }: TaskRowProps) {
-  const { t } = useTranslation('tasks')
+  const { t } = useTranslation(['tasks', 'teams'])
   const lastSlash = task.file_path.lastIndexOf('/')
   const dir = lastSlash >= 0 ? task.file_path.slice(0, lastSlash + 1) : ''
   const file = lastSlash >= 0 ? task.file_path.slice(lastSlash + 1) : task.file_path
@@ -101,7 +101,10 @@ export function TaskRow({
         </span>
       </div>
 
-      <div className={styles.project}>{task.project_name ?? t('project_manual')}</div>
+      <div className={styles.project}>
+        <span>{task.project_name ?? t('project_manual')}</span>
+        {task.is_team_task && <span className={styles.teamBadge}>{t('teams:team_badge')}</span>}
+      </div>
 
       <div className={styles.statusCell}>
         {task.status === 'running' ? (

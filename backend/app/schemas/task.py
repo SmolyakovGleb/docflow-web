@@ -28,6 +28,8 @@ class TaskSummary(BaseModel):
     created_at: datetime
     completed_at: datetime | None = Field(None, description="Completion time for done/failed tasks")
     updated_at: datetime
+    team_id: UUID | None = Field(None, description="Team ID; null for personal tasks")
+    is_team_task: bool = Field(False, description="True if task belongs to a team")
 
 
 class TaskDetail(TaskSummary):

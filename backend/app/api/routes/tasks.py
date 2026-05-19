@@ -25,7 +25,7 @@ from app.schemas.task import (
 from app.services import pipeline_runner
 from app.services import task_list_events
 from app.services.auth import get_current_user
-from app.services.projects import get_project_or_404
+from app.services.projects import _get_user_team_id, get_project_visible_or_404
 from app.services.tasks import (
     PublishConflictError,
     SourceFileChangedError,
@@ -142,10 +142,13 @@ async def task_list_events_stream(
     search: str | None = Query(default=None, min_length=1, max_length=200),
 ) -> StreamingResponse:
     if project_id is not None:
-        await get_project_or_404(session, project_id, current_user)
+        await get_project_visible_or_404(session, project_id, current_user)
+
+    team_id = await _get_user_team_id(session, current_user.id)
 
     subscription = task_list_events.register_subscription(
         user_id=current_user.id,
+        team_id=team_id,
         status=status,
         project_id=project_id,
         search=search,
@@ -257,6 +260,7 @@ async def create_manual_tasks(
     current_user: CurrentUser,
 ) -> TaskCreateResponse:
     content_type = request.headers.get("content-type", "")
+    logger.info("create_manual_tasks called", extra={"content_type": content_type, "user_id": str(current_user.id)})
 
     if content_type.startswith("application/json"):
         payload = parse_manual_repo_payload(await request.json())

@@ -6,8 +6,8 @@ describe('translateBackendError', () => {
     expect(translateBackendError('Email already registered')).toBe('Email уже зарегистрирован')
   })
 
-  it('falls back to generic message for unknown backend error', () => {
-    expect(translateBackendError('Unexpected backend error')).toBe('Что-то пошло не так')
+  it('returns raw message for unknown backend error', () => {
+    expect(translateBackendError('Unexpected backend error')).toBe('Unexpected backend error')
   })
 
   it('translates rate limited api errors by status code', () => {

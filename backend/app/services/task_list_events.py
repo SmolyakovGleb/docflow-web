@@ -17,6 +17,7 @@ MAX_TASK_LIST_EVENT_SUBSCRIPTIONS = 500
 class TaskListSubscription:
     id: UUID
     user_id: UUID
+    team_id: UUID | None
     status: str | None
     project_id: UUID | None
     search: str | None
@@ -37,6 +38,7 @@ def _evict_oldest_subscriptions_if_needed() -> None:
 def register_subscription(
     *,
     user_id: UUID,
+    team_id: UUID | None,
     status: str | None,
     project_id: UUID | None,
     search: str | None,
@@ -45,6 +47,7 @@ def register_subscription(
     subscription = TaskListSubscription(
         id=uuid.uuid4(),
         user_id=user_id,
+        team_id=team_id,
         status=status,
         project_id=project_id,
         search=search.strip().lower() if search else None,
@@ -65,7 +68,13 @@ def _task_matches_scope(
     *,
     status_override: str | None,
 ) -> bool:
-    if task.user_id != subscription.user_id:
+    belongs_to_user = task.user_id == subscription.user_id
+    belongs_to_team = (
+        subscription.team_id is not None
+        and task.team_id is not None
+        and task.team_id == subscription.team_id
+    )
+    if not belongs_to_user and not belongs_to_team:
         return False
 
     if subscription.project_id is not None and task.project_id != subscription.project_id:

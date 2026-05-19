@@ -7,6 +7,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useGetMeQuery } from '@/features/auth/api/authApi'
 import { redirectToGithubConnect } from '@/features/auth/lib/redirectToGithubConnect'
 import { markOnboardingCompleted } from '@/features/onboarding'
+import { useGetMyTeamQuery } from '@/features/teams/api/teamsApi'
 import { translateApiError } from '@/shared/lib/errorMessages'
 import { Breadcrumbs } from '@/shared/ui/Breadcrumbs/Breadcrumbs'
 import { Button } from '@/shared/ui/Button/Button'
@@ -28,7 +29,7 @@ interface CreatedProjectSecret {
 }
 
 export function NewRepositoryPage() {
-  const { t } = useTranslation('repositories')
+  const { t } = useTranslation(['repositories', 'teams'])
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const {
@@ -40,11 +41,14 @@ export function NewRepositoryPage() {
     refetchOnFocus: true,
     refetchOnReconnect: true,
   })
+  const { data: myTeam } = useGetMyTeamQuery(undefined, { skip: !me })
+  const isTeamOwner = Boolean(myTeam && me && myTeam.owner_id === me.id)
   const githubLinked = Boolean(me?.github_linked)
   const isOnboardingFlow = searchParams.get('onboarding') === '1'
   const isGithubStatePending = isMeLoading || (isMeFetching && !me)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [secretModal, setSecretModal] = useState<CreatedProjectSecret | null>(null)
+  const [assignToTeam, setAssignToTeam] = useState(false)
   const { data: repos = [], isLoading: isReposLoading } = useGetGithubReposQuery(undefined, {
     skip: !githubLinked,
   })
@@ -70,7 +74,10 @@ export function NewRepositoryPage() {
     setSubmitError(null)
 
     try {
-      const response = await createProject(values).unwrap()
+      const response = await createProject({
+        ...values,
+        team_id: isTeamOwner && assignToTeam && myTeam ? myTeam.id : null,
+      }).unwrap()
       setSecretModal({
         webhook_secret: response.webhook_secret,
         webhook_url: response.webhook_url,
@@ -259,6 +266,26 @@ export function NewRepositoryPage() {
                 />
               </Field>
             </SectionCard>
+
+            {/* Team assignment — visible only to team owner */}
+            {isTeamOwner && myTeam && (
+              <SectionCard label={t('teams:team_badge')}>
+                <label className={styles.teamToggle}>
+                  <input
+                    type="checkbox"
+                    className={styles.teamToggleCheckbox}
+                    checked={assignToTeam}
+                    onChange={(e) => setAssignToTeam(e.target.checked)}
+                  />
+                  <span className={styles.teamToggleText}>
+                    <span className={styles.teamToggleLabel}>
+                      {t('teams:assign_to_team_label', { name: myTeam.name })}
+                    </span>
+                    <span className={styles.teamToggleHint}>{t('teams:assign_to_team_hint')}</span>
+                  </span>
+                </label>
+              </SectionCard>
+            )}
 
             <div className={styles.footer}>
               <Button

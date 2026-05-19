@@ -32,6 +32,9 @@ function buildNormalizedParams(filters: AnalyticsFilters) {
   if (filters.to) {
     params.set('to', filters.to)
   }
+  if (filters.teamId) {
+    params.set('team_id', filters.teamId)
+  }
 
   return params
 }
@@ -44,6 +47,7 @@ export function useAnalyticsFilters() {
       projectId: getValidUuid(searchParams.get('project_id')),
       from: getValidDate(searchParams.get('from')),
       to: getValidDate(searchParams.get('to')),
+      teamId: getValidUuid(searchParams.get('team_id')),
     }),
     [searchParams],
   )
@@ -80,6 +84,14 @@ export function useAnalyticsFilters() {
           params.set('to', next.to)
         } else {
           params.delete('to')
+        }
+      }
+
+      if ('teamId' in next) {
+        if (next.teamId) {
+          params.set('team_id', next.teamId)
+        } else {
+          params.delete('team_id')
         }
       }
 

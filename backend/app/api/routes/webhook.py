@@ -244,6 +244,7 @@ async def github_webhook(
         Task(
             user_id=owner.id,
             project_id=project.id,
+            team_id=project.team_id,
             file_path=file_path,
             github_ref=str(payload["ref"]),
             github_sha=payload.get("after"),

@@ -397,11 +397,14 @@ function TaskDetailContent({
   } as const
 
   async function refreshTaskAndOpenConflictIfNeeded() {
-    const refreshed = await fetchTask(task.id).unwrap()
-    if (refreshed.status === 'conflict') {
-      onTabChange('conflict')
+    try {
+      const refreshed = await fetchTask(task.id).unwrap()
+      if (refreshed.status === 'conflict') {
+        onTabChange('conflict')
+      }
+    } catch {
+      // Refetch failed after conflict — dialog remains open so user can act manually
     }
-    // fetchTask updates the shared RTK Query cache — no second request needed.
   }
 
   async function handleSaveDiff() {

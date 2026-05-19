@@ -44,6 +44,51 @@ describe('LoginForm', () => {
     })
   })
 
+  it('redirects back to protected route after login', async () => {
+    server.use(
+      http.post('/api/auth/login', async ({ request }) => {
+        const body = (await request.json()) as { email: string }
+
+        return HttpResponse.json({
+          id: '00000000-0000-0000-0000-000000000001',
+          email: body.email,
+          display_name: 'Anna Kuznetsova',
+          github_linked: false,
+          github_login: null,
+        })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderWithProviders(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/login',
+            state: {
+              from: {
+                pathname: '/teams/join',
+                search: '?token=11111111-1111-1111-1111-111111111111',
+                hash: '',
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/login" element={<LoginForm />} />
+          <Route path="/teams/join" element={<div>join team page</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await user.type(screen.getByLabelText(/email/i, { selector: 'input' }), 'anna@company.ru')
+    await user.type(screen.getByLabelText(/Пароль/i, { selector: 'input' }), 'password1')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    expect(await screen.findByText('join team page')).toBeInTheDocument()
+  })
+
   it('shows translated invalid credentials error', async () => {
     server.use(
       http.post('/api/auth/login', () =>

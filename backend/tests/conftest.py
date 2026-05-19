@@ -24,11 +24,14 @@ async def engine():
     """Создаёт все таблицы один раз на сессию, удаляет после всех тестов."""
     engine = create_async_engine(TEST_DATABASE_URL, pool_pre_ping=True, poolclass=NullPool)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        # DROP SCHEMA CASCADE handles circular FK dependencies between tables
+        await conn.execute(text("DROP SCHEMA public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
         await conn.run_sync(Base.metadata.create_all)
     yield engine
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("DROP SCHEMA public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
     await engine.dispose()
 
 

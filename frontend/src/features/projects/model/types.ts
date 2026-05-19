@@ -9,6 +9,8 @@ export interface Project {
   webhook_url: string
   version: number
   created_at: string
+  team_id: string | null
+  is_team_project: boolean
 }
 
 export interface ProjectCreatePayload {
@@ -18,6 +20,7 @@ export interface ProjectCreatePayload {
   target_repo: string
   target_branch: string
   exclude_patterns: string[]
+  team_id?: string | null
 }
 
 export interface ProjectCreateResponse extends Project {

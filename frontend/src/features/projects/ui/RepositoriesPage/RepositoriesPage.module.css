@@ -25,6 +25,37 @@
   font-size: 13.5px;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.sourceFilter {
+  display: flex;
+  gap: 2px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.sourceChip {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.sourceChipActive {
+  background: var(--surface-tint-strong);
+  color: var(--text);
+}
+
 .tableWrap {
   overflow: hidden;
   border: 1px solid var(--border);

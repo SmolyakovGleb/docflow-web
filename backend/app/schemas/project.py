@@ -24,6 +24,7 @@ class ProjectCreate(BaseModel):
     target_repo: str
     target_branch: str = "main"
     exclude_patterns: list[str] = Field(default_factory=list)
+    team_id: UUID | None = None
 
     @field_validator("source_repo", "target_repo")
     @classmethod
@@ -44,6 +45,8 @@ class ProjectRead(BaseModel):
     webhook_url: str
     version: int
     created_at: datetime
+    team_id: UUID | None
+    is_team_project: bool
 
 
 class ProjectCreateResponse(ProjectRead):

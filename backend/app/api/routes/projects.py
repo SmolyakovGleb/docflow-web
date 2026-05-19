@@ -6,11 +6,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
 from app.models.project import Project
+from app.models.team import Team, TeamMember
 from app.models.user import User
 from app.schemas.project import (
     ProjectCreate,
@@ -26,7 +27,11 @@ from app.services.auth import (
     get_current_user,
 )
 from app.services.github import GitHubClient
-from app.services.projects import ensure_github_linked, get_project_or_404
+from app.services.projects import (
+    ensure_github_linked,
+    get_project_or_404,
+    get_project_visible_or_404,
+)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
@@ -55,14 +60,16 @@ def _validate_tree_path(path: str) -> str:
     "",
     response_model=list[ProjectRead],
     summary="Список проектов",
-    description="Возвращает все проекты текущего пользователя, отсортированные по дате создания (новые первые). `webhook_secret` в ответе отсутствует.",
+    description="Возвращает проекты текущего пользователя + проекты его команды (если состоит). `webhook_secret` в ответе отсутствует.",
 )
 async def get_projects(session: DbSession, current_user: CurrentUser) -> list[Project]:
-    result = await session.scalars(
-        select(Project)
-        .where(Project.user_id == current_user.id)
-        .order_by(Project.created_at.desc())
-    )
+    membership = await session.scalar(select(TeamMember).where(TeamMember.user_id == current_user.id))
+    if membership is not None:
+        cond = or_(Project.user_id == current_user.id, Project.team_id == membership.team_id)
+    else:
+        cond = Project.user_id == current_user.id
+
+    result = await session.scalars(select(Project).where(cond).order_by(Project.created_at.desc()))
     return list(result.all())
 
 
@@ -88,11 +95,20 @@ async def create_project(
     session: DbSession,
     current_user: CurrentUser,
 ) -> ProjectCreateResponse:
+    if payload.team_id is not None:
+        team = await session.get(Team, payload.team_id)
+        if team is None or team.owner_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the team owner can create team projects",
+            )
+
     ensure_github_linked(current_user)
 
     plaintext_secret = secrets.token_hex(32)
     project = Project(
         user_id=current_user.id,
+        team_id=payload.team_id,
         name=payload.name,
         source_repo=payload.source_repo,
         source_branch=payload.source_branch,
@@ -128,10 +144,12 @@ async def get_project_files(
     current_user: CurrentUser,
     path: str = Query(default=""),
 ) -> ProjectFilesResponse:
-    project = await get_project_or_404(session, project_id, current_user)
-    ensure_github_linked(current_user)
+    project = await get_project_visible_or_404(session, project_id, current_user)
     normalized_path = _validate_tree_path(path)
-    github_client = GitHubClient(decrypt_github_access_token(current_user.github_access_token))
+    # Use project owner's GitHub token — team members may not have GitHub linked
+    project_owner = current_user if project.user_id == current_user.id else await session.get(User, project.user_id)
+    ensure_github_linked(project_owner)
+    github_client = GitHubClient(decrypt_github_access_token(project_owner.github_access_token))
     items = await github_client.get_repo_tree(
         project.source_repo,
         project.source_branch,
@@ -150,7 +168,7 @@ async def get_project_files(
     },
 )
 async def get_project(project_id: UUID, session: DbSession, current_user: CurrentUser) -> Project:
-    return await get_project_or_404(session, project_id, current_user)
+    return await get_project_visible_or_404(session, project_id, current_user)
 
 
 @router.patch(

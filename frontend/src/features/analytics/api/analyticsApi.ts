@@ -21,6 +21,7 @@ export const analyticsApi = baseApi.injectEndpoints({
         project_id: queryArgs?.project_id ?? null,
         from: queryArgs?.from ?? null,
         to: queryArgs?.to ?? null,
+        team_id: queryArgs?.team_id ?? null,
       }),
       providesTags: ['Analytics'],
     }),
