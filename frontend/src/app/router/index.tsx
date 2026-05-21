@@ -1,29 +1,52 @@
+import { lazy, Suspense } from 'react'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
-import LoginPage from '@/pages/LoginPage'
-import RegisterPage from '@/pages/RegisterPage'
-import RepositoriesPage from '@/pages/RepositoriesPage'
-import NewRepositoryPage from '@/pages/NewRepositoryPage'
-import RepositoryDetailPage from '@/pages/RepositoryDetailPage'
-import TaskDetailPage from '@/pages/TaskDetailPage'
-import TaskListPage from '@/pages/TaskListPage'
-import AnalyticsPage from '@/pages/AnalyticsPage'
-import DictionariesPage from '@/pages/DictionariesPage'
-import HistoryPage from '@/pages/HistoryPage'
-import SettingsPage from '@/pages/SettingsPage'
-import NotFoundPage from '@/pages/NotFoundPage'
-import PageInDevelopmentPage from '@/pages/PageInDevelopmentPage'
-import { ProfilePage } from '@/features/settings/ui/ProfilePage/ProfilePage'
-import { GithubPage } from '@/features/settings/ui/GithubPage/GithubPage'
-import { NotificationsPage } from '@/features/settings/ui/NotificationsPage/NotificationsPage'
-import { JoinTeamPage } from '@/features/teams/ui/JoinTeamPage/JoinTeamPage'
-import { TeamSettingsPage } from '@/features/teams/ui/TeamSettingsPage/TeamSettingsPage'
-import { DevShowcasePage } from '@/pages/DevShowcasePage'
-import AdminPage from '@/pages/AdminPage'
 import i18n from '@/shared/lib/i18n'
 import { AppLayout } from '../layouts/AppLayout'
 import { AdminRoute } from '../auth/AdminRoute'
 import { ProtectedRoute } from '../auth/ProtectedRoute'
 import { PublicRoute } from '../auth/PublicRoute'
+import { Splash } from '../Splash'
+
+const LoginPage = lazy(() => import('@/pages/LoginPage'))
+const RegisterPage = lazy(() => import('@/pages/RegisterPage'))
+const RepositoriesPage = lazy(() => import('@/pages/RepositoriesPage'))
+const NewRepositoryPage = lazy(() => import('@/pages/NewRepositoryPage'))
+const RepositoryDetailPage = lazy(() => import('@/pages/RepositoryDetailPage'))
+const TaskDetailPage = lazy(() => import('@/pages/TaskDetailPage'))
+const TaskListPage = lazy(() => import('@/pages/TaskListPage'))
+const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
+const DictionariesPage = lazy(() => import('@/pages/DictionariesPage'))
+const HistoryPage = lazy(() => import('@/pages/HistoryPage'))
+const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
+const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
+const PageInDevelopmentPage = lazy(() => import('@/pages/PageInDevelopmentPage'))
+const AdminPage = lazy(() => import('@/pages/AdminPage'))
+const DevShowcasePage = lazy(() =>
+  import('@/pages/DevShowcasePage').then((m) => ({ default: m.DevShowcasePage })),
+)
+const ProfilePage = lazy(() =>
+  import('@/features/settings/ui/ProfilePage/ProfilePage').then((m) => ({
+    default: m.ProfilePage,
+  })),
+)
+const GithubPage = lazy(() =>
+  import('@/features/settings/ui/GithubPage/GithubPage').then((m) => ({ default: m.GithubPage })),
+)
+const NotificationsPage = lazy(() =>
+  import('@/features/settings/ui/NotificationsPage/NotificationsPage').then((m) => ({
+    default: m.NotificationsPage,
+  })),
+)
+const JoinTeamPage = lazy(() =>
+  import('@/features/teams/ui/JoinTeamPage/JoinTeamPage').then((m) => ({
+    default: m.JoinTeamPage,
+  })),
+)
+const TeamSettingsPage = lazy(() =>
+  import('@/features/teams/ui/TeamSettingsPage/TeamSettingsPage').then((m) => ({
+    default: m.TeamSettingsPage,
+  })),
+)
 
 const router = createBrowserRouter([
   {
@@ -147,5 +170,9 @@ const router = createBrowserRouter([
 ])
 
 export function AppRouter() {
-  return <RouterProvider router={router} />
+  return (
+    <Suspense fallback={<Splash />}>
+      <RouterProvider router={router} />
+    </Suspense>
+  )
 }

@@ -22,13 +22,12 @@ class Settings(BaseSettings):
 
     github_client_id: str | None = Field(default=None, alias="GITHUB_CLIENT_ID")
     github_client_secret: str | None = Field(default=None, alias="GITHUB_CLIENT_SECRET")
-    github_callback_url: str | None = Field(default=None, alias="GITHUB_CALLBACK_URL")
     frontend_base_url: str = Field(default="http://localhost:3000", alias="FRONTEND_BASE_URL")
 
     api_key: str | None = Field(default=None, alias="API_KEY")
     base_url: str | None = Field(default=None, alias="BASE_URL")
     model: str | None = Field(default=None, alias="MODEL")
-    app_base_url: str = Field(default="http://localhost:8000", alias="APP_BASE_URL")
+    app_base_url: str = Field(default="http://localhost:8080", alias="APP_BASE_URL")
 
     @field_validator("debug", mode="before")
     @classmethod
@@ -61,6 +60,10 @@ class Settings(BaseSettings):
         if self.database_url.startswith("postgresql://"):
             return self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         return self.database_url
+
+    @property
+    def github_callback_url(self) -> str:
+        return f"{self.frontend_base_url.rstrip('/')}/auth/github/callback"
 
 
 @lru_cache

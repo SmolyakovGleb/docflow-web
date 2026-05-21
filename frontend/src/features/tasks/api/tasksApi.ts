@@ -122,12 +122,19 @@ export const tasksApi = baseApi.injectEndpoints({
         { type: 'TaskLog', id: taskId },
       ],
     }),
-    publishTask: builder.mutation<TaskPublishResponse, string>({
-      query: (taskId) => ({
+    publishTask: builder.mutation<
+      TaskPublishResponse,
+      { taskId: string; commitMessage?: string; targetPath?: string }
+    >({
+      query: ({ taskId, commitMessage, targetPath }) => ({
         url: `/tasks/${taskId}/publish`,
         method: 'POST',
+        data: {
+          ...(commitMessage ? { commit_message: commitMessage } : {}),
+          ...(targetPath ? { target_path: targetPath } : {}),
+        },
       }),
-      invalidatesTags: (_result, _error, taskId) => [
+      invalidatesTags: (_result, _error, { taskId }) => [
         'History',
         'Task',
         { type: 'Task', id: taskId },

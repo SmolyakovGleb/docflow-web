@@ -59,7 +59,7 @@ export function TeamInvitesSection() {
     const trimmedValue = expiresInDays.trim()
     const days = trimmedValue ? Number(trimmedValue) : null
 
-    if (trimmedValue && (!Number.isInteger(days) || days < 1)) {
+    if (trimmedValue && (days === null || !Number.isInteger(days) || days < 1)) {
       setSubmitError(t('invite_days_invalid'))
       return
     }

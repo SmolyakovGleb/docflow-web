@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db_session
 from app.models.user import User
 from app.schemas.task import (
+    PublishRequest,
     RetryRequest,
     TaskPublishResponse,
     TaskCreateResponse,
@@ -389,10 +390,17 @@ async def publish_task_route(
     task_id: UUID,
     session: DbSession,
     current_user: CurrentUser,
+    body: PublishRequest | None = None,
 ) -> TaskPublishResponse:
     task = await get_task_or_404(session, task_id, current_user)
     try:
-        result = await publish_task(session, task, current_user)
+        result = await publish_task(
+            session,
+            task,
+            current_user,
+            commit_message=body.commit_message if body else None,
+            target_path=body.target_path if body else None,
+        )
     except PublishConflictError as exc:
         return JSONResponse(
             status_code=409,

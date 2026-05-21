@@ -41,6 +41,7 @@ import { DiffEditor } from '../DiffEditor/DiffEditor'
 import { DiffSaveBar } from '../DiffSaveBar/DiffSaveBar'
 import { LogsView } from '../LogsView/LogsView'
 import { PublishConflictDialog } from '../PublishConflictDialog/PublishConflictDialog'
+import { PublishDialog } from '../PublishDialog/PublishDialog'
 import { RetryConflictDialog } from '../RetryConflictDialog/RetryConflictDialog'
 import { TaskDetailHeader } from '../TaskDetailHeader/TaskDetailHeader'
 import { TaskDetailTabs } from '../TaskDetailTabs/TaskDetailTabs'
@@ -299,6 +300,8 @@ function TaskDetailContent({
     newSha: string | null
   } | null>(null)
   const [publishConflictOpen, setPublishConflictOpen] = useState(false)
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+  const [pendingPublishContent, setPendingPublishContent] = useState<string | null>(null)
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
 
   const baseDiffContent = task.translated_content ?? ''
@@ -489,7 +492,13 @@ function TaskDetailContent({
     }
   }
 
-  async function handlePublish(content: string) {
+  function openPublishDialog(content: string) {
+    setPendingPublishContent(content)
+    setPublishDialogOpen(true)
+  }
+
+  async function handlePublish(content: string, commitMessage: string, targetPath: string) {
+    setPublishDialogOpen(false)
     try {
       await toast.promise(
         async () => {
@@ -497,7 +506,7 @@ function TaskDetailContent({
             await updateTask({ taskId: task.id, translated_content: content }).unwrap()
           }
 
-          return publishTask(task.id).unwrap()
+          return publishTask({ taskId: task.id, commitMessage, targetPath }).unwrap()
         },
         {
           loading: `${t('actions.publish')}...`,
@@ -570,7 +579,7 @@ function TaskDetailContent({
           size="sm"
           iconLeft={<Upload size={14} />}
           loading={isPublishing}
-          onClick={() => void handlePublish(diffContent)}
+          onClick={() => openPublishDialog(diffContent)}
         >
           {t('actions.publish')}
         </Button>
@@ -663,7 +672,7 @@ function TaskDetailContent({
               setConflictDraft(baseConflictOurs === baseConflictContent ? null : baseConflictOurs)
             }
             onUseTheirs={() => setConflictDraft(null)}
-            onPublish={() => void handlePublish(resolvedConflictDraft)}
+            onPublish={() => openPublishDialog(resolvedConflictDraft)}
           />
         ) : null}
       </div>
@@ -683,6 +692,19 @@ function TaskDetailContent({
         onOpenChange={setRetryConflictOpen}
         onCreateNew={() => void handleCreateNewTask()}
         onUseOld={() => void handleRetry(true)}
+      />
+
+      <PublishDialog
+        open={publishDialogOpen}
+        onOpenChange={setPublishDialogOpen}
+        task={task}
+        project={project}
+        loading={isPublishing}
+        onPublish={(commitMessage, targetPath) => {
+          if (pendingPublishContent !== null) {
+            void handlePublish(pendingPublishContent, commitMessage, targetPath)
+          }
+        }}
       />
 
       <PublishConflictDialog

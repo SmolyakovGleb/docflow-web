@@ -115,3 +115,8 @@ class ConflictDetail(BaseModel):
     base: str
     ours: str
     theirs: str
+
+
+class PublishRequest(BaseModel):
+    commit_message: str | None = Field(None, description="Custom commit message for the GitHub commit")
+    target_path: str | None = Field(None, description="Override target file path in repository")

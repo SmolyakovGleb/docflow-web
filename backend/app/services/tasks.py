@@ -602,6 +602,8 @@ async def publish_task(
     session: AsyncSession,
     task: Task,
     current_user: User,
+    commit_message: str | None = None,
+    target_path: str | None = None,
 ) -> PublishTaskResult:
     ensure_task_publishable(task)
 
@@ -614,13 +616,18 @@ async def publish_task(
 
     access_token = ensure_github_access(current_user)
     github_client = GitHubClient(access_token)
+
+    effective_path = target_path or task.file_path
+    effective_message = commit_message or f"Publish translation: {task.file_path}"
+    path_changed = bool(target_path) and target_path != task.file_path
+
     current_sha = await github_client.get_file_sha(
         project.target_repo,
-        task.file_path,
+        effective_path,
         project.target_branch,
     )
 
-    if current_sha != task.target_file_sha:
+    if not path_changed and current_sha != task.target_file_sha:
         previous_status = task.status
         theirs = ""
         if current_sha is not None:
@@ -644,8 +651,8 @@ async def publish_task(
 
     commit_sha = await github_client.create_or_update_file(
         repo=project.target_repo,
-        path=task.file_path,
-        message=f"Publish translation: {task.file_path}",
+        path=effective_path,
+        message=effective_message,
         content=task.translated_content or "",
         sha=current_sha,
         branch=project.target_branch,
@@ -655,7 +662,7 @@ async def publish_task(
         task_id=task.id,
         published_by=current_user.id,
         target_repo=project.target_repo,
-        target_path=task.file_path,
+        target_path=effective_path,
         commit_sha=commit_sha,
         target_file_sha_before=current_sha,
     )
@@ -680,7 +687,7 @@ async def publish_task(
             "task_id": str(task.id),
             "project_id": str(project.id),
             "target_repo": project.target_repo,
-            "target_path": task.file_path,
+            "target_path": effective_path,
             "commit_sha": commit_sha,
             "published_by": str(current_user.id),
         },
@@ -691,5 +698,5 @@ async def publish_task(
         status="published",
         commit_sha=commit_sha,
         target_repo=project.target_repo,
-        target_path=task.file_path,
+        target_path=effective_path,
     )

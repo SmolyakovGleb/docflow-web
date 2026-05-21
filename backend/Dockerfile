@@ -27,4 +27,4 @@ RUN chmod +x ./backend/entrypoint.sh
 WORKDIR /app/backend
 
 ENTRYPOINT ["./entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

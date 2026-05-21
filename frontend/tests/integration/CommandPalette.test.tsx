@@ -73,7 +73,7 @@ describe('CommandPalette', () => {
             target_repo: 'team/docs-en',
             target_branch: 'release',
             exclude_patterns: [],
-            webhook_url: 'http://localhost:8000/webhook/project-1',
+            webhook_url: 'http://localhost:8080/webhook/project-1',
             version: 1,
             created_at: '2026-05-15T07:00:00Z',
           },

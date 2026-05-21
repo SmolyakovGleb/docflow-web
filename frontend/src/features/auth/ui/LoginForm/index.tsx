@@ -6,7 +6,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useLoginMutation } from '@/features/auth/api/authApi'
 import { setUser } from '@/features/auth/model/authSlice'
 import { type LoginFormValues, loginSchema } from '@/features/auth/lib/schemas'
-import { translateApiError } from '@/shared/lib/errorMessages'
+import { getApiErrorStatus, translateApiError } from '@/shared/lib/errorMessages'
 import { Button } from '@/shared/ui/Button/Button'
 import { Field } from '@/shared/ui/Field/Field'
 import { Input } from '@/shared/ui/Input/Input'
@@ -47,6 +47,11 @@ export function LoginForm() {
       dispatch(setUser(user))
       void navigate(redirectTo, { replace: true })
     } catch (error) {
+      if (getApiErrorStatus(error) === 401) {
+        setSubmitError(t('errors.invalid_credentials'))
+        return
+      }
+
       setSubmitError(translateApiError(error))
     }
   })

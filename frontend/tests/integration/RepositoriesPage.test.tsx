@@ -20,7 +20,7 @@ describe('RepositoriesPage', () => {
             target_repo: 'team/docs-en',
             target_branch: 'release',
             exclude_patterns: ['docs/drafts/**'],
-            webhook_url: 'http://localhost:8000/webhook/00000000-0000-0000-0000-000000000101',
+            webhook_url: 'http://localhost:8080/webhook/00000000-0000-0000-0000-000000000101',
             version: 1,
             created_at: '2026-05-08T10:00:00Z',
           },

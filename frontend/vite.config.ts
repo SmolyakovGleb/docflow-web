@@ -26,16 +26,29 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    allowedHosts: ['.cloudpub.ru'],
+    warmup: {
+      clientFiles: [
+        './src/main.tsx',
+        './src/app/**/*.tsx',
+        './src/features/**/*.tsx',
+        './src/shared/**/*.tsx',
+      ],
+    },
     watch: {
       usePolling: watchUsePolling,
       interval: watchInterval,
     },
     proxy: {
       '/api': {
-        // В Docker dev: VITE_PROXY_TARGET=http://backend:8000
-        // Локально без Docker: http://localhost:8000
-        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8000',
+        // В Docker dev: VITE_PROXY_TARGET=http://backend:8080
+        // Локально без Docker: http://localhost:8080
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
         rewrite: (path) => path.replace(/^\/api/, ''),
+        changeOrigin: true,
+      },
+      '/auth': {
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
         changeOrigin: true,
       },
     },

@@ -62,6 +62,7 @@ const baseTask: TaskDetail = {
   conflict_theirs: null,
   error: null,
   publications: [],
+  is_team_task: false,
 }
 
 function getFileName(filePath: string) {
@@ -87,7 +88,7 @@ function renderTaskDetail(initialTask: TaskDetail, log = '[prepare] started') {
           target_repo: 'team/docs-en',
           target_branch: 'main',
           exclude_patterns: [],
-          webhook_url: 'http://localhost:8000/webhook/project-1',
+          webhook_url: 'http://localhost:8080/webhook/project-1',
           version: 1,
           created_at: '2026-05-10T09:00:00Z',
         },
@@ -219,7 +220,7 @@ describe('TaskDetailPage', () => {
             target_repo: 'team/docs-en',
             target_branch: 'main',
             exclude_patterns: [],
-            webhook_url: 'http://localhost:8000/webhook/project-1',
+            webhook_url: 'http://localhost:8080/webhook/project-1',
             version: 1,
             created_at: '2026-05-10T09:00:00Z',
           },
@@ -291,7 +292,7 @@ describe('TaskDetailPage', () => {
             target_repo: 'team/docs-en',
             target_branch: 'main',
             exclude_patterns: [],
-            webhook_url: 'http://localhost:8000/webhook/project-1',
+            webhook_url: 'http://localhost:8080/webhook/project-1',
             version: 1,
             created_at: '2026-05-10T09:00:00Z',
           },
@@ -372,7 +373,7 @@ describe('TaskDetailPage', () => {
             target_repo: 'team/docs-en',
             target_branch: 'main',
             exclude_patterns: [],
-            webhook_url: 'http://localhost:8000/webhook/project-1',
+            webhook_url: 'http://localhost:8080/webhook/project-1',
             version: 1,
             created_at: '2026-05-10T09:00:00Z',
           },
@@ -453,7 +454,7 @@ describe('TaskDetailPage', () => {
             target_repo: 'team/docs-en',
             target_branch: 'main',
             exclude_patterns: [],
-            webhook_url: 'http://localhost:8000/webhook/project-1',
+            webhook_url: 'http://localhost:8080/webhook/project-1',
             version: 1,
             created_at: '2026-05-10T09:00:00Z',
           },
@@ -529,7 +530,7 @@ describe('TaskDetailPage', () => {
             target_repo: 'team/docs-en',
             target_branch: 'main',
             exclude_patterns: [],
-            webhook_url: 'http://localhost:8000/webhook/project-1',
+            webhook_url: 'http://localhost:8080/webhook/project-1',
             version: 1,
             created_at: '2026-05-10T09:00:00Z',
           },
@@ -609,7 +610,7 @@ describe('TaskDetailPage', () => {
             target_repo: 'team/docs-en',
             target_branch: 'main',
             exclude_patterns: [],
-            webhook_url: 'http://localhost:8000/webhook/project-1',
+            webhook_url: 'http://localhost:8080/webhook/project-1',
             version: 1,
             created_at: '2026-05-10T09:00:00Z',
           },
@@ -649,5 +650,251 @@ describe('TaskDetailPage', () => {
 
     expect(await screen.findByText('Tasks list')).toBeInTheDocument()
     expect(deleteCalls).toBe(1)
+  })
+
+  it('publish button opens dialog instead of publishing immediately', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const user = userEvent.setup()
+    let publishCalls = 0
+
+    server.use(
+      http.get('/api/tasks/:taskId', () => HttpResponse.json(baseTask)),
+      http.get('/api/tasks/:taskId/log', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/projects', () =>
+        HttpResponse.json([
+          {
+            id: 'project-1',
+            name: 'CRM Docs',
+            source_repo: 'team/docs-ru',
+            source_branch: 'main',
+            target_repo: 'team/docs-en',
+            target_branch: 'main',
+            exclude_patterns: [],
+            webhook_url: 'http://localhost:8080/webhook/project-1',
+            version: 1,
+            created_at: '2026-05-10T09:00:00Z',
+          },
+        ]),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          total_tasks: 1,
+          success_rate: 1.0,
+          avg_duration_seconds: 42,
+          tasks_by_status: { queued: 0, running: 0, done: 1, failed: 0, published: 0, conflict: 0 },
+          tasks_per_day: [],
+          top_errors: [],
+        }),
+      ),
+      http.post('/api/tasks/:taskId/publish', () => {
+        publishCalls += 1
+        return HttpResponse.json({
+          task_id: 'task-1',
+          status: 'published',
+          commit_sha: 'abc',
+          target_repo: 'team/docs-en',
+          target_path: 'docs/deals/index.md',
+        })
+      }),
+      http.get('/api/projects/:projectId/files', () => HttpResponse.json({ items: [] })),
+    )
+
+    renderTaskDetail(baseTask)
+
+    await user.click(await screen.findByRole('button', { name: /Опубликовать/i }))
+
+    expect(publishCalls).toBe(0)
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('publish dialog prefills default commit message and submits with it', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const user = userEvent.setup()
+    let capturedBody: { commit_message?: string; target_path?: string } | null = null
+
+    server.use(
+      http.get('/api/tasks/:taskId', () => HttpResponse.json(baseTask)),
+      http.get('/api/tasks/:taskId/log', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/projects', () =>
+        HttpResponse.json([
+          {
+            id: 'project-1',
+            name: 'CRM Docs',
+            source_repo: 'team/docs-ru',
+            source_branch: 'main',
+            target_repo: 'team/docs-en',
+            target_branch: 'main',
+            exclude_patterns: [],
+            webhook_url: 'http://localhost:8080/webhook/project-1',
+            version: 1,
+            created_at: '2026-05-10T09:00:00Z',
+          },
+        ]),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          total_tasks: 1,
+          success_rate: 1.0,
+          avg_duration_seconds: 42,
+          tasks_by_status: { queued: 0, running: 0, done: 1, failed: 0, published: 0, conflict: 0 },
+          tasks_per_day: [],
+          top_errors: [],
+        }),
+      ),
+      http.post('/api/tasks/:taskId/publish', async ({ request }) => {
+        capturedBody = (await request.json()) as { commit_message?: string; target_path?: string }
+        return HttpResponse.json({
+          task_id: 'task-1',
+          status: 'published',
+          commit_sha: 'abc',
+          target_repo: 'team/docs-en',
+          target_path: 'docs/deals/index.md',
+        })
+      }),
+      http.get('/api/projects/:projectId/files', () => HttpResponse.json({ items: [] })),
+    )
+
+    renderTaskDetail(baseTask)
+
+    await user.click(await screen.findByRole('button', { name: /Опубликовать/i }))
+    const dialog = await screen.findByRole('dialog')
+
+    const commitInput = within(dialog).getByDisplayValue(
+      `Publish translation: ${baseTask.file_path}`,
+    )
+    expect(commitInput).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: /Опубликовать/i }))
+
+    await waitFor(() => {
+      expect(capturedBody).not.toBeNull()
+    })
+    expect(capturedBody!.commit_message).toBe(`Publish translation: ${baseTask.file_path}`)
+    expect(capturedBody!.target_path).toBe(baseTask.file_path)
+  })
+
+  it('publish dialog sends custom commit message when user edits it', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const user = userEvent.setup()
+    let capturedBody: { commit_message?: string; target_path?: string } | null = null
+
+    server.use(
+      http.get('/api/tasks/:taskId', () => HttpResponse.json(baseTask)),
+      http.get('/api/tasks/:taskId/log', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/projects', () =>
+        HttpResponse.json([
+          {
+            id: 'project-1',
+            name: 'CRM Docs',
+            source_repo: 'team/docs-ru',
+            source_branch: 'main',
+            target_repo: 'team/docs-en',
+            target_branch: 'main',
+            exclude_patterns: [],
+            webhook_url: 'http://localhost:8080/webhook/project-1',
+            version: 1,
+            created_at: '2026-05-10T09:00:00Z',
+          },
+        ]),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          total_tasks: 1,
+          success_rate: 1.0,
+          avg_duration_seconds: 42,
+          tasks_by_status: { queued: 0, running: 0, done: 1, failed: 0, published: 0, conflict: 0 },
+          tasks_per_day: [],
+          top_errors: [],
+        }),
+      ),
+      http.post('/api/tasks/:taskId/publish', async ({ request }) => {
+        capturedBody = (await request.json()) as { commit_message?: string; target_path?: string }
+        return HttpResponse.json({
+          task_id: 'task-1',
+          status: 'published',
+          commit_sha: 'abc',
+          target_repo: 'team/docs-en',
+          target_path: 'docs/deals/index.md',
+        })
+      }),
+      http.get('/api/projects/:projectId/files', () => HttpResponse.json({ items: [] })),
+    )
+
+    renderTaskDetail(baseTask)
+
+    await user.click(await screen.findByRole('button', { name: /Опубликовать/i }))
+    const dialog = await screen.findByRole('dialog')
+
+    const commitInput = within(dialog).getByDisplayValue(
+      `Publish translation: ${baseTask.file_path}`,
+    )
+    await user.clear(commitInput)
+    await user.type(commitInput, 'chore: translate deals page')
+
+    await user.click(within(dialog).getByRole('button', { name: /Опубликовать/i }))
+
+    await waitFor(() => {
+      expect(capturedBody).not.toBeNull()
+    })
+    expect(capturedBody!.commit_message).toBe('chore: translate deals page')
+  })
+
+  it('closing publish dialog does not trigger publish', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource)
+    const user = userEvent.setup()
+    let publishCalls = 0
+
+    server.use(
+      http.get('/api/tasks/:taskId', () => HttpResponse.json(baseTask)),
+      http.get('/api/tasks/:taskId/log', () => new HttpResponse(null, { status: 204 })),
+      http.get('/api/projects', () =>
+        HttpResponse.json([
+          {
+            id: 'project-1',
+            name: 'CRM Docs',
+            source_repo: 'team/docs-ru',
+            source_branch: 'main',
+            target_repo: 'team/docs-en',
+            target_branch: 'main',
+            exclude_patterns: [],
+            webhook_url: 'http://localhost:8080/webhook/project-1',
+            version: 1,
+            created_at: '2026-05-10T09:00:00Z',
+          },
+        ]),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({
+          total_tasks: 1,
+          success_rate: 1.0,
+          avg_duration_seconds: 42,
+          tasks_by_status: { queued: 0, running: 0, done: 1, failed: 0, published: 0, conflict: 0 },
+          tasks_per_day: [],
+          top_errors: [],
+        }),
+      ),
+      http.post('/api/tasks/:taskId/publish', () => {
+        publishCalls += 1
+        return HttpResponse.json({
+          task_id: 'task-1',
+          status: 'published',
+          commit_sha: 'abc',
+          target_repo: 'team/docs-en',
+          target_path: 'docs/deals/index.md',
+        })
+      }),
+      http.get('/api/projects/:projectId/files', () => HttpResponse.json({ items: [] })),
+    )
+
+    renderTaskDetail(baseTask)
+
+    await user.click(await screen.findByRole('button', { name: /Опубликовать/i }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: /Отмена/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    expect(publishCalls).toBe(0)
   })
 })

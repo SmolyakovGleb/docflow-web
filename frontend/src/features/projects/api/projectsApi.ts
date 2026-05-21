@@ -34,11 +34,15 @@ export const projectsApi = baseApi.injectEndpoints({
         },
       }),
     }),
-    getProjectFiles: builder.query<ProjectFilesResponse, { projectId: string; path: string }>({
-      query: ({ projectId, path }) => ({
+    getProjectFiles: builder.query<
+      ProjectFilesResponse,
+      { projectId: string; path: string; useTarget?: boolean }
+    >({
+      query: ({ projectId, path, useTarget }) => ({
         url: `/projects/${projectId}/files`,
         params: {
           path,
+          ...(useTarget ? { use_target: true } : {}),
         },
       }),
     }),

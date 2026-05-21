@@ -12,7 +12,7 @@ from app.services.auth import decrypt_github_access_token
 def github_oauth_settings(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("GITHUB_CLIENT_ID", "github-client-id")
     monkeypatch.setenv("GITHUB_CLIENT_SECRET", "github-client-secret")
-    monkeypatch.setenv("GITHUB_CALLBACK_URL", "http://localhost:8000/auth/github/callback")
+    monkeypatch.setenv("APP_BASE_URL", "http://localhost:8080")
     monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
     get_settings.cache_clear()
     yield
@@ -45,7 +45,7 @@ async def test_connect_redirects_to_github(auth_client, github_oauth_settings):
     assert location.path == "/login/oauth/authorize"
     assert params["client_id"] == ["github-client-id"]
     assert params["scope"] == ["repo"]
-    assert params["redirect_uri"] == ["http://localhost:8000/auth/github/callback"]
+    assert params["redirect_uri"] == ["http://localhost:3000/auth/github/callback"]
     assert params["state"] == [response.cookies["github_oauth_state"]]
 
 

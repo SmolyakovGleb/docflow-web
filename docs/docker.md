@@ -175,7 +175,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 | `MODEL` | `bitrixgpt-5.5` | Модель Bitrix GPT |
 | `GITHUB_CLIENT_ID` | `Ov23li...` | GitHub OAuth App Client ID |
 | `GITHUB_CLIENT_SECRET` | `abc123...` | GitHub OAuth App Client Secret |
-| `GITHUB_CALLBACK_URL` | `https://your-domain.com/auth/github/callback` | OAuth redirect URL |
+| `APP_BASE_URL` | `https://your-backend-domain.com` | Публичный base URL backend; используется для webhook URL и внешних backend-ссылок |
+| `FRONTEND_BASE_URL` | `https://your-frontend-domain.com` | Публичный base URL frontend; OAuth callback собирается как `${FRONTEND_BASE_URL}/auth/github/callback` |
 | `SESSION_SECRET` | `random-32-char-string` | Секрет для подписи JWT |
 
 > `GITHUB_SOURCE_TOKEN`, `GITHUB_TARGET_TOKEN`, `TARGET_REPO`, `WEBHOOK_SECRET` удалены: GitHub-токены берутся из OAuth-сессии пользователя, a webhook_secret хранится в таблице `projects` per-project.
@@ -513,7 +514,7 @@ cd docflow-web
 cp .env.example .env
 nano .env
 # Обязательно обновить:
-#   GITHUB_CALLBACK_URL=https://your-domain.com/auth/github/callback
+#   APP_BASE_URL=https://your-domain.com
 #   SESSION_SECRET=<новый случайный ключ>
 #   API_KEY, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
 

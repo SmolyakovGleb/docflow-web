@@ -54,11 +54,7 @@ async def verify_password_async(password: str, password_hash: str) -> bool:
 
 def _require_github_oauth_settings() -> tuple[str, str, str]:
     settings = get_settings()
-    if (
-        not settings.github_client_id
-        or not settings.github_client_secret
-        or not settings.github_callback_url
-    ):
+    if not settings.github_client_id or not settings.github_client_secret:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="GitHub OAuth is not configured",

@@ -25,6 +25,9 @@ export const authApi = baseApi.injectEndpoints({
         data,
       }),
       invalidatesTags: ['User'],
+      extraOptions: {
+        skipAuthRedirect: true,
+      },
     }),
     register: builder.mutation<UserRead, RegisterPayload>({
       query: (data) => ({

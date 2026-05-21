@@ -51,7 +51,7 @@ describe('NewRepositoryPage', () => {
             target_repo: body.target_repo,
             target_branch: body.target_branch,
             exclude_patterns: body.exclude_patterns,
-            webhook_url: 'http://localhost:8000/webhook/00000000-0000-0000-0000-000000000201',
+            webhook_url: 'http://localhost:8080/webhook/00000000-0000-0000-0000-000000000201',
             webhook_secret: 'secret-123',
             version: 1,
             created_at: '2026-05-08T10:00:00Z',
@@ -93,7 +93,7 @@ describe('NewRepositoryPage', () => {
     expect(screen.getByDisplayValue('secret-123')).toBeInTheDocument()
     expect(
       screen.getByDisplayValue(
-        'http://localhost:8000/webhook/00000000-0000-0000-0000-000000000201',
+        'http://localhost:8080/webhook/00000000-0000-0000-0000-000000000201',
       ),
     ).toBeInTheDocument()
   })
@@ -166,7 +166,7 @@ describe('NewRepositoryPage', () => {
             target_repo: body.target_repo,
             target_branch: body.target_branch,
             exclude_patterns: body.exclude_patterns,
-            webhook_url: 'http://localhost:8000/webhook/00000000-0000-0000-0000-000000000202',
+            webhook_url: 'http://localhost:8080/webhook/00000000-0000-0000-0000-000000000202',
             webhook_secret: 'secret-456',
             version: 1,
             created_at: '2026-05-15T10:00:00Z',

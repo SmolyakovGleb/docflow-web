@@ -143,6 +143,7 @@ async def get_project_files(
     session: DbSession,
     current_user: CurrentUser,
     path: str = Query(default=""),
+    use_target: bool = Query(default=False),
 ) -> ProjectFilesResponse:
     project = await get_project_visible_or_404(session, project_id, current_user)
     normalized_path = _validate_tree_path(path)
@@ -150,11 +151,9 @@ async def get_project_files(
     project_owner = current_user if project.user_id == current_user.id else await session.get(User, project.user_id)
     ensure_github_linked(project_owner)
     github_client = GitHubClient(decrypt_github_access_token(project_owner.github_access_token))
-    items = await github_client.get_repo_tree(
-        project.source_repo,
-        project.source_branch,
-        normalized_path,
-    )
+    repo = project.target_repo if use_target else project.source_repo
+    branch = project.target_branch if use_target else project.source_branch
+    items = await github_client.get_repo_tree(repo, branch, normalized_path)
     return ProjectFilesResponse(items=items)
 
 

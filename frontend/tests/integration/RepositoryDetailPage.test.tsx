@@ -19,7 +19,7 @@ function createProjectState() {
     target_repo: 'team/docs-en',
     target_branch: 'release',
     exclude_patterns: ['docs/drafts/**'],
-    webhook_url: `http://localhost:8000/webhook/${projectId}`,
+    webhook_url: `http://localhost:8080/webhook/${projectId}`,
     version: 1,
     created_at: '2026-05-08T10:00:00Z',
   }

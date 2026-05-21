@@ -12,6 +12,7 @@ import {
   useRetryTaskMutation,
 } from '@/features/tasks/api/tasksApi'
 import { downloadMd } from '@/features/tasks/lib/downloadMd'
+import { PublishDialog } from '../PublishDialog/PublishDialog'
 import { useTaskListNotifications } from '@/features/tasks/hooks/useTaskListNotifications'
 import { useTaskFilters } from '@/features/tasks/hooks/useTaskFilters'
 import { groupByCommit } from '@/features/tasks/lib/groupByCommit'
@@ -55,6 +56,9 @@ export function TaskListPage() {
   const [isDialogOpen, setDialogOpen] = useState(false)
   const [dialogTab, setDialogTab] = useState<TriggerDialogTab>('repo')
   const [taskToRemove, setTaskToRemove] = useState<TaskSummary | null>(null)
+  const [pendingPublishTask, setPendingPublishTask] = useState<TaskSummary | null>(null)
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+  const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set())
 
   const { data: projects = [] } = useGetProjectsQuery()
   const {
@@ -187,15 +191,33 @@ export function TaskListPage() {
     }
   }
 
-  const handlePublish = async (taskId: string) => {
+  const handlePublish = (taskId: string) => {
+    const task = tasks.find((item) => item.id === taskId) ?? null
+    if (!task) return
+    setPendingPublishTask(task)
+    setPublishDialogOpen(true)
+  }
+
+  const handlePublishConfirmed = async (commitMessage: string, targetPath: string) => {
+    if (!pendingPublishTask) return
+    const { id: taskId } = pendingPublishTask
+    setPublishDialogOpen(false)
+    setPublishingIds((prev) => new Set([...prev, taskId]))
     try {
-      await toast.promise(publishTask(taskId).unwrap(), {
+      await toast.promise(publishTask({ taskId, commitMessage, targetPath }).unwrap(), {
         loading: `${t('actions.publish')}...`,
         success: t('actions.publish_success'),
         error: (error) => translateApiError(error),
       })
     } catch {
       // promise toast already shows the error state
+    } finally {
+      setPublishingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(taskId)
+        return next
+      })
+      setPendingPublishTask(null)
     }
   }
 
@@ -215,11 +237,19 @@ export function TaskListPage() {
 
   const handlePublishGroup = async (taskIds: string[]) => {
     if (!taskIds.length) return
-    const results = await Promise.allSettled(taskIds.map((id) => publishTask(id).unwrap()))
+    setPublishingIds((prev) => new Set([...prev, ...taskIds]))
+    const results = await Promise.allSettled(
+      taskIds.map((id) => publishTask({ taskId: id }).unwrap()),
+    )
     const successCount = results.filter((r) => r.status === 'fulfilled').length
     const failCount = results.length - successCount
     if (successCount > 0) toast.success(t('actions.publish_group_success', { count: successCount }))
     if (failCount > 0) toast.error(t('actions.publish_group_failed', { count: failCount }))
+    setPublishingIds((prev) => {
+      const next = new Set(prev)
+      taskIds.forEach((id) => next.delete(id))
+      return next
+    })
   }
 
   const handleBatchPublish = async () => {
@@ -309,6 +339,7 @@ export function TaskListPage() {
               group={group}
               batchMode={batchMode}
               selectedIds={selectedIdsSet}
+              publishingIds={publishingIds}
               onToggleSelect={handleToggleSelect}
               onOpenTask={(taskId) => void navigate(`/tasks/${taskId}`)}
               onDownload={(task) => void handleDownload(task)}
@@ -317,7 +348,7 @@ export function TaskListPage() {
                 const task = tasks.find((item) => item.id === taskId) ?? null
                 setTaskToRemove(task)
               }}
-              onPublish={(taskId) => void handlePublish(taskId)}
+              onPublish={(taskId) => handlePublish(taskId)}
               onPublishGroup={(taskIds) => void handlePublishGroup(taskIds)}
             />
           ))}
@@ -360,6 +391,22 @@ export function TaskListPage() {
         }}
         onOpenRepositories={() => void navigate('/repositories')}
       />
+
+      {pendingPublishTask ? (
+        <PublishDialog
+          open={publishDialogOpen}
+          onOpenChange={(open) => {
+            setPublishDialogOpen(open)
+            if (!open) setPendingPublishTask(null)
+          }}
+          task={pendingPublishTask}
+          project={projects.find((p) => p.id === pendingPublishTask.project_id)}
+          loading={publishingIds.has(pendingPublishTask.id)}
+          onPublish={(commitMessage, targetPath) =>
+            void handlePublishConfirmed(commitMessage, targetPath)
+          }
+        />
+      ) : null}
 
       <ConfirmDialog
         open={Boolean(taskToRemove)}

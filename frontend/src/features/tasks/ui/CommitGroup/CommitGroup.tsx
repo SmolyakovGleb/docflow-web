@@ -19,6 +19,7 @@ interface CommitGroupProps {
   onRemove: (taskId: string) => void
   onPublish: (taskId: string) => void
   onPublishGroup: (taskIds: string[]) => void
+  publishingIds?: Set<string>
 }
 
 export function CommitGroup({
@@ -32,11 +33,13 @@ export function CommitGroup({
   onRemove,
   onPublish,
   onPublishGroup,
+  publishingIds,
 }: CommitGroupProps) {
   const { t } = useTranslation('tasks')
   const publishableIds = group.tasks
     .filter((task) => task.status === 'done' && Boolean(task.project_id))
     .map((task) => task.id)
+  const isGroupPublishing = publishableIds.some((id) => publishingIds?.has(id))
   const authorLabel = group.authorName ?? group.authorLogin ?? t('manual_group')
   const message =
     group.commitMessage && group.commitMessage !== 'manual'
@@ -69,6 +72,7 @@ export function CommitGroup({
           <button
             type="button"
             className={styles.publishAll}
+            disabled={isGroupPublishing}
             onClick={() => onPublishGroup(publishableIds)}
           >
             {t('actions.publish_all')}
@@ -89,6 +93,7 @@ export function CommitGroup({
           onRetry={onRetry}
           onRemove={onRemove}
           onPublish={onPublish}
+          isPublishing={publishingIds?.has(task.id) ?? false}
         />
       ))}
     </section>

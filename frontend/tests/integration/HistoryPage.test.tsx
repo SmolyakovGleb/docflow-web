@@ -17,7 +17,7 @@ function makeProject(id: string, name: string, sourceRepo: string, targetRepo: s
     target_repo: targetRepo,
     target_branch: 'main',
     exclude_patterns: [],
-    webhook_url: `http://localhost:8000/webhook/${id}`,
+    webhook_url: `http://localhost:8080/webhook/${id}`,
     version: 1,
     created_at: '2026-05-10T09:00:00Z',
   }
@@ -349,7 +349,7 @@ describe('HistoryPage', () => {
     expect((await screen.findAllByText('docs/page-1.md')).length).toBeGreaterThan(0)
     expect(historyRequests).toBe(1)
 
-    await store.dispatch(tasksApi.endpoints.publishTask.initiate('task-1'))
+    await store.dispatch(tasksApi.endpoints.publishTask.initiate({ taskId: 'task-1' }))
 
     await waitFor(() => {
       expect(historyRequests).toBe(2)

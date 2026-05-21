@@ -41,6 +41,7 @@ const task: TaskDetail = {
   conflict_theirs: null,
   error: null,
   publications: [],
+  is_team_task: false,
 }
 
 describe('DiffEditor save flow', () => {
@@ -72,7 +73,7 @@ describe('DiffEditor save flow', () => {
             target_repo: 'team/docs-en',
             target_branch: 'main',
             exclude_patterns: [],
-            webhook_url: 'http://localhost:8000/webhook/project-1',
+            webhook_url: 'http://localhost:8080/webhook/project-1',
             version: 1,
             created_at: '2026-05-10T09:00:00Z',
           },

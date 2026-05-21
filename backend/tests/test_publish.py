@@ -343,6 +343,96 @@ async def test_publish_other_user_task(auth_client, db_session, test_project):
     assert response.json() == {"detail": "Task not found"}
 
 
+async def test_publish_with_custom_commit_message(
+    auth_client, db_session, test_project, test_user, mocker
+):
+    await link_github(test_user, db_session)
+    task = await create_task(db_session, test_project)
+
+    github_client = mocker.Mock()
+    github_client.get_file_sha = mocker.AsyncMock(return_value="target-sha")
+    github_client.create_or_update_file = mocker.AsyncMock(return_value="commit-sha")
+    mocker.patch("app.services.tasks.GitHubClient", return_value=github_client)
+    mocker.patch("app.services.tasks.bitrix_notify.notify", new=mocker.AsyncMock())
+
+    response = await auth_client.post(
+        f"/tasks/{task.id}/publish",
+        json={"commit_message": "chore: translate deals index"},
+    )
+
+    assert response.status_code == 200
+    github_client.create_or_update_file.assert_awaited_once_with(
+        repo=test_project.target_repo,
+        path=task.file_path,
+        message="chore: translate deals index",
+        content="# Target",
+        sha="target-sha",
+        branch=test_project.target_branch,
+    )
+
+
+async def test_publish_with_custom_target_path(
+    auth_client, db_session, test_project, test_user, mocker
+):
+    await link_github(test_user, db_session)
+    task = await create_task(db_session, test_project, file_path="docs/index.md", target_file_sha="sha-a")
+
+    github_client = mocker.Mock()
+    github_client.get_file_sha = mocker.AsyncMock(return_value=None)
+    github_client.create_or_update_file = mocker.AsyncMock(return_value="commit-sha")
+    mocker.patch("app.services.tasks.GitHubClient", return_value=github_client)
+    mocker.patch("app.services.tasks.bitrix_notify.notify", new=mocker.AsyncMock())
+
+    response = await auth_client.post(
+        f"/tasks/{task.id}/publish",
+        json={"target_path": "translated/index.md"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["target_path"] == "translated/index.md"
+
+    github_client.get_file_sha.assert_awaited_once_with(
+        test_project.target_repo, "translated/index.md", test_project.target_branch
+    )
+    github_client.create_or_update_file.assert_awaited_once_with(
+        repo=test_project.target_repo,
+        path="translated/index.md",
+        message=f"Publish translation: {task.file_path}",
+        content="# Target",
+        sha=None,
+        branch=test_project.target_branch,
+    )
+
+    publication = await db_session.scalar(select(Publication).where(Publication.task_id == task.id))
+    assert publication is not None
+    assert publication.target_path == "translated/index.md"
+
+
+async def test_publish_custom_path_skips_conflict_check(
+    auth_client, db_session, test_project, test_user, mocker
+):
+    """When target_path differs from task.file_path, SHA mismatch must not trigger a conflict."""
+    await link_github(test_user, db_session)
+    task = await create_task(db_session, test_project, target_file_sha="sha-a")
+
+    github_client = mocker.Mock()
+    # Return a SHA that would normally trigger a conflict (different from task.target_file_sha)
+    github_client.get_file_sha = mocker.AsyncMock(return_value="sha-b")
+    github_client.create_or_update_file = mocker.AsyncMock(return_value="commit-sha")
+    mocker.patch("app.services.tasks.GitHubClient", return_value=github_client)
+    mocker.patch("app.services.tasks.bitrix_notify.notify", new=mocker.AsyncMock())
+
+    response = await auth_client.post(
+        f"/tasks/{task.id}/publish",
+        json={"target_path": "new/path/index.md"},
+    )
+
+    assert response.status_code == 200
+    await db_session.refresh(task)
+    assert task.status == "published"
+
+
 async def test_publish_github_error_returns_502(
     auth_client,
     db_session,

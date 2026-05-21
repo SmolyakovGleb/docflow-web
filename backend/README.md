@@ -87,7 +87,8 @@ uvicorn app.main:app --reload --port 8000
 | `SESSION_SECRET` | Секрет для подписи JWT (hex, минимум 32 байта) |
 | `GITHUB_CLIENT_ID` | OAuth App Client ID |
 | `GITHUB_CLIENT_SECRET` | OAuth App Client Secret |
-| `GITHUB_CALLBACK_URL` | `http://localhost:8000/auth/github/callback` |
+| `APP_BASE_URL` | Публичный base URL backend; используется для webhook URL и внешних backend-ссылок |
+| `FRONTEND_BASE_URL` | Публичный base URL frontend; GitHub callback собирается как `${FRONTEND_BASE_URL}/auth/github/callback` |
 | `API_KEY` | Ключ Bitrix GPT (из проекта DocFlow AI) |
 | `BASE_URL` | Endpoint Bitrix GPT |
 | `MODEL` | Модель, например `bitrixgpt-5.5` |

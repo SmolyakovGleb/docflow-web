@@ -1,9 +1,18 @@
 param(
-    [int]$Port = 8000,
-    [string]$TunnelName = "docflow-webhook"
+    [int]$Port = 0,
+    [switch]$Frontend,
+    [string]$TunnelName = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Frontend) {
+    if ($Port -eq 0) { $Port = 3000 }
+    if (-not $TunnelName) { $TunnelName = "docflow-frontend" }
+} else {
+    if ($Port -eq 0) { $Port = 8080 }
+    if (-not $TunnelName) { $TunnelName = "docflow-webhook" }
+}
 
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 $EnvLocalPath = Join-Path $RepoRoot ".env.local"
@@ -54,15 +63,23 @@ if (-not $Token) {
     exit 1
 }
 
+if ($Frontend) {
+    $HealthUrl = "http://localhost:$Port/"
+    $HealthError = "Frontend is not reachable on http://localhost:$Port/. Start containers before opening the tunnel."
+} else {
+    $HealthUrl = "http://localhost:$Port/health"
+    $HealthError = "Backend is not reachable on http://localhost:$Port/health. Start backend before opening the tunnel."
+}
+
 try {
-    $HealthResponse = Invoke-WebRequest -Uri "http://localhost:$Port/health" -UseBasicParsing -TimeoutSec 5
+    $HealthResponse = Invoke-WebRequest -Uri $HealthUrl -UseBasicParsing -TimeoutSec 5
 } catch {
-    Write-Error "Backend is not reachable on http://localhost:$Port/health. Start backend before opening the tunnel."
+    Write-Error $HealthError
     exit 1
 }
 
 if ($HealthResponse.StatusCode -ne 200) {
-    Write-Error "Backend health check returned HTTP $($HealthResponse.StatusCode)."
+    Write-Error "Health check returned HTTP $($HealthResponse.StatusCode)."
     exit 1
 }
 
@@ -72,11 +89,16 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "==> Starting CloudPub tunnel..."
-Write-Host "When CloudPub prints the public URL, update:"
-Write-Host "  - $RepoRoot\.env -> APP_BASE_URL=https://<your-subdomain>.cloudpub.ru"
-Write-Host "  - $FrontendEnvLocalPath -> VITE_TUNNEL_URL=https://<your-subdomain>.cloudpub.ru"
-Write-Host "Then restart backend so project.webhook_url uses the public domain."
+Write-Host "==> Starting CloudPub tunnel ($TunnelName -> localhost:$Port)..."
+
+if ($Frontend) {
+    Write-Host "When CloudPub prints the public URL, you can share it to access the full app."
+} else {
+    Write-Host "When CloudPub prints the public URL, update:"
+    Write-Host "  - $RepoRoot\.env -> APP_BASE_URL=https://<your-subdomain>.cloudpub.ru"
+    Write-Host "  - $FrontendEnvLocalPath -> VITE_TUNNEL_URL=https://<your-subdomain>.cloudpub.ru"
+    Write-Host "Then restart backend so project.webhook_url uses the public domain."
+}
 Write-Host ""
 
 & $Clo.Source publish http $Port --name $TunnelName

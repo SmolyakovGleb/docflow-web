@@ -112,6 +112,25 @@ describe('LoginForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Неверный email или пароль')
   })
 
+  it('shows invalid credentials error for login 401 without backend detail', async () => {
+    server.use(http.post('/api/auth/login', () => new HttpResponse(null, { status: 401 })))
+
+    const user = userEvent.setup()
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={<LoginForm />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await user.type(screen.getByLabelText(/email/i, { selector: 'input' }), 'anna@company.ru')
+    await user.type(screen.getByPlaceholderText('**********'), 'password1')
+    await user.click(document.querySelector('button[type="submit"]') as HTMLButtonElement)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Неверный email или пароль')
+  })
+
   it('shows translated rate limit error', async () => {
     server.use(
       http.post('/api/auth/login', () =>

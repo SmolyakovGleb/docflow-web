@@ -18,6 +18,7 @@ interface TaskRowProps {
   onRetry: (taskId: string) => void
   onRemove: (taskId: string) => void
   onPublish: (taskId: string) => void
+  isPublishing?: boolean
 }
 
 export function TaskRow({
@@ -30,6 +31,7 @@ export function TaskRow({
   onRetry,
   onRemove,
   onPublish,
+  isPublishing = false,
 }: TaskRowProps) {
   const { t } = useTranslation(['tasks', 'teams'])
   const lastSlash = task.file_path.lastIndexOf('/')
@@ -133,12 +135,13 @@ export function TaskRow({
             <button
               type="button"
               className={styles.quickAction}
+              disabled={isPublishing}
               onClick={(event) => {
                 event.stopPropagation()
                 onPublish(task.id)
               }}
             >
-              {t('actions.publish')}
+              {isPublishing ? t('actions.publish') + '…' : t('actions.publish')}
             </button>
           </div>
         ) : null}

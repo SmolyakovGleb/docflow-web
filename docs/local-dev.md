@@ -38,7 +38,7 @@ ls pipeline/src/
 |------|---------------|
 | Application name | `DocFlow Web (local)` |
 | Homepage URL | `http://localhost:3000` |
-| Authorization callback URL | `http://localhost:8000/auth/github/callback` |
+| Authorization callback URL | `http://localhost:3000/auth/github/callback` |
 
 После создания скопировать `Client ID` и сгенерировать `Client Secret`.
 
@@ -59,7 +59,8 @@ DATABASE_URL=postgresql://docflow:docflow_secret@db:5432/docflow
 # GitHub OAuth App
 GITHUB_CLIENT_ID=Ov23liXXXXXXXXXXXXXX
 GITHUB_CLIENT_SECRET=abc123...
-GITHUB_CALLBACK_URL=http://localhost:8000/auth/github/callback
+FRONTEND_BASE_URL=http://localhost:3000
+APP_BASE_URL=http://localhost:8080
 
 # JWT (любая случайная строка, минимум 32 символа)
 SESSION_SECRET=your-very-secret-jwt-key-here
@@ -188,7 +189,7 @@ docker compose build backend
 Когда локальное тестирование завершено:
 
 1. Создать новый GitHub OAuth App (или обновить callback URL в существующем) на prod-домен
-2. Обновить `.env` на сервере: `GITHUB_CALLBACK_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
+2. Обновить `.env` на сервере: `FRONTEND_BASE_URL`, `APP_BASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
 3. В DocFlow Web создать проект с боевой парой репозиториев:
    - Source: `bitrix-tools/b24-rest-docs`
    - Target: `bitrix24/b24restdocs`
