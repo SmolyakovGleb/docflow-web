@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.commit_group import CommitGroup
     from app.models.project import Project
     from app.models.publication import Publication
     from app.models.user import User
@@ -52,10 +53,14 @@ class Task(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    commit_group_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("commit_groups.id", ondelete="SET NULL"), nullable=True
+    )
 
     user: Mapped[User] = relationship(back_populates="tasks")
     project: Mapped[Project | None] = relationship(back_populates="tasks")
     publications: Mapped[list[Publication]] = relationship(back_populates="task")
+    commit_group: Mapped[CommitGroup | None] = relationship(back_populates="tasks")
 
     @property
     def project_name(self) -> str | None:
@@ -67,7 +72,7 @@ class Task(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'done', 'failed', 'published', 'conflict')",
+            "status IN ('queued', 'running', 'done', 'failed', 'published', 'conflict', 'cancelled')",
             name="tasks_status_check",
         ),
         Index("idx_tasks_user_id", "user_id"),

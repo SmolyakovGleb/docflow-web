@@ -1,3 +1,4 @@
+from app.models.commit_group import CommitGroup  # noqa: F401
 from app.models.dictionary_entry import DictionaryEntry  # noqa: F401
 from app.models.invite_token import InviteToken  # noqa: F401
 from app.models.notification_channel import NotificationChannel  # noqa: F401
