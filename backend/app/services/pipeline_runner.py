@@ -258,7 +258,9 @@ async def _queue_worker() -> None:
         try:
             await _CURRENT_EXECUTION
         except asyncio.CancelledError:
-            pass
+            raise
+        except Exception:
+            app_logger.exception("queue_worker_unexpected_error", extra={"task_id": str(task_id)})
         finally:
             _BACKGROUND_TASKS.discard(_CURRENT_EXECUTION)
             _CURRENT_EXECUTION = None
