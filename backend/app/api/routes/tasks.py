@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated, AsyncIterator
 from uuid import UUID
 
@@ -178,6 +179,35 @@ async def task_list_events_stream(
             task_list_events.close_subscription(subscription.id)
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
+@router.post(
+    "/{task_id}/cancel",
+    status_code=200,
+    summary="Отменить задачу",
+    description="Отменяет задачу со статусом `queued` или `running`. Статус становится `cancelled`.",
+)
+async def cancel_task_route(
+    task_id: UUID,
+    session: DbSession,
+    current_user: CurrentUser,
+) -> dict[str, str]:
+    task = await get_task_or_404(session, task_id, current_user)
+    if task.status not in ("queued", "running"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel task with status '{task.status}'",
+        )
+    previous_status = task.status
+    if task.status == "queued":
+        task.status = "cancelled"
+        task.completed_at = datetime.now(UTC)
+        await session.commit()
+        task_list_events.publish_task_status_changed(task, previous_status=previous_status)
+    else:
+        # running: asyncio cancel → run_task handles status update
+        await pipeline_runner.cancel_task(task_id)
+    return {"id": str(task.id), "status": "cancelled"}
 
 
 @router.get(

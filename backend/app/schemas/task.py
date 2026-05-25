@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.publication import PublicationRead
 
-TaskStatus = Literal["queued", "running", "done", "failed", "published", "conflict"]
+TaskStatus = Literal["queued", "running", "done", "failed", "published", "conflict", "cancelled"]
 SkippedReason = Literal["already_queued", "pipeline_running", "excluded_by_pattern"]
 
 

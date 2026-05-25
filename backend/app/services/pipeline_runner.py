@@ -234,6 +234,13 @@ async def schedule_task(task_id: UUID) -> bool:
     return True
 
 
+async def cancel_task(task_id: UUID) -> bool:
+    if _CURRENT_TASK_ID == task_id and _CURRENT_EXECUTION is not None:
+        _CURRENT_EXECUTION.cancel()
+        return True
+    return False
+
+
 async def _queue_worker() -> None:
     global _CURRENT_TASK_ID, _CURRENT_EXECUTION
 
