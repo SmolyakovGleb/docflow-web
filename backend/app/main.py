@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import time
 import uuid
@@ -90,22 +92,55 @@ class _LoggingMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    from sqlalchemy import select
+    from app.models.project import Project
+    from app.services import pipeline_runner
+
     settings = get_settings()
     configure_logging(level="DEBUG" if settings.debug else "INFO")
     _warn_missing_pipeline_settings()
     session_factory = get_session_factory()
+
+    # Reset stuck running tasks → queued
     async with session_factory() as session:
         result = await session.execute(
-            update(Task).where(Task.status == "running").values(
-                status="queued",
-                current_stage=None,
-                error="Прервано перезапуском сервера",
-            )
+            update(Task)
+            .where(Task.status == "running")
+            .values(status="queued", current_stage=None, error="Прервано перезапуском сервера")
         )
         await session.commit()
     if result.rowcount:
         logger.info("startup_reset_running_tasks", extra={"count": result.rowcount})
+
+    # Load paused projects into memory
+    async with session_factory() as session:
+        paused_ids = (await session.scalars(
+            select(Project.id).where(Project.pipeline_paused == True)  # noqa: E712
+        )).all()
+        pipeline_runner._PAUSED_PROJECTS.update(paused_ids)
+
+    # Enqueue all queued tasks (skip paused projects)
+    async with session_factory() as session:
+        queued_ids = (await session.scalars(
+            select(Task.id).where(
+                Task.status == "queued",
+                Task.project_id.notin_(list(pipeline_runner._PAUSED_PROJECTS)),
+            ).order_by(Task.created_at)
+        )).all()
+        for task_id in queued_ids:
+            await pipeline_runner.schedule_task(task_id)
+
+    # Start the queue worker
+    worker = asyncio.create_task(
+        pipeline_runner._queue_worker(), name="docflow.queue_worker"
+    )
+    pipeline_runner._WORKER_TASK = worker
+
     yield
+
+    worker.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await worker
 
 
 def create_app() -> FastAPI:
