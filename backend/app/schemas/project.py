@@ -47,6 +47,8 @@ class ProjectRead(BaseModel):
     created_at: datetime
     team_id: UUID | None
     is_team_project: bool
+    pipeline_paused: bool
+    webhook_file_limit: int
 
 
 class ProjectCreateResponse(ProjectRead):
@@ -72,3 +74,5 @@ class ProjectUpdate(BaseModel):
     source_branch: str | None = None
     target_branch: str | None = None
     exclude_patterns: list[str] | None = None
+    pipeline_paused: bool | None = None
+    webhook_file_limit: int | None = Field(None, ge=1, le=1000)
