@@ -390,7 +390,6 @@ async def delete_task_route(
 ) -> Response:
     task = await get_task_or_404(session, task_id, current_user)
     ensure_task_removable(task)
-    await pipeline_runner.cancel_scheduled_task(task.id)
     await delete_queued_task(session, task)
     logger.info("task_deleted_from_queue", extra={"task_id": str(task_id)})
     return Response(status_code=status.HTTP_204_NO_CONTENT)
