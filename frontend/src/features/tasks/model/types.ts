@@ -81,6 +81,12 @@ export interface TaskPublishResponse {
   target_path: string
 }
 
+export interface BatchPublishResponse {
+  commit_sha: string | null
+  published_task_ids: string[]
+  conflict_task_ids: string[]
+}
+
 export interface TaskStageUpdateEvent {
   stage: TaskPipelineStage
   index: number

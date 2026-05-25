@@ -156,6 +156,14 @@
     "target_path_hint": "Путь, по которому переведённый файл будет опубликован в target-репозиторий",
     "commit_message_label": "Сообщение коммита"
   },
+  "batch_publish_dialog": {
+    "title_one": "Опубликовать {{count}} перевод",
+    "title_few": "Опубликовать {{count}} перевода",
+    "title_many": "Опубликовать {{count}} переводов",
+    "default_message_one": "Publish {{count}} translation",
+    "default_message_few": "Publish {{count}} translations",
+    "default_message_many": "Publish {{count}} translations"
+  },
   "publish_conflict": {
     "title": "Конфликт публикации",
     "description": "Во время публикации текущий EN-файл изменился в репозитории. Откройте вкладку «{{tab}}» и соберите итоговую версию.",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 from dataclasses import dataclass
@@ -44,6 +45,20 @@ class GitHubClient:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 return await client.put(url, headers=self._headers, json=json)
+        except httpx.HTTPError:
+            raise GitHubAPIError(status_code=502, detail="GitHub request failed") from None
+
+    async def _post(self, url: str, *, json: dict) -> httpx.Response:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                return await client.post(url, headers=self._headers, json=json)
+        except httpx.HTTPError:
+            raise GitHubAPIError(status_code=502, detail="GitHub request failed") from None
+
+    async def _patch(self, url: str, *, json: dict) -> httpx.Response:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                return await client.patch(url, headers=self._headers, json=json)
         except httpx.HTTPError:
             raise GitHubAPIError(status_code=502, detail="GitHub request failed") from None
 
@@ -179,6 +194,110 @@ class GitHubClient:
                 detail="GitHub returned an invalid commit payload",
             )
         return str(commit_sha)
+
+    async def _get_branch_commit_sha(self, repo: str, branch: str) -> str:
+        repo_name = quote(repo, safe="/")
+        response = await self._get(
+            f"{GITHUB_API_BASE_URL}/repos/{repo_name}/git/refs/heads/{quote(branch, safe='')}",
+        )
+        self._raise_for_error(response)
+        sha = response.json().get("object", {}).get("sha")
+        if not sha:
+            raise GitHubAPIError(status_code=502, detail="GitHub returned an invalid ref payload")
+        return str(sha)
+
+    async def _get_commit_tree_sha(self, repo: str, commit_sha: str) -> str:
+        repo_name = quote(repo, safe="/")
+        response = await self._get(
+            f"{GITHUB_API_BASE_URL}/repos/{repo_name}/git/commits/{quote(commit_sha, safe='')}",
+        )
+        self._raise_for_error(response)
+        sha = response.json().get("tree", {}).get("sha")
+        if not sha:
+            raise GitHubAPIError(status_code=502, detail="GitHub returned an invalid commit payload")
+        return str(sha)
+
+    async def _create_blob(self, repo: str, content: str) -> str:
+        repo_name = quote(repo, safe="/")
+        response = await self._post(
+            f"{GITHUB_API_BASE_URL}/repos/{repo_name}/git/blobs",
+            json={
+                "content": base64.b64encode(content.encode("utf-8")).decode("utf-8"),
+                "encoding": "base64",
+            },
+        )
+        self._raise_for_error(response)
+        sha = response.json().get("sha")
+        if not sha:
+            raise GitHubAPIError(status_code=502, detail="GitHub returned an invalid blob payload")
+        return str(sha)
+
+    async def _create_tree(
+        self, repo: str, base_tree_sha: str, files: list[tuple[str, str]]
+    ) -> str:
+        repo_name = quote(repo, safe="/")
+        response = await self._post(
+            f"{GITHUB_API_BASE_URL}/repos/{repo_name}/git/trees",
+            json={
+                "base_tree": base_tree_sha,
+                "tree": [
+                    {"path": path, "mode": "100644", "type": "blob", "sha": blob_sha}
+                    for path, blob_sha in files
+                ],
+            },
+        )
+        self._raise_for_error(response)
+        sha = response.json().get("sha")
+        if not sha:
+            raise GitHubAPIError(status_code=502, detail="GitHub returned an invalid tree payload")
+        return str(sha)
+
+    async def _create_commit(
+        self, repo: str, message: str, tree_sha: str, parent_sha: str
+    ) -> str:
+        repo_name = quote(repo, safe="/")
+        response = await self._post(
+            f"{GITHUB_API_BASE_URL}/repos/{repo_name}/git/commits",
+            json={"message": message, "tree": tree_sha, "parents": [parent_sha]},
+        )
+        self._raise_for_error(response)
+        sha = response.json().get("sha")
+        if not sha:
+            raise GitHubAPIError(status_code=502, detail="GitHub returned an invalid commit payload")
+        return str(sha)
+
+    async def _update_ref(self, repo: str, branch: str, commit_sha: str) -> None:
+        repo_name = quote(repo, safe="/")
+        response = await self._patch(
+            f"{GITHUB_API_BASE_URL}/repos/{repo_name}/git/refs/heads/{quote(branch, safe='')}",
+            json={"sha": commit_sha},
+        )
+        self._raise_for_error(response)
+
+    async def commit_files_batch(
+        self,
+        *,
+        repo: str,
+        branch: str,
+        message: str,
+        files: list[tuple[str, str]],
+    ) -> str:
+        """Commit multiple files in one git commit via the Git Tree API.
+
+        files: list of (path, content) tuples.
+        Returns the new commit SHA.
+        """
+        parent_commit_sha = await self._get_branch_commit_sha(repo, branch)
+        base_tree_sha = await self._get_commit_tree_sha(repo, parent_commit_sha)
+        blob_shas = await asyncio.gather(
+            *[self._create_blob(repo, content) for _, content in files]
+        )
+        new_tree_sha = await self._create_tree(
+            repo, base_tree_sha, [(path, sha) for (path, _), sha in zip(files, blob_shas)]
+        )
+        new_commit_sha = await self._create_commit(repo, message, new_tree_sha, parent_commit_sha)
+        await self._update_ref(repo, branch, new_commit_sha)
+        return new_commit_sha
 
     async def get_user_repos(self) -> list[str]:
         repos: list[str] = []

@@ -120,3 +120,15 @@ class ConflictDetail(BaseModel):
 class PublishRequest(BaseModel):
     commit_message: str | None = Field(None, description="Custom commit message for the GitHub commit")
     target_path: str | None = Field(None, description="Override target file path in repository")
+
+
+class BatchPublishRequest(BaseModel):
+    task_ids: list[UUID]
+    commit_message: str | None = Field(None, description="Custom commit message for the GitHub commit")
+    per_task_paths: dict[UUID, str] | None = Field(None, description="Override target path per task ID")
+
+
+class BatchPublishResponse(BaseModel):
+    commit_sha: str | None = Field(None, description="Commit SHA; null if all tasks had conflicts")
+    published_task_ids: list[UUID]
+    conflict_task_ids: list[UUID]

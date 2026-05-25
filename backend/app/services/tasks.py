@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
@@ -73,6 +74,13 @@ class PublishTaskResult:
     commit_sha: str
     target_repo: str
     target_path: str
+
+
+@dataclass
+class BatchPublishResult:
+    commit_sha: str | None = None
+    published_task_ids: list[UUID] = field(default_factory=list)
+    conflict_task_ids: list[UUID] = field(default_factory=list)
 
 
 def ensure_github_access(user: User) -> str:
@@ -617,6 +625,14 @@ async def publish_task(
     access_token = ensure_github_access(current_user)
     github_client = GitHubClient(access_token)
 
+    if target_path:
+        _ensure_safe_relative_path(target_path, field="target_path")
+        if target_path.startswith(".github/"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Publishing to .github/ is not allowed",
+            )
+
     effective_path = target_path or task.file_path
     effective_message = commit_message or f"Publish translation: {task.file_path}"
     path_changed = bool(target_path) and target_path != task.file_path
@@ -700,3 +716,105 @@ async def publish_task(
         target_repo=project.target_repo,
         target_path=effective_path,
     )
+
+
+async def publish_tasks_batch(
+    session: AsyncSession,
+    task_ids: list[UUID],
+    current_user: User,
+    commit_message: str | None = None,
+    per_task_paths: dict[UUID, str] | None = None,
+) -> BatchPublishResult:
+    if not task_ids:
+        return BatchPublishResult()
+
+    access_token = ensure_github_access(current_user)
+    github_client = GitHubClient(access_token)
+
+    team_id = await _get_user_team_id(session, current_user.id)
+    visibility = _visibility_condition(current_user.id, team_id)
+    stmt = (
+        select(Task)
+        .where(Task.id.in_(task_ids), visibility)
+        .options(selectinload(Task.project))
+    )
+    rows = await session.execute(stmt)
+    tasks = list(rows.scalars().all())
+
+    publishable = [t for t in tasks if t.status in PUBLISHABLE_TASK_STATUSES and t.project is not None]
+    if not publishable:
+        return BatchPublishResult()
+
+    # Group by (repo, branch) so each repo gets exactly one commit
+    groups: dict[tuple[str, str], list[Task]] = {}
+    for task in publishable:
+        key = (task.project.target_repo, task.project.target_branch)
+        groups.setdefault(key, []).append(task)
+
+    result = BatchPublishResult()
+
+    for (repo, branch), group_tasks in groups.items():
+        # Check all file SHAs in parallel to detect conflicts
+        current_shas: list[str | None] = list(
+            await asyncio.gather(
+                *[github_client.get_file_sha(repo, t.file_path, branch) for t in group_tasks]
+            )
+        )
+
+        clean_tasks: list[Task] = []
+        for task, current_sha in zip(group_tasks, current_shas):
+            if task.target_file_sha is not None and current_sha != task.target_file_sha:
+                previous_status = task.status
+                theirs = ""
+                if current_sha is not None:
+                    theirs, _ = await github_client.get_file_content(repo, task.file_path, branch)
+                task.status = "conflict"
+                task.target_file_sha = current_sha
+                task.conflict_base = task.original_content
+                task.conflict_ours = task.translated_content or ""
+                task.conflict_theirs = theirs
+                result.conflict_task_ids.append(task.id)
+                task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
+            else:
+                clean_tasks.append(task)
+
+        if not clean_tasks:
+            await session.commit()
+            continue
+
+        effective_message = (
+            commit_message
+            or f"Publish {len(clean_tasks)} translation(s)"
+        )
+        files = [
+            ((per_task_paths or {}).get(t.id, t.file_path), t.translated_content or "")
+            for t in clean_tasks
+        ]
+        commit_sha = await github_client.commit_files_batch(
+            repo=repo,
+            branch=branch,
+            message=effective_message,
+            files=files,
+        )
+        result.commit_sha = commit_sha
+
+        for task, (effective_path, _) in zip(clean_tasks, files):
+            publication = Publication(
+                task_id=task.id,
+                published_by=current_user.id,
+                target_repo=repo,
+                target_path=effective_path,
+                commit_sha=commit_sha,
+                target_file_sha_before=task.target_file_sha,
+            )
+            session.add(publication)
+            previous_status = task.status
+            task.status = "published"
+            clear_task_conflict(task)
+            result.published_task_ids.append(task.id)
+            task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
+            logger.info("task_published_batch", extra={"task_id": str(task.id), "commit_sha": commit_sha})
+
+        await session.commit()
+
+    return result

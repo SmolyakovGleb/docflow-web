@@ -9,10 +9,12 @@ import {
   useGetTasksQuery,
   useLazyGetTaskQuery,
   usePublishTaskMutation,
+  usePublishTasksBatchMutation,
   useRetryTaskMutation,
 } from '@/features/tasks/api/tasksApi'
 import { downloadMd } from '@/features/tasks/lib/downloadMd'
 import { PublishDialog } from '../PublishDialog/PublishDialog'
+import { BatchPublishDialog, type BatchPublishItem } from '../BatchPublishDialog/BatchPublishDialog'
 import { useTaskListNotifications } from '@/features/tasks/hooks/useTaskListNotifications'
 import { useTaskFilters } from '@/features/tasks/hooks/useTaskFilters'
 import { groupByCommit } from '@/features/tasks/lib/groupByCommit'
@@ -58,11 +60,15 @@ export function TaskListPage() {
   const [taskToRemove, setTaskToRemove] = useState<TaskSummary | null>(null)
   const [pendingPublishTask, setPendingPublishTask] = useState<TaskSummary | null>(null)
   const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+  const [pendingBatchIds, setPendingBatchIds] = useState<string[]>([])
+  const [batchPublishDialogOpen, setBatchPublishDialogOpen] = useState(false)
+  const [isBatchPublishing, setIsBatchPublishing] = useState(false)
   const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set())
 
   const { data: projects = [] } = useGetProjectsQuery()
   const {
     data: tasksResponse,
+    currentData: currentTasksResponse,
     isLoading,
     isFetching,
     error,
@@ -74,9 +80,11 @@ export function TaskListPage() {
     limit: 50,
     offset: 0,
   })
+  const isPendingFilter = isFetching && currentTasksResponse === undefined
   const { data: health } = useGetHealthQuery(undefined, { pollingInterval: 30000 })
   const [fetchTask] = useLazyGetTaskQuery()
   const [publishTask] = usePublishTaskMutation()
+  const [publishTasksBatch] = usePublishTasksBatchMutation()
   const [retryTask] = useRetryTaskMutation()
   const [deleteTask, { isLoading: isDeletingTask }] = useDeleteTaskMutation()
 
@@ -235,30 +243,49 @@ export function TaskListPage() {
     }
   }
 
-  const handlePublishGroup = async (taskIds: string[]) => {
+  const openBatchPublishDialog = (taskIds: string[]) => {
     if (!taskIds.length) return
-    setPublishingIds((prev) => new Set([...prev, ...taskIds]))
-    const results = await Promise.allSettled(
-      taskIds.map((id) => publishTask({ taskId: id }).unwrap()),
-    )
-    const successCount = results.filter((r) => r.status === 'fulfilled').length
-    const failCount = results.length - successCount
-    if (successCount > 0) toast.success(t('actions.publish_group_success', { count: successCount }))
-    if (failCount > 0) toast.error(t('actions.publish_group_failed', { count: failCount }))
-    setPublishingIds((prev) => {
-      const next = new Set(prev)
-      taskIds.forEach((id) => next.delete(id))
-      return next
-    })
+    setPendingBatchIds(taskIds)
+    setBatchPublishDialogOpen(true)
   }
 
-  const handleBatchPublish = async () => {
+  const handleBatchPublishConfirm = async (
+    commitMessage: string,
+    pathOverrides: Record<string, string>,
+  ) => {
+    if (!pendingBatchIds.length) return
+    const taskIds = pendingBatchIds
+    setBatchPublishDialogOpen(false)
+    setIsBatchPublishing(true)
+    setPublishingIds((prev) => new Set([...prev, ...taskIds]))
+    try {
+      const result = await publishTasksBatch({ taskIds, commitMessage, pathOverrides }).unwrap()
+      const successCount = result.published_task_ids.length
+      const conflictCount = result.conflict_task_ids.length
+      if (successCount > 0)
+        toast.success(t('actions.publish_group_success', { count: successCount }))
+      if (conflictCount > 0)
+        toast.error(t('actions.publish_group_failed', { count: conflictCount }))
+    } catch (err) {
+      toast.error(translateApiError(err))
+    } finally {
+      setIsBatchPublishing(false)
+      setPublishingIds((prev) => {
+        const next = new Set(prev)
+        taskIds.forEach((id) => next.delete(id))
+        return next
+      })
+      setPendingBatchIds([])
+    }
+  }
+
+  const handleBatchPublish = () => {
     const ids = tasks
       .filter(
         (task) => selectedIdsSet.has(task.id) && task.status === 'done' && Boolean(task.project_id),
       )
       .map((task) => task.id)
-    await handlePublishGroup(ids)
+    openBatchPublishDialog(ids)
   }
 
   const handleSearchChange = useCallback(
@@ -308,7 +335,7 @@ export function TaskListPage() {
         />
       ) : null}
 
-      {isLoading ? (
+      {isLoading || isPendingFilter ? (
         <TaskListSkeleton />
       ) : error ? (
         <TaskListError isRetrying={isFetching} onRetry={() => void refetch()} />
@@ -349,7 +376,7 @@ export function TaskListPage() {
                 setTaskToRemove(task)
               }}
               onPublish={(taskId) => handlePublish(taskId)}
-              onPublishGroup={(taskIds) => void handlePublishGroup(taskIds)}
+              onPublishGroup={(taskIds) => openBatchPublishDialog(taskIds)}
             />
           ))}
         </div>
@@ -370,7 +397,7 @@ export function TaskListPage() {
           const selected = tasks.filter((task) => selectedIdsSet.has(task.id))
           void Promise.all(selected.map((task) => handleDownload(task)))
         }}
-        onPublish={() => void handleBatchPublish()}
+        onPublish={() => handleBatchPublish()}
         onClose={() => dispatch(clearSelection())}
       />
 
@@ -390,6 +417,35 @@ export function TaskListPage() {
           redirectToGithubConnect()
         }}
         onOpenRepositories={() => void navigate('/repositories')}
+      />
+
+      <BatchPublishDialog
+        open={batchPublishDialogOpen}
+        onOpenChange={(open) => {
+          setBatchPublishDialogOpen(open)
+          if (!open) setPendingBatchIds([])
+        }}
+        items={(() => {
+          const pendingSet = new Set(pendingBatchIds)
+          const result: BatchPublishItem[] = []
+          for (const task of tasks) {
+            if (!pendingSet.has(task.id)) continue
+            const project = projects.find((p) => p.id === task.project_id)
+            if (!project) continue
+            result.push({
+              taskId: task.id,
+              filePath: task.file_path,
+              projectId: project.id,
+              targetRepo: project.target_repo,
+              targetBranch: project.target_branch,
+            })
+          }
+          return result
+        })()}
+        loading={isBatchPublishing}
+        onPublish={(commitMessage, pathOverrides) =>
+          void handleBatchPublishConfirm(commitMessage, pathOverrides)
+        }
       />
 
       {pendingPublishTask ? (

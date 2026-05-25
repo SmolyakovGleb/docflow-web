@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db_session
 from app.models.user import User
 from app.schemas.task import (
+    BatchPublishRequest,
+    BatchPublishResponse,
     PublishRequest,
     RetryRequest,
     TaskPublishResponse,
@@ -39,6 +41,7 @@ from app.services.tasks import (
     parse_manual_repo_payload,
     parse_upload_payload,
     publish_task,
+    publish_tasks_batch,
     reset_task_for_retry,
     update_task_content,
 )
@@ -415,6 +418,36 @@ async def publish_task_route(
         )
 
     return TaskPublishResponse.model_validate(result)
+
+
+@router.post(
+    "/publish-batch",
+    response_model=BatchPublishResponse,
+    summary="Опубликовать несколько переводов одним коммитом",
+    description=(
+        "Публикует несколько задач одним git-коммитом на репозиторий через Git Tree API. "
+        "Задачи группируются по репозиторию — каждый репозиторий получает ровно один коммит. "
+        "Задачи с конфликтами (SHA файла изменился) переводятся в статус `conflict` и пропускаются."
+    ),
+    responses={
+        200: {"description": "Результат: опубликованные и конфликтные задачи"},
+        400: {"description": "GitHub не подключён"},
+        502: {"description": "Ошибка GitHub API"},
+    },
+)
+async def publish_tasks_batch_route(
+    body: BatchPublishRequest,
+    session: DbSession,
+    current_user: CurrentUser,
+) -> BatchPublishResponse:
+    result = await publish_tasks_batch(
+        session,
+        body.task_ids,
+        current_user,
+        commit_message=body.commit_message,
+        per_task_paths=body.per_task_paths,
+    )
+    return BatchPublishResponse.model_validate(result.__dict__)
 
 
 @router.get(

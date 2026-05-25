@@ -88,25 +88,17 @@
 
 .userMeta {
   display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
   min-width: 0;
   flex: 1;
-  flex-direction: column;
-}
-
-.userName {
-  overflow: hidden;
-  color: var(--text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
 }
 
 .userStatus {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 1px;
   color: var(--text-dim);
   font-size: 11px;
 }
@@ -144,6 +136,7 @@
 .adminBadge {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   padding: 1px 6px;
   border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--indigo-dim, #818cf8) 15%, transparent);

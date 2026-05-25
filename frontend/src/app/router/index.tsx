@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import i18n from '@/shared/lib/i18n'
 import { AppLayout } from '../layouts/AppLayout'
@@ -169,7 +169,32 @@ const router = createBrowserRouter([
   },
 ])
 
+function preloadPages() {
+  const chunks = [
+    () => import('@/pages/TaskListPage'),
+    () => import('@/pages/TaskDetailPage'),
+    () => import('@/pages/RepositoriesPage'),
+    () => import('@/pages/NewRepositoryPage'),
+    () => import('@/pages/RepositoryDetailPage'),
+    () => import('@/pages/AnalyticsPage'),
+    () => import('@/pages/DictionariesPage'),
+    () => import('@/pages/HistoryPage'),
+    () => import('@/pages/SettingsPage'),
+    () => import('@/features/settings/ui/ProfilePage/ProfilePage'),
+    () => import('@/features/settings/ui/GithubPage/GithubPage'),
+    () => import('@/features/settings/ui/NotificationsPage/NotificationsPage'),
+    () => import('@/features/teams/ui/TeamSettingsPage/TeamSettingsPage'),
+    () => import('@/pages/AdminPage'),
+  ]
+  const schedule = typeof requestIdleCallback !== 'undefined' ? requestIdleCallback : setTimeout
+  schedule(() => chunks.forEach((load) => void load()))
+}
+
 export function AppRouter() {
+  useEffect(() => {
+    preloadPages()
+  }, [])
+
   return (
     <Suspense fallback={<Splash />}>
       <RouterProvider router={router} />

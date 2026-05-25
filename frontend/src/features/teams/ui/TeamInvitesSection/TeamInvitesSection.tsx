@@ -51,7 +51,8 @@ export function TeamInvitesSection() {
   const [revokeInvite] = useRevokeTeamInviteMutation()
   const [expiresInDays, setExpiresInDays] = useState('')
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [target, setTarget] = useState<TeamInviteRead | null>(null)
+  const [revokeTarget, setRevokeTarget] = useState<TeamInviteRead | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<TeamInviteRead | null>(null)
   const [revokingId, setRevokingId] = useState<string | null>(null)
 
   const handleCreateInvite = async () => {
@@ -73,19 +74,30 @@ export function TeamInvitesSection() {
   }
 
   const handleRevokeInvite = async () => {
-    if (!target) {
-      return
-    }
-
+    if (!revokeTarget) return
     setSubmitError(null)
-    setRevokingId(target.id)
-
+    setRevokingId(revokeTarget.id)
     try {
-      await revokeInvite(target.id).unwrap()
+      await revokeInvite(revokeTarget.id).unwrap()
       toast.success(t('invite_revoke_success'))
-      setTarget(null)
+      setRevokeTarget(null)
     } catch (revokeError) {
       setSubmitError(translateApiError(revokeError))
+    } finally {
+      setRevokingId(null)
+    }
+  }
+
+  const handleDeleteInvite = async () => {
+    if (!deleteTarget) return
+    setSubmitError(null)
+    setRevokingId(deleteTarget.id)
+    try {
+      await revokeInvite(deleteTarget.id).unwrap()
+      toast.success(t('invite_delete_success'))
+      setDeleteTarget(null)
+    } catch (deleteError) {
+      setSubmitError(translateApiError(deleteError))
     } finally {
       setRevokingId(null)
     }
@@ -171,18 +183,27 @@ export function TeamInvitesSection() {
                       {formatDateTime(invite.expires_at) ?? t('invite_expires_never')}
                     </td>
                     <td>
-                      {invite.status === 'active' ? (
-                        <div className={styles.actions}>
+                      <div className={styles.actions}>
+                        {invite.status === 'active' ? (
                           <Button
                             variant="danger"
                             size="sm"
                             loading={revokingId === invite.id}
-                            onClick={() => setTarget(invite)}
+                            onClick={() => setRevokeTarget(invite)}
                           >
                             {t('invite_revoke')}
                           </Button>
-                        </div>
-                      ) : null}
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={revokingId === invite.id}
+                            onClick={() => setDeleteTarget(invite)}
+                          >
+                            {t('invite_delete')}
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
@@ -193,11 +214,9 @@ export function TeamInvitesSection() {
       )}
 
       <ConfirmDialog
-        open={target !== null}
+        open={revokeTarget !== null}
         onOpenChange={(open) => {
-          if (!open) {
-            setTarget(null)
-          }
+          if (!open) setRevokeTarget(null)
         }}
         title={t('invite_revoke_confirm_title')}
         description={t('invite_revoke_confirm')}
@@ -205,6 +224,19 @@ export function TeamInvitesSection() {
         confirmVariant="danger"
         loading={revokingId !== null}
         onConfirm={() => void handleRevokeInvite()}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        title={t('invite_delete_confirm_title')}
+        description={t('invite_delete_confirm')}
+        confirmText={t('invite_delete')}
+        confirmVariant="danger"
+        loading={revokingId !== null}
+        onConfirm={() => void handleDeleteInvite()}
       />
     </SectionCard>
   )

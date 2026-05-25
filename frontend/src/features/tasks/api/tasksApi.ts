@@ -1,5 +1,6 @@
 import { baseApi } from '@/shared/api/baseApi'
 import type {
+  BatchPublishResponse,
   RetryTaskResponse,
   TaskCreateResponse,
   TaskDetail,
@@ -140,6 +141,23 @@ export const tasksApi = baseApi.injectEndpoints({
         { type: 'Task', id: taskId },
       ],
     }),
+    publishTasksBatch: builder.mutation<
+      BatchPublishResponse,
+      { taskIds: string[]; commitMessage?: string; pathOverrides?: Record<string, string> }
+    >({
+      query: ({ taskIds, commitMessage, pathOverrides }) => ({
+        url: '/tasks/publish-batch',
+        method: 'POST',
+        data: {
+          task_ids: taskIds,
+          ...(commitMessage ? { commit_message: commitMessage } : {}),
+          ...(pathOverrides && Object.keys(pathOverrides).length > 0
+            ? { per_task_paths: pathOverrides }
+            : {}),
+        },
+      }),
+      invalidatesTags: ['History', 'Task'],
+    }),
   }),
 })
 
@@ -152,6 +170,7 @@ export const {
   useLazyGetTaskLogQuery,
   useLazyGetTaskQuery,
   usePublishTaskMutation,
+  usePublishTasksBatchMutation,
   useRetryTaskMutation,
   useUpdateTaskMutation,
   useUploadManualTaskMutation,

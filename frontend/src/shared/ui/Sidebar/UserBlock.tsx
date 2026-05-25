@@ -25,9 +25,7 @@ export function UserBlock() {
     >
       <Avatar name={userLabel} size={26} />
       <span className={styles.userMeta}>
-        <span className={styles.userName} title={userLabel}>
-          {userLabel}
-        </span>
+        {user.is_admin && <span className={styles.adminBadge}>{t('admin_badge')}</span>}
         <span className={styles.userStatus}>
           <span
             className={user.github_linked ? styles.githubDot : styles.githubDotOff}
@@ -36,7 +34,6 @@ export function UserBlock() {
           <span>{githubStatus}</span>
         </span>
       </span>
-      {user.is_admin && <span className={styles.adminBadge}>{t('admin_badge')}</span>}
     </button>
   )
 }

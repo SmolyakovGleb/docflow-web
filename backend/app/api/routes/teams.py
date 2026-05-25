@@ -283,15 +283,10 @@ async def revoke_invite(invite_id: UUID, session: DbSession, current_user: Curre
     invite = await session.get(TeamInvite, invite_id)
     if invite is None or invite.team_id != team.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
-    if invite.used_by_id is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot revoke an already used invite",
-        )
 
-    invite.expires_at = datetime.now(timezone.utc)
+    await session.delete(invite)
     await session.commit()
-    logger.info("team_invite_revoked", extra={"invite_id": str(invite_id)})
+    logger.info("team_invite_deleted", extra={"invite_id": str(invite_id)})
 
 
 @router.get(
