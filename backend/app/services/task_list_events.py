@@ -93,6 +93,11 @@ def _task_matches_scope(
     return needle in file_path or needle in commit_message
 
 
+def publish_task_status_changed(task: Any, *, previous_status: str) -> None:
+    # Full implementation in 16.7 — for now just a no-op stub
+    pass
+
+
 def publish_task_entered_scope(task: Task, *, previous_status: str | None = None) -> None:
     payload = {
         "task_id": str(task.id),

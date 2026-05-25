@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import importlib
 import json
 import logging
@@ -24,9 +23,14 @@ from app.services import task_list_events
 
 PIPELINE_ROOT = Path(__file__).resolve().parents[3] / "pipeline"
 TASK_EVENT_QUEUES: dict[UUID, asyncio.Queue[dict[str, Any] | None]] = {}
-PIPELINE_RUN_LOCK = asyncio.Lock()
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
-_SCHEDULED_PIPELINES: dict[UUID, asyncio.Task[None]] = {}
+_SCHEDULED_PIPELINES: dict[UUID, bool] = {}
+_PIPELINE_QUEUE: asyncio.Queue[UUID] = asyncio.Queue()
+_DEFERRED_TASKS: dict[UUID, list[UUID]] = {}  # project_id → [task_ids]
+_PAUSED_PROJECTS: set[UUID] = set()
+_CURRENT_TASK_ID: UUID | None = None
+_CURRENT_EXECUTION: asyncio.Task[None] | None = None
+_WORKER_TASK: asyncio.Task[None] | None = None
 MAX_TASK_EVENT_QUEUES = 200
 app_logger = logging.getLogger(__name__)
 
@@ -222,62 +226,43 @@ async def _cleanup_queue_after(task_id: UUID, delay: float) -> None:
     TASK_EVENT_QUEUES.pop(task_id, None)
 
 
-def _spawn_pipeline_task(task_id: UUID) -> asyncio.Task[None]:
-    return asyncio.create_task(run_task(task_id), name=f"docflow.task.{task_id}")
-
-
-def _finish_scheduled_pipeline(task_id: UUID, scheduled_task: asyncio.Task[None]) -> None:
-    _SCHEDULED_PIPELINES.pop(task_id, None)
-    _BACKGROUND_TASKS.discard(scheduled_task)
-
-
-async def _mark_task_failed_before_start(task_id: UUID, error_text: str) -> None:
-    session_factory = get_session_factory()
-
-    async with session_factory() as session:
-        task = await session.get(Task, task_id)
-        if task is None or task.status != "queued":
-            return
-
-        previous_status = task.status
-        task.status = "failed"
-        task.current_stage = None
-        task.error = _sanitize_error(error_text)
-        task.completed_at = datetime.now(UTC)
-        await session.commit()
-        task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
-
-
 async def schedule_task(task_id: UUID) -> bool:
     if task_id in _SCHEDULED_PIPELINES:
         return False
+    _PIPELINE_QUEUE.put_nowait(task_id)
+    _SCHEDULED_PIPELINES[task_id] = True
+    return True
 
-    try:
-        scheduled_task = _spawn_pipeline_task(task_id)
-    except RuntimeError as exc:
-        await _mark_task_failed_before_start(
-            task_id,
-            f"Failed to schedule pipeline run: {type(exc).__name__}: {exc}",
+
+async def _queue_worker() -> None:
+    global _CURRENT_TASK_ID, _CURRENT_EXECUTION
+
+    while True:
+        task_id = await _PIPELINE_QUEUE.get()
+        _SCHEDULED_PIPELINES.pop(task_id, None)
+
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            task = await session.get(Task, task_id)
+            if task is None or task.status != "queued":
+                continue
+            if task.project_id in _PAUSED_PROJECTS:
+                _DEFERRED_TASKS.setdefault(task.project_id, []).append(task_id)
+                continue
+
+        _CURRENT_TASK_ID = task_id
+        _CURRENT_EXECUTION = asyncio.create_task(
+            run_task(task_id), name=f"docflow.task.{task_id}"
         )
-        app_logger.exception("task_schedule_failed", extra={"task_id": str(task_id)})
-        return False
-
-    _SCHEDULED_PIPELINES[task_id] = scheduled_task
-    _BACKGROUND_TASKS.add(scheduled_task)
-    scheduled_task.add_done_callback(lambda finished_task: _finish_scheduled_pipeline(task_id, finished_task))
-    return True
-
-
-async def cancel_scheduled_task(task_id: UUID) -> bool:
-    scheduled_task = _SCHEDULED_PIPELINES.pop(task_id, None)
-    if scheduled_task is None:
-        return False
-
-    scheduled_task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await scheduled_task
-    _BACKGROUND_TASKS.discard(scheduled_task)
-    return True
+        _BACKGROUND_TASKS.add(_CURRENT_EXECUTION)
+        try:
+            await _CURRENT_EXECUTION
+        except asyncio.CancelledError:
+            pass
+        finally:
+            _BACKGROUND_TASKS.discard(_CURRENT_EXECUTION)
+            _CURRENT_EXECUTION = None
+            _CURRENT_TASK_ID = None
 
 
 async def run_task(task_id: UUID) -> None:
@@ -331,8 +316,7 @@ async def run_task(task_id: UUID) -> None:
                 index=2,
                 total=3,
             )
-            async with PIPELINE_RUN_LOCK:
-                output_file = await _execute_pipeline(
+            output_file = await _execute_pipeline(
                     input_file=input_file,
                     output_dir=output_dir,
                     pre_translator_dir=pre_translator_dir,
@@ -360,6 +344,13 @@ async def run_task(task_id: UUID) -> None:
             task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
             await _emit_event(queue, "status_change", {"status": "done"})
             app_logger.info("task_completed", extra={"task_id": str(task.id)})
+        except asyncio.CancelledError:
+            task.status = "cancelled"
+            task.current_stage = None
+            task.completed_at = datetime.now(UTC)
+            await session.commit()
+            task_list_events.publish_task_status_changed(task, previous_status="running")
+            raise
         except Exception:
             task.translated_content = None
             task.log = _sanitize_error(log_handler.get_log()) if log_handler else None
