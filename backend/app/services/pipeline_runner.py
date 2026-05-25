@@ -241,6 +241,38 @@ async def cancel_task(task_id: UUID) -> bool:
     return False
 
 
+async def pause_project(project_id: UUID) -> None:
+    _PAUSED_PROJECTS.add(project_id)
+    if _CURRENT_TASK_ID is not None and _CURRENT_EXECUTION is not None:
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            task = await session.get(Task, _CURRENT_TASK_ID)
+            if task is not None and task.project_id == project_id:
+                _CURRENT_EXECUTION.cancel()
+
+
+async def resume_project(project_id: UUID) -> None:
+    from sqlalchemy import select
+    _PAUSED_PROJECTS.discard(project_id)
+    deferred = _DEFERRED_TASKS.pop(project_id, [])
+    for task_id in deferred:
+        _PIPELINE_QUEUE.put_nowait(task_id)
+        _SCHEDULED_PIPELINES[task_id] = True
+    # Also scan DB for queued tasks (handles server restart scenario)
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        queued = (await session.scalars(
+            select(Task.id).where(
+                Task.project_id == project_id,
+                Task.status == "queued",
+                Task.id.notin_(list(_SCHEDULED_PIPELINES.keys())),
+            ).order_by(Task.created_at)
+        )).all()
+        for task_id in queued:
+            _PIPELINE_QUEUE.put_nowait(task_id)
+            _SCHEDULED_PIPELINES[task_id] = True
+
+
 async def _queue_worker() -> None:
     global _CURRENT_TASK_ID, _CURRENT_EXECUTION
 

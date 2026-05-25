@@ -27,6 +27,7 @@ from app.services.auth import (
     get_current_user,
 )
 from app.services.github import GitHubClient
+from app.services import pipeline_runner
 from app.services.projects import (
     ensure_github_linked,
     get_project_or_404,
@@ -256,3 +257,25 @@ async def regenerate_webhook_secret(
 
     logger.info("project_webhook_secret_regenerated", extra={"project_id": str(project_id)})
     return ProjectWebhookSecretResponse(webhook_secret=plaintext_secret)
+
+
+@router.post("/{project_id}/pause", status_code=200, summary="Поставить пайплайн на паузу")
+async def pause_project_route(
+    project_id: UUID, session: DbSession, current_user: CurrentUser
+) -> dict:
+    project = await get_project_visible_or_404(session, project_id, current_user)
+    project.pipeline_paused = True
+    await session.commit()
+    await pipeline_runner.pause_project(project_id)
+    return {"pipeline_paused": True}
+
+
+@router.post("/{project_id}/resume", status_code=200, summary="Возобновить пайплайн")
+async def resume_project_route(
+    project_id: UUID, session: DbSession, current_user: CurrentUser
+) -> dict:
+    project = await get_project_visible_or_404(session, project_id, current_user)
+    project.pipeline_paused = False
+    await session.commit()
+    await pipeline_runner.resume_project(project_id)
+    return {"pipeline_paused": False}
