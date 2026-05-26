@@ -1571,3 +1571,1276 @@ is_team_task: bool
 | 15.2    | Колонки `team_id` в `projects` и `tasks` + миграция. Изменить `GET /projects`, `POST /projects`, `GET /tasks` (добавить командные записи в выборку). Добавить `team_id`, `is_team_project` в `ProjectRead`, `is_team_task` в `TaskSummary`. GitHub-токен в pipeline_runner берётся от владельца проекта |
 | 15.4    | Добавить `GET /teams/invite-preview?token=XXX` (публичный)                                                                                                                                                                                                                                              |
 | 15.5    | Добавить `team_id` query param в `GET /analytics`                                                                                                                                                                                                                                                       |
+
+---
+
+## Этап 16 — Pipeline Queue + CommitGroup + Real-time трансляция
+
+> **Для агентного выполнения:** использовать `superpowers:subagent-driven-development` или `superpowers:executing-plans`. Шаги отмечены чекбоксами для трекинга.
+
+**Цель:** Защитить систему от флуда при больших коммитах, заменить костыльный `PIPELINE_RUN_LOCK` настоящей FIFO-очередью, добавить cancel/pause/resume и транслировать все изменения статусов задач в реальном времени через SSE.
+
+**Архитектура:**
+
+- Новая таблица `commit_groups` хранит «ожидающие подтверждения» группы файлов из крупных коммитов
+- `pipeline_runner.py` получает явную `asyncio.Queue[UUID]` и единственный воркер-coroutine вместо scattered `asyncio.create_task` + `PIPELINE_RUN_LOCK`
+- `task_list_events.py` расширяется событиями `task_updated` и `commit_group_created/updated` — фронтенд обновляет статусы in-place без перезагрузки
+
+**Стек:** SQLAlchemy async, FastAPI lifespan, asyncio.Queue, asyncio.Semaphore, SSE (EventSource), RTK Query `updateQueryData`.
+
+---
+
+### 16.1 — Backend: DB schema
+
+**Зависимости:** нет.
+
+#### Файлы
+
+- Создать: `backend/app/models/commit_group.py`
+- Изменить: `backend/app/models/project.py` — добавить `webhook_file_limit`, `pipeline_paused`
+- Изменить: `backend/app/models/task.py` — добавить `commit_group_id`, `cancelled` в CHECK constraint
+- Создать: `backend/migrations/versions/XXXX_add_commit_groups.py`
+
+#### Детали реализации
+
+**`backend/app/models/commit_group.py`:**
+
+```python
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, JSON, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.project import Project
+    from app.models.task import Task
+
+
+class CommitGroup(Base):
+    __tablename__ = "commit_groups"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    team_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("teams.id", ondelete="SET NULL"), nullable=True
+    )
+    github_sha: Mapped[str]
+    github_ref: Mapped[str]
+    commit_message: Mapped[str | None]
+    commit_author_name: Mapped[str | None]
+    commit_author_login: Mapped[str | None]
+    file_paths: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(server_default="pending_confirmation")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    project: Mapped[Project] = relationship()
+    tasks: Mapped[list[Task]] = relationship(back_populates="commit_group")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending_confirmation', 'processing', 'done', 'cancelled')",
+            name="commit_groups_status_check",
+        ),
+        Index("idx_commit_groups_project_id", "project_id"),
+        Index("idx_commit_groups_user_id", "user_id"),
+        Index("idx_commit_groups_status", "status"),
+    )
+```
+
+**`backend/app/models/project.py`** — добавить поля:
+
+```python
+webhook_file_limit: Mapped[int] = mapped_column(default=50, server_default=text("50"))
+pipeline_paused: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
+```
+
+**`backend/app/models/task.py`** — добавить поле и обновить CHECK constraint:
+
+```python
+commit_group_id: Mapped[uuid.UUID | None] = mapped_column(
+    ForeignKey("commit_groups.id", ondelete="SET NULL"), nullable=True
+)
+commit_group: Mapped[CommitGroup | None] = relationship(back_populates="tasks")
+```
+
+CheckConstraint обновить:
+
+```python
+"status IN ('queued', 'running', 'done', 'failed', 'published', 'conflict', 'cancelled')"
+```
+
+**Миграция** — создать через `alembic revision --autogenerate -m "add_commit_groups"`, проверить что содержит:
+
+- `CREATE TABLE commit_groups`
+- `ALTER TABLE projects ADD COLUMN webhook_file_limit INTEGER NOT NULL DEFAULT 50`
+- `ALTER TABLE projects ADD COLUMN pipeline_paused BOOLEAN NOT NULL DEFAULT false`
+- `ALTER TABLE tasks ADD COLUMN commit_group_id UUID REFERENCES commit_groups(id) ON DELETE SET NULL`
+- `ALTER TABLE tasks DROP CONSTRAINT tasks_status_check` + `ADD CONSTRAINT` с расширенным списком (включая `'cancelled'`)
+
+#### Шаги выполнения
+
+- [ ] Создать `backend/app/models/commit_group.py` с кодом выше
+- [ ] Добавить `webhook_file_limit` и `pipeline_paused` в `backend/app/models/project.py`
+- [ ] Добавить `commit_group_id`, обновить CHECK constraint в `backend/app/models/task.py`
+- [ ] Добавить импорт `CommitGroup` в `backend/app/models/__init__.py`
+- [ ] Запустить `alembic revision --autogenerate -m "add_commit_groups"` и проверить содержимое
+- [ ] Запустить `alembic upgrade head`, убедиться что миграция проходит без ошибок
+
+#### Проверка
+
+```bash
+# Проверить наличие таблицы и колонок
+SELECT column_name FROM information_schema.columns WHERE table_name = 'projects' AND column_name IN ('webhook_file_limit', 'pipeline_paused');
+SELECT table_name FROM information_schema.tables WHERE table_name = 'commit_groups';
+```
+
+---
+
+### 16.2 — Backend: Pipeline queue worker
+
+**Зависимости:** 16.1
+
+#### Файлы
+
+- Изменить: `backend/app/services/pipeline_runner.py` — полный рефакторинг очереди
+- Изменить: `backend/app/main.py` — lifespan запускает воркер
+
+#### Детали реализации
+
+Удалить `PIPELINE_RUN_LOCK`. Заменить на:
+
+```python
+_PIPELINE_QUEUE: asyncio.Queue[uuid.UUID] = asyncio.Queue()
+_DEFERRED_TASKS: dict[uuid.UUID, list[uuid.UUID]] = {}  # project_id → [task_ids]
+_PAUSED_PROJECTS: set[uuid.UUID] = set()
+_CURRENT_TASK_ID: uuid.UUID | None = None
+_CURRENT_EXECUTION: asyncio.Task[None] | None = None
+_WORKER_TASK: asyncio.Task[None] | None = None
+```
+
+**`schedule_task(task_id)`** — теперь просто кладёт в очередь:
+
+```python
+async def schedule_task(task_id: uuid.UUID) -> bool:
+    if task_id in _SCHEDULED_PIPELINES:
+        return False
+    _PIPELINE_QUEUE.put_nowait(task_id)
+    _SCHEDULED_PIPELINES[task_id] = True
+    return True
+```
+
+**`_queue_worker()`** — единственный воркер, запускается один раз при старте:
+
+```python
+async def _queue_worker() -> None:
+    global _CURRENT_TASK_ID, _CURRENT_EXECUTION
+
+    while True:
+        task_id = await _PIPELINE_QUEUE.get()
+        _SCHEDULED_PIPELINES.pop(task_id, None)
+
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            task = await session.get(Task, task_id)
+            if task is None or task.status != "queued":
+                continue
+            if task.project_id in _PAUSED_PROJECTS:
+                _DEFERRED_TASKS.setdefault(task.project_id, []).append(task_id)
+                continue
+
+        _CURRENT_TASK_ID = task_id
+        _CURRENT_EXECUTION = asyncio.create_task(
+            run_task(task_id), name=f"docflow.task.{task_id}"
+        )
+        _BACKGROUND_TASKS.add(_CURRENT_EXECUTION)
+        try:
+            await _CURRENT_EXECUTION
+        except asyncio.CancelledError:
+            pass
+        finally:
+            _BACKGROUND_TASKS.discard(_CURRENT_EXECUTION)
+            _CURRENT_EXECUTION = None
+            _CURRENT_TASK_ID = None
+```
+
+**`run_task()`** — добавить обработку `CancelledError` перед `except Exception`:
+
+```python
+    except asyncio.CancelledError:
+        task.status = "cancelled"
+        task.current_stage = None
+        task.completed_at = datetime.now(UTC)
+        await session.commit()
+        task_list_events.publish_task_status_changed(task, previous_status="running")
+        raise
+```
+
+**`main.py` lifespan** — инициализация при старте:
+
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Сбросить зависшие running → queued
+    async with session_factory() as session:
+        await session.execute(
+            update(Task)
+            .where(Task.status == "running")
+            .values(status="queued", current_stage=None)
+        )
+        await session.commit()
+
+    # Загрузить paused проекты из DB
+    async with session_factory() as session:
+        paused_ids = (await session.scalars(
+            select(Project.id).where(Project.pipeline_paused == True)
+        )).all()
+        pipeline_runner._PAUSED_PROJECTS.update(paused_ids)
+
+    # Поставить в очередь все queued задачи (кроме paused проектов)
+    async with session_factory() as session:
+        queued = (await session.scalars(
+            select(Task.id).where(
+                Task.status == "queued",
+                Task.project_id.notin_(list(pipeline_runner._PAUSED_PROJECTS)),
+            ).order_by(Task.created_at)
+        )).all()
+        for task_id in queued:
+            await pipeline_runner.schedule_task(task_id)
+
+    # Запустить воркер
+    worker = asyncio.create_task(
+        pipeline_runner._queue_worker(), name="docflow.queue_worker"
+    )
+    pipeline_runner._WORKER_TASK = worker
+
+    yield
+
+    worker.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await worker
+```
+
+#### Шаги выполнения
+
+- [ ] Удалить `PIPELINE_RUN_LOCK` и `async with PIPELINE_RUN_LOCK:` из `pipeline_runner.py`
+- [ ] Добавить новые глобальные переменные (`_PIPELINE_QUEUE`, `_DEFERRED_TASKS`, `_PAUSED_PROJECTS`, `_CURRENT_TASK_ID`, `_CURRENT_EXECUTION`, `_WORKER_TASK`)
+- [ ] Переписать `schedule_task()` — только `put_nowait`
+- [ ] Добавить `_queue_worker()` coroutine
+- [ ] Добавить `except asyncio.CancelledError` блок в `run_task()`
+- [ ] Обновить `lifespan` в `main.py`
+- [ ] Запустить сервер, создать задачу через `POST /tasks/manual`, убедиться что она выполняется (`queued → running → done`)
+- [ ] Перезапустить сервер пока задача `running` — после перезапуска она сбросится в `queued` и перезапустится
+
+---
+
+### 16.3 — Backend: Cancel задачи
+
+**Зависимости:** 16.2
+
+#### Файлы
+
+- Изменить: `backend/app/api/routes/tasks.py` — новый endpoint
+- Изменить: `backend/app/services/pipeline_runner.py` — функция `cancel_task()`
+- Изменить: `backend/app/schemas/task.py` — добавить `cancelled` в `TaskStatus`
+
+#### Детали реализации
+
+**`pipeline_runner.cancel_task(task_id)`:**
+
+```python
+async def cancel_task(task_id: uuid.UUID) -> bool:
+    if _CURRENT_TASK_ID == task_id and _CURRENT_EXECUTION is not None:
+        _CURRENT_EXECUTION.cancel()
+        return True
+    return False
+```
+
+**Новый endpoint `POST /tasks/{task_id}/cancel`:**
+
+```python
+@router.post(
+    "/{task_id}/cancel",
+    status_code=200,
+    summary="Отменить задачу",
+    description="Отменяет задачу со статусом `queued` или `running`. Статус становится `cancelled`.",
+)
+async def cancel_task_route(
+    task_id: UUID,
+    session: DbSession,
+    current_user: CurrentUser,
+) -> dict[str, str]:
+    task = await get_task_or_404(session, task_id, current_user)
+    if task.status not in ("queued", "running"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel task with status '{task.status}'",
+        )
+    previous_status = task.status
+    if task.status == "queued":
+        task.status = "cancelled"
+        task.completed_at = datetime.now(UTC)
+        await session.commit()
+        task_list_events.publish_task_status_changed(task, previous_status=previous_status)
+    else:
+        # running: cancel через asyncio, run_task сам обновит статус
+        await pipeline_runner.cancel_task(task_id)
+    return {"id": str(task.id), "status": "cancelled"}
+```
+
+**`TaskStatus` в `schemas/task.py`** — добавить `cancelled = "cancelled"`.
+
+#### Шаги выполнения
+
+- [ ] Добавить `cancelled` в `TaskStatus` enum в `backend/app/schemas/task.py`
+- [ ] Добавить `cancel_task()` в `pipeline_runner.py`
+- [ ] Добавить `POST /tasks/{id}/cancel` в `tasks.py` (до других `/{task_id}` роутов)
+- [ ] Проверить: создать задачу → отменить пока `queued` → статус `cancelled` в DB
+- [ ] Проверить: создать задачу → дождаться `running` → отменить → статус `cancelled`
+
+---
+
+### 16.4 — Backend: Pause/Resume проекта
+
+**Зависимости:** 16.2, 16.3
+
+#### Файлы
+
+- Изменить: `backend/app/api/routes/projects.py` — два новых endpoint
+- Изменить: `backend/app/services/pipeline_runner.py` — `pause_project()`, `resume_project()`
+- Изменить: `backend/app/schemas/project.py` — добавить `pipeline_paused`, `webhook_file_limit`
+
+#### Детали реализации
+
+**`pipeline_runner.pause_project(project_id)`:**
+
+```python
+async def pause_project(project_id: uuid.UUID) -> None:
+    _PAUSED_PROJECTS.add(project_id)
+    if _CURRENT_TASK_ID is not None and _CURRENT_EXECUTION is not None:
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            task = await session.get(Task, _CURRENT_TASK_ID)
+            if task is not None and task.project_id == project_id:
+                _CURRENT_EXECUTION.cancel()
+```
+
+**`pipeline_runner.resume_project(project_id)`:**
+
+```python
+async def resume_project(project_id: uuid.UUID) -> None:
+    _PAUSED_PROJECTS.discard(project_id)
+    deferred = _DEFERRED_TASKS.pop(project_id, [])
+    for task_id in deferred:
+        _PIPELINE_QUEUE.put_nowait(task_id)
+        _SCHEDULED_PIPELINES[task_id] = True
+    # Сканировать DB на queued задачи этого проекта (на случай рестарта)
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        queued = (await session.scalars(
+            select(Task.id).where(
+                Task.project_id == project_id,
+                Task.status == "queued",
+                Task.id.notin_(list(_SCHEDULED_PIPELINES.keys())),
+            ).order_by(Task.created_at)
+        )).all()
+        for task_id in queued:
+            _PIPELINE_QUEUE.put_nowait(task_id)
+            _SCHEDULED_PIPELINES[task_id] = True
+```
+
+**Новые endpoints в `projects.py`:**
+
+```python
+@router.post("/{project_id}/pause", status_code=200, summary="Поставить пайплайн на паузу")
+async def pause_project_route(
+    project_id: UUID, session: DbSession, current_user: CurrentUser
+) -> dict:
+    project = await get_project_visible_or_404(session, project_id, current_user)
+    project.pipeline_paused = True
+    await session.commit()
+    await pipeline_runner.pause_project(project_id)
+    return {"pipeline_paused": True}
+
+
+@router.post("/{project_id}/resume", status_code=200, summary="Возобновить пайплайн")
+async def resume_project_route(
+    project_id: UUID, session: DbSession, current_user: CurrentUser
+) -> dict:
+    project = await get_project_visible_or_404(session, project_id, current_user)
+    project.pipeline_paused = False
+    await session.commit()
+    await pipeline_runner.resume_project(project_id)
+    return {"pipeline_paused": False}
+```
+
+**`schemas/project.py`** — добавить в `ProjectRead`:
+
+```python
+pipeline_paused: bool
+webhook_file_limit: int
+```
+
+Добавить в `ProjectUpdate` (опционально):
+
+```python
+pipeline_paused: bool | None = None
+webhook_file_limit: int | None = Field(None, ge=1, le=1000)
+```
+
+#### Шаги выполнения
+
+- [x] Добавить `pipeline_paused` и `webhook_file_limit` в `ProjectRead` и `ProjectUpdate`
+- [x] Добавить `pause_project()` и `resume_project()` в `pipeline_runner.py`
+- [x] Добавить `POST /projects/{id}/pause` и `POST /projects/{id}/resume` в `projects.py`
+- [ ] Проверить: создать задачи → поставить проект на паузу → задачи не запускаются → возобновить → задачи начинают выполняться
+
+---
+
+### 16.5 — Backend: Webhook — bulk protection → CommitGroup
+
+**Зависимости:** 16.1
+
+#### Файлы
+
+- Изменить: `backend/app/api/routes/webhook.py`
+- Создать: `backend/app/schemas/commit_group.py`
+
+#### Детали реализации
+
+**`backend/app/schemas/commit_group.py`:**
+
+```python
+from __future__ import annotations
+import uuid
+from datetime import datetime
+from pydantic import BaseModel
+
+
+class CommitGroupRead(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    github_sha: str
+    github_ref: str
+    commit_message: str | None
+    commit_author_name: str | None
+    commit_author_login: str | None
+    file_paths: list[str]
+    status: str
+    created_at: datetime
+    confirmed_at: datetime | None
+
+
+class CommitGroupListResponse(BaseModel):
+    items: list[CommitGroupRead]
+    total: int
+```
+
+**`webhook.py`** — добавить блок после `_apply_exclude_patterns`:
+
+```python
+# Bulk protection
+if len(files_to_process) > project.webhook_file_limit:
+    owner = await _get_project_owner(session, project)
+    commit_group = CommitGroup(
+        project_id=project.id,
+        user_id=owner.id,
+        team_id=project.team_id,
+        github_sha=payload.get("after"),
+        github_ref=str(payload["ref"]),
+        commit_message=commit_message,
+        commit_author_name=commit_author_name,
+        commit_author_login=commit_author_login,
+        file_paths=files_to_process,
+        status="pending_confirmation",
+    )
+    session.add(commit_group)
+    await session.commit()
+    task_list_events.publish_commit_group_event(commit_group, event_type="commit_group_created")
+    logger.info(
+        "webhook_bulk_commit_group_created",
+        extra={"project_id": str(project.id), "files_count": len(files_to_process)},
+    )
+    return {
+        "created": 0,
+        "task_ids": [],
+        "skipped": skipped_files,
+        "commit_group_id": str(commit_group.id),
+        "commit_group_status": "pending_confirmation",
+    }
+```
+
+**Семафор на GitHub API** — вынести `_fetch_file_metadata` и обернуть:
+
+```python
+_GITHUB_FETCH_SEMAPHORE = asyncio.Semaphore(10)
+
+async def _fetch_file_metadata_safe(github_client, project, file_path):
+    async with _GITHUB_FETCH_SEMAPHORE:
+        return await _fetch_file_metadata(github_client, project, file_path)
+```
+
+Заменить `asyncio.gather(*[_fetch_file_metadata(fp) for fp in files_to_process])` на `asyncio.gather(*[_fetch_file_metadata_safe(github_client, project, fp) for fp in files_to_process])`.
+
+#### Шаги выполнения
+
+- [x] Создать `backend/app/schemas/commit_group.py`
+- [x] Добавить `_GITHUB_FETCH_SEMAPHORE` и `_fetch_file_metadata_safe` в `webhook.py`
+- [x] Заменить `asyncio.gather` на версию с семафором
+- [x] Добавить bulk-protection блок в webhook handler
+- [ ] Проверить: curl-запрос с 1 файлом → задача создаётся. Curl с 51 файлом → возвращается `commit_group_id`
+
+---
+
+### 16.6 — Backend: CommitGroup API
+
+**Зависимости:** 16.1, 16.5, 16.2
+
+#### Файлы
+
+- Создать: `backend/app/services/commit_groups.py`
+- Создать: `backend/app/api/routes/commit_groups.py`
+- Изменить: `backend/app/api/router.py` — подключить router
+
+#### Детали реализации
+
+**`backend/app/services/commit_groups.py`:**
+
+```python
+from __future__ import annotations
+
+import asyncio
+from datetime import UTC, datetime
+from uuid import UUID
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.commit_group import CommitGroup
+from app.models.task import Task
+from app.models.user import User
+from app.services import pipeline_runner, task_list_events
+from app.services.github import GitHubClient
+
+
+async def list_commit_groups(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    team_id: UUID | None,
+    project_id: UUID | None = None,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[CommitGroup], int]:
+    q = select(CommitGroup).where(
+        (CommitGroup.user_id == user_id)
+        if team_id is None
+        else (CommitGroup.user_id == user_id) | (CommitGroup.team_id == team_id)
+    )
+    if project_id:
+        q = q.where(CommitGroup.project_id == project_id)
+    if status:
+        q = q.where(CommitGroup.status == status)
+    q = q.order_by(CommitGroup.created_at.desc())
+    total = (await session.scalar(
+        select(func.count()).select_from(q.subquery())
+    )) or 0
+    items = (await session.scalars(q.offset(offset).limit(limit))).all()
+    return list(items), total
+
+
+async def confirm_commit_group(
+    session: AsyncSession,
+    commit_group: CommitGroup,
+    owner: User,
+    github_client: GitHubClient,
+) -> list[Task]:
+    from app.api.routes.webhook import _fetch_file_metadata_safe
+
+    commit_group.status = "processing"
+    commit_group.confirmed_at = datetime.now(UTC)
+    await session.commit()
+    task_list_events.publish_commit_group_event(commit_group, event_type="commit_group_updated")
+
+    active_tasks = (await session.scalars(
+        select(Task).where(
+            Task.project_id == commit_group.project_id,
+            Task.file_path.in_(commit_group.file_paths),
+            Task.status.in_(("queued", "running")),
+        )
+    )).all()
+    active_by_path = {t.file_path: t for t in active_tasks}
+    to_process = [fp for fp in commit_group.file_paths if fp not in active_by_path]
+
+    project = commit_group.project
+    fetched = await asyncio.gather(*[
+        _fetch_file_metadata_safe(github_client, project, fp) for fp in to_process
+    ])
+
+    tasks_to_create = [
+        Task(
+            user_id=owner.id,
+            project_id=commit_group.project_id,
+            team_id=commit_group.team_id,
+            commit_group_id=commit_group.id,
+            file_path=fp,
+            github_ref=commit_group.github_ref,
+            github_sha=commit_group.github_sha,
+            commit_message=commit_group.commit_message,
+            commit_author_name=commit_group.commit_author_name,
+            commit_author_login=commit_group.commit_author_login,
+            source_file_sha=source_sha,
+            target_file_sha=target_sha,
+            original_content=content,
+            status="queued",
+        )
+        for fp, content, source_sha, target_sha in fetched
+    ]
+
+    session.add_all(tasks_to_create)
+    commit_group.status = "done"
+    await session.commit()
+    task_list_events.publish_commit_group_event(commit_group, event_type="commit_group_updated")
+
+    for task in tasks_to_create:
+        task_list_events.publish_task_entered_scope(task)
+        await pipeline_runner.schedule_task(task.id)
+
+    return tasks_to_create
+```
+
+**`backend/app/api/routes/commit_groups.py`:**
+
+```python
+from __future__ import annotations
+
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.session import get_db_session
+from app.models.commit_group import CommitGroup
+from app.models.user import User
+from app.schemas.commit_group import CommitGroupListResponse, CommitGroupRead
+from app.services import task_list_events
+from app.services.auth import decrypt_github_access_token, get_current_user
+from app.services.commit_groups import confirm_commit_group, list_commit_groups
+from app.services.github import GitHubClient
+from app.services.projects import _get_user_team_id
+
+router = APIRouter(prefix="/commit-groups", tags=["commit-groups"])
+DbSession = Annotated[AsyncSession, Depends(get_db_session)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def _get_group_or_404(session: AsyncSession, group_id: UUID, user: User) -> CommitGroup:
+    group = await session.get(CommitGroup, group_id)
+    if group is None or group.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Commit group not found")
+    return group
+
+
+@router.get("", response_model=CommitGroupListResponse)
+async def get_commit_groups(
+    session: DbSession,
+    current_user: CurrentUser,
+    project_id: UUID | None = None,
+    status: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> CommitGroupListResponse:
+    team_id = await _get_user_team_id(session, current_user.id)
+    items, total = await list_commit_groups(
+        session,
+        user_id=current_user.id,
+        team_id=team_id,
+        project_id=project_id,
+        status=status,
+        limit=limit,
+        offset=offset,
+    )
+    return CommitGroupListResponse(
+        items=[CommitGroupRead.model_validate(g) for g in items],
+        total=total,
+    )
+
+
+@router.post("/{group_id}/confirm", status_code=202)
+async def confirm_group_route(
+    group_id: UUID,
+    session: DbSession,
+    current_user: CurrentUser,
+) -> dict:
+    group = await _get_group_or_404(session, group_id, current_user)
+    if group.status != "pending_confirmation":
+        raise HTTPException(status_code=400, detail=f"Cannot confirm group with status '{group.status}'")
+    if not current_user.github_linked or not current_user.github_access_token:
+        raise HTTPException(status_code=400, detail="GitHub account is not linked")
+
+    access_token = decrypt_github_access_token(current_user.github_access_token)
+    github_client = GitHubClient(access_token)
+    await session.refresh(group, ["project"])
+    tasks = await confirm_commit_group(session, group, current_user, github_client)
+    return {"created": len(tasks), "task_ids": [str(t.id) for t in tasks]}
+
+
+@router.delete("/{group_id}", status_code=204)
+async def cancel_group_route(
+    group_id: UUID,
+    session: DbSession,
+    current_user: CurrentUser,
+) -> None:
+    group = await _get_group_or_404(session, group_id, current_user)
+    if group.status != "pending_confirmation":
+        raise HTTPException(status_code=400, detail=f"Cannot cancel group with status '{group.status}'")
+    group.status = "cancelled"
+    await session.commit()
+    task_list_events.publish_commit_group_event(group, event_type="commit_group_updated")
+```
+
+#### Шаги выполнения
+
+- [x] Создать `backend/app/services/commit_groups.py`
+- [x] Создать `backend/app/api/routes/commit_groups.py`
+- [x] Добавить `commit_groups_router` в `backend/app/api/router.py`
+- [ ] Проверить `GET /commit-groups` → 200, пустой список
+- [ ] Создать CommitGroup через webhook → `POST /commit-groups/{id}/confirm` → задачи созданы
+- [ ] `DELETE /commit-groups/{id}` → статус `cancelled`
+
+---
+
+### 16.7 — Backend: SSE — task_updated + commit_group events
+
+**Зависимости:** 16.2, 16.3, 16.4
+
+#### Файлы
+
+- Изменить: `backend/app/services/task_list_events.py`
+
+#### Детали реализации
+
+**Добавить `publish_task_status_changed`:**
+
+```python
+def publish_task_status_changed(task: Task, *, previous_status: str) -> None:
+    payload = {
+        "task_id": str(task.id),
+        "project_id": str(task.project_id) if task.project_id is not None else None,
+        "status": task.status,
+        "current_stage": task.current_stage,
+    }
+    for subscription in list(TASK_LIST_EVENT_SUBSCRIPTIONS.values()):
+        belongs_to_user = task.user_id == subscription.user_id
+        belongs_to_team = (
+            subscription.team_id is not None
+            and task.team_id is not None
+            and task.team_id == subscription.team_id
+        )
+        if not belongs_to_user and not belongs_to_team:
+            continue
+        if subscription.project_id is not None and task.project_id != subscription.project_id:
+            continue
+        if subscription.search:
+            needle = subscription.search
+            if needle not in task.file_path.lower() and needle not in (task.commit_message or "").lower():
+                continue
+        subscription.queue.put_nowait({"event": "task_updated", "data": payload})
+```
+
+**Добавить `publish_commit_group_event`:**
+
+```python
+def publish_commit_group_event(commit_group: Any, *, event_type: str) -> None:
+    payload = {
+        "commit_group_id": str(commit_group.id),
+        "project_id": str(commit_group.project_id),
+        "github_sha": commit_group.github_sha,
+        "files_count": len(commit_group.file_paths),
+        "commit_message": commit_group.commit_message,
+        "commit_author_name": commit_group.commit_author_name,
+        "commit_author_login": commit_group.commit_author_login,
+        "status": commit_group.status,
+        "created_at": commit_group.created_at.isoformat(),
+    }
+    for subscription in list(TASK_LIST_EVENT_SUBSCRIPTIONS.values()):
+        belongs_to_user = commit_group.user_id == subscription.user_id
+        belongs_to_team = (
+            subscription.team_id is not None
+            and getattr(commit_group, "team_id", None) == subscription.team_id
+        )
+        if not belongs_to_user and not belongs_to_team:
+            continue
+        if subscription.project_id is not None and commit_group.project_id != subscription.project_id:
+            continue
+        subscription.queue.put_nowait({"event": event_type, "data": payload})
+```
+
+**Точки вызова `publish_task_status_changed`** — добавить в `pipeline_runner.py`:
+
+| Место в `run_task`                       | Вызов                                                                           |
+| ---------------------------------------- | ------------------------------------------------------------------------------- |
+| После `task.status = "running"` + commit | `task_list_events.publish_task_status_changed(task, previous_status="queued")`  |
+| После `task.status = "done"` + commit    | `task_list_events.publish_task_status_changed(task, previous_status="running")` |
+| После `task.status = "failed"` + commit  | `task_list_events.publish_task_status_changed(task, previous_status="running")` |
+| В `except CancelledError` + commit       | уже добавлено в 16.2                                                            |
+
+Также в `tasks.py cancel_task_route` для queued→cancelled — уже добавлено в 16.3.
+
+#### Шаги выполнения
+
+- [x] Добавить `publish_task_status_changed` в `task_list_events.py`
+- [x] Добавить `publish_commit_group_event` в `task_list_events.py`
+- [x] Добавить вызовы `publish_task_status_changed` в `pipeline_runner.run_task` на каждый переход статуса
+- [ ] Проверить через DevTools Network: открыть `/api/tasks/events` SSE → изменить статус задачи → получить `task_updated` событие
+
+---
+
+### 16.8 — Frontend: Real-time обновления статусов
+
+**Зависимости:** 16.7
+
+#### Файлы
+
+- Создать: `src/features/tasks/hooks/useTaskListSSE.ts`
+- Изменить: `src/features/tasks/ui/TaskListPage/TaskListPage.tsx`
+
+#### Детали реализации
+
+**`useTaskListSSE.ts`:**
+
+```typescript
+import { useEffect } from 'react'
+import { useDispatch } from 'react-redux'
+import { AppDispatch } from '@/shared/store'
+import { tasksApi } from '../api/tasksApi'
+import { commitGroupsApi } from '@/features/commit-groups/api/commitGroupsApi'
+
+interface Filters {
+  projectId?: string
+  status?: string
+  search?: string
+}
+
+export function useTaskListSSE(filters: Filters) {
+  const dispatch = useDispatch<AppDispatch>()
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (filters.projectId) params.set('project_id', filters.projectId)
+    if (filters.status) params.set('status', filters.status)
+    if (filters.search) params.set('search', filters.search)
+
+    const es = new EventSource(`/api/tasks/events?${params}`)
+
+    es.addEventListener('task_entered', () => {
+      dispatch(tasksApi.util.invalidateTags(['Task']))
+    })
+
+    es.addEventListener('task_updated', (e) => {
+      const data = JSON.parse((e as MessageEvent).data) as {
+        task_id: string
+        status: string
+        current_stage: string | null
+        project_id: string | null
+      }
+      dispatch(
+        tasksApi.util.updateQueryData('getTasks', undefined as any, (draft) => {
+          const task = draft.items.find((t) => t.id === data.task_id)
+          if (task) {
+            task.status = data.status as any
+            task.current_stage = data.current_stage
+          }
+        }),
+      )
+    })
+
+    es.addEventListener('commit_group_created', () => {
+      dispatch(commitGroupsApi.util.invalidateTags(['CommitGroup']))
+    })
+
+    es.addEventListener('commit_group_updated', (e) => {
+      const data = JSON.parse((e as MessageEvent).data) as {
+        commit_group_id: string
+        status: string
+      }
+      dispatch(
+        commitGroupsApi.util.updateQueryData('getCommitGroups', undefined as any, (draft) => {
+          const group = draft.items.find((g) => g.id === data.commit_group_id)
+          if (group) group.status = data.status as any
+        }),
+      )
+    })
+
+    es.onerror = () => es.close()
+    return () => es.close()
+  }, [filters.projectId, filters.status, filters.search, dispatch])
+}
+```
+
+**`TaskListPage.tsx`** — подключить hook:
+
+```typescript
+const filters = useTaskFilters()
+useTaskListSSE({
+  projectId: filters.projectId ?? undefined,
+  status: filters.status ?? undefined,
+  search: filters.search ?? undefined,
+})
+```
+
+#### Шаги выполнения
+
+- [x] Создать `src/features/tasks/hooks/useTaskListSSE.ts`
+- [x] Вызвать `useTaskListSSE(filters)` в `TaskListPage.tsx`
+- [x] Добавить `'CommitGroup'` в список тегов `baseApi` в `src/shared/api/baseApi.ts`
+- [ ] Проверить: отменить задачу через API → статус обновился в UI без перезагрузки страницы
+
+---
+
+### 16.9 — Frontend: CommitGroup UI
+
+**Зависимости:** 16.6, 16.8
+
+#### Файлы
+
+- Создать: `src/features/commit-groups/model/types.ts`
+- Создать: `src/features/commit-groups/api/commitGroupsApi.ts`
+- Создать: `src/features/commit-groups/ui/CommitGroupRow/CommitGroupRow.tsx` + `.module.css`
+- Изменить: `src/features/tasks/ui/TaskListPage/TaskListPage.tsx`
+- Изменить: `src/locales/ru/tasks.json`
+
+#### Детали реализации
+
+**`types.ts`:**
+
+```typescript
+export interface CommitGroup {
+  id: string
+  project_id: string
+  github_sha: string
+  github_ref: string
+  commit_message: string | null
+  commit_author_name: string | null
+  commit_author_login: string | null
+  file_paths: string[]
+  files_count: number
+  status: 'pending_confirmation' | 'processing' | 'done' | 'cancelled'
+  created_at: string
+  confirmed_at: string | null
+}
+
+export interface CommitGroupListResponse {
+  items: CommitGroup[]
+  total: number
+}
+```
+
+**`commitGroupsApi.ts`:**
+
+```typescript
+import { baseApi } from '@/shared/api/baseApi'
+import { CommitGroup, CommitGroupListResponse } from '../model/types'
+
+export const commitGroupsApi = baseApi.injectEndpoints({
+  endpoints: (build) => ({
+    getCommitGroups: build.query<CommitGroupListResponse, { projectId?: string; status?: string }>({
+      query: ({ projectId, status }) => ({
+        url: '/commit-groups',
+        params: { project_id: projectId, status },
+      }),
+      providesTags: ['CommitGroup'],
+    }),
+    confirmCommitGroup: build.mutation<{ created: number; task_ids: string[] }, string>({
+      query: (groupId) => ({ url: `/commit-groups/${groupId}/confirm`, method: 'POST' }),
+      invalidatesTags: ['CommitGroup', 'Task'],
+    }),
+    cancelCommitGroup: build.mutation<void, string>({
+      query: (groupId) => ({ url: `/commit-groups/${groupId}`, method: 'DELETE' }),
+      invalidatesTags: ['CommitGroup'],
+    }),
+  }),
+})
+
+export const {
+  useGetCommitGroupsQuery,
+  useConfirmCommitGroupMutation,
+  useCancelCommitGroupMutation,
+} = commitGroupsApi
+```
+
+**`CommitGroupRow.tsx`:**
+
+```tsx
+import { useTranslation } from 'react-i18next'
+import { GitCommitHorizontal, Loader2 } from 'lucide-react'
+import { Button } from '@/shared/ui/Button/Button'
+import {
+  useConfirmCommitGroupMutation,
+  useCancelCommitGroupMutation,
+} from '../../api/commitGroupsApi'
+import { CommitGroup } from '../../model/types'
+import styles from './CommitGroupRow.module.css'
+
+interface Props {
+  group: CommitGroup
+}
+
+export function CommitGroupRow({ group }: Props) {
+  const { t } = useTranslation('tasks')
+  const [confirm, { isLoading: confirming }] = useConfirmCommitGroupMutation()
+  const [cancel, { isLoading: cancelling }] = useCancelCommitGroupMutation()
+
+  return (
+    <div className={styles.row}>
+      <div className={styles.icon}>
+        <GitCommitHorizontal size={13} />
+      </div>
+      <div className={styles.body}>
+        <span className={styles.sha}>{group.github_sha?.slice(0, 7)}</span>
+        <span className={styles.message}>{group.commit_message ?? '—'}</span>
+        <span className={styles.meta}>
+          {t('commit_group.files_count', { count: group.file_paths.length })}
+          {' · '}
+          <span className={styles.pending}>{t('commit_group.pending_label')}</span>
+        </span>
+      </div>
+      <div className={styles.actions}>
+        {group.status === 'processing' ? (
+          <Loader2 size={15} className={styles.spinner} />
+        ) : (
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={confirming}
+              onClick={() => confirm(group.id)}
+            >
+              {t('commit_group.confirm_action')}
+            </Button>
+            <Button variant="ghost" size="sm" loading={cancelling} onClick={() => cancel(group.id)}>
+              {t('commit_group.cancel_action')}
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+**Ключи локализации в `tasks.json`:**
+
+```json
+{
+  "commit_group": {
+    "files_count_one": "{{count}} файл",
+    "files_count_few": "{{count}} файла",
+    "files_count_many": "{{count}} файлов",
+    "pending_label": "ожидает подтверждения",
+    "confirm_action": "Запустить перевод",
+    "cancel_action": "Отклонить"
+  }
+}
+```
+
+**`TaskListPage.tsx`** — добавить перед commit-группами задач:
+
+```tsx
+const { data: pendingGroups } = useGetCommitGroupsQuery({ status: 'pending_confirmation' })
+
+// В JSX:
+{
+  pendingGroups?.items.map((group) => <CommitGroupRow key={group.id} group={group} />)
+}
+```
+
+#### Шаги выполнения
+
+- [x] Создать `src/features/commit-groups/model/types.ts`
+- [x] Создать `src/features/commit-groups/api/commitGroupsApi.ts`
+- [x] Добавить `'CommitGroup'` в baseApi tags (если ещё не добавлено в 16.8)
+- [x] Создать `CommitGroupRow.tsx` + `CommitGroupRow.module.css`
+- [x] Добавить ключи в `src/locales/ru/tasks.json`
+- [x] Добавить `useGetCommitGroupsQuery` и `CommitGroupRow` в `TaskListPage.tsx`
+- [ ] Проверить: webhook с 51 файлом → в TaskList появилась строка «ожидает подтверждения» → «Запустить перевод» → строка исчезла, задачи появились
+
+---
+
+### 16.10 — Frontend: Cancel + Pause/Resume UI
+
+**Зависимости:** 16.3, 16.4, 16.8
+
+#### Файлы
+
+- Изменить: `src/features/tasks/api/tasksApi.ts` — мутация `cancelTask`
+- Изменить: `src/features/tasks/ui/TaskRow/TaskRow.tsx` — кнопка Cancel
+- Изменить: `src/features/projects/api/projectsApi.ts` — мутации `pauseProject`, `resumeProject`
+- Изменить: `src/features/projects/ui/RepositoryDetailPage/RepositoryDetailPage.tsx` — секция Пайплайн
+- Изменить: `src/locales/ru/tasks.json`, `src/locales/ru/repositories.json`
+
+#### Детали реализации
+
+**`tasksApi.ts`** — добавить мутацию:
+
+```typescript
+cancelTask: build.mutation<{ id: string; status: string }, string>({
+  query: (taskId) => ({ url: `/tasks/${taskId}/cancel`, method: 'POST' }),
+  invalidatesTags: (_result, _error, taskId) => [{ type: 'Task', id: taskId }],
+}),
+```
+
+**`TaskRow.tsx`** — добавить кнопку Cancel для `queued` и `running`:
+
+```tsx
+const [cancelTask, { isLoading: cancelling }] = useCancelTaskMutation()
+
+// В action-секции строки:
+{
+  ;(task.status === 'queued' || task.status === 'running') && (
+    <Button
+      variant="ghost"
+      size="sm"
+      iconLeft={<X size={13} />}
+      loading={cancelling}
+      title={t('task.cancel_action')}
+      onClick={(e) => {
+        e.stopPropagation()
+        cancelTask(task.id)
+      }}
+    />
+  )
+}
+```
+
+**`projectsApi.ts`** — добавить:
+
+```typescript
+pauseProject: build.mutation<{ pipeline_paused: boolean }, string>({
+  query: (projectId) => ({ url: `/projects/${projectId}/pause`, method: 'POST' }),
+  invalidatesTags: (_r, _e, id) => [{ type: 'Project', id }],
+}),
+resumeProject: build.mutation<{ pipeline_paused: boolean }, string>({
+  query: (projectId) => ({ url: `/projects/${projectId}/resume`, method: 'POST' }),
+  invalidatesTags: (_r, _e, id) => [{ type: 'Project', id }],
+}),
+```
+
+**`RepositoryDetailPage.tsx`** — добавить секцию «Пайплайн» (после секции Webhook):
+
+```tsx
+const [pauseProject, { isLoading: pausing }] = usePauseProjectMutation()
+const [resumeProject, { isLoading: resuming }] = useResumeProjectMutation()
+
+// Настройки лимита
+const [limitValue, setLimitValue] = useState(String(project.webhook_file_limit))
+
+// JSX — новая секция:
+<section className={styles.section}>
+  <h2>{t('repositories.pipeline_title')}</h2>
+  <div className={styles.pipelineRow}>
+    <label>{t('repositories.webhook_file_limit')}</label>
+    <input
+      type="number"
+      min={1}
+      max={1000}
+      value={limitValue}
+      onChange={(e) => setLimitValue(e.target.value)}
+    />
+    <Button variant="secondary" size="sm" onClick={() =>
+      updateProject({ id: project.id, webhook_file_limit: Number(limitValue) })
+    }>
+      {t('common.save')}
+    </Button>
+    <span className={styles.hint}>{t('repositories.webhook_file_limit_hint')}</span>
+  </div>
+  <div className={styles.pipelineRow}>
+    {project.pipeline_paused ? (
+      <>
+        <StatusPill status="paused" />
+        <Button variant="secondary" loading={resuming} onClick={() => resumeProject(project.id)}>
+          {t('repositories.resume_pipeline')}
+        </Button>
+      </>
+    ) : (
+      <Button variant="ghost" loading={pausing} onClick={() => pauseProject(project.id)}>
+        {t('repositories.pause_pipeline')}
+      </Button>
+    )}
+  </div>
+</section>
+```
+
+**Ключи локализации:**
+
+`tasks.json`:
+
+```json
+{ "task": { "cancel_action": "Отменить задачу" } }
+```
+
+`repositories.json`:
+
+```json
+{
+  "pipeline_title": "Пайплайн",
+  "webhook_file_limit": "Лимит файлов на коммит",
+  "webhook_file_limit_hint": "Коммиты с большим числом .md файлов потребуют подтверждения",
+  "pause_pipeline": "Поставить на паузу",
+  "resume_pipeline": "Возобновить пайплайн"
+}
+```
+
+#### Шаги выполнения
+
+- [x] Добавить `cancelTask` mutation в `tasksApi.ts`
+- [x] Добавить кнопку Cancel в `TaskRow.tsx`
+- [x] Добавить `pauseProject` и `resumeProject` в `projectsApi.ts`
+- [x] Добавить секцию «Пайплайн» в `RepositoryDetailPage.tsx`
+- [x] Добавить ключи локализации
+- [ ] Проверить: задача `queued` → нажать Cancel → статус сразу обновляется без перезагрузки
+- [ ] Проверить: поставить проект на паузу → новые задачи не запускаются → возобновить → запускаются
+
+---
+
+### Порядок подэтапов 16
+
+```
+16.1  backend: DB schema (CommitGroup + поля Project/Task + миграция)
+16.2  backend: pipeline queue worker (замена PIPELINE_RUN_LOCK)
+16.3  backend: cancel задачи (queued + running)
+16.4  backend: pause/resume проекта
+16.5  backend: webhook bulk protection → CommitGroup
+16.6  backend: CommitGroup API (list / confirm / cancel)
+16.7  backend: SSE — task_updated + commit_group events
+16.8  frontend: real-time обновления через SSE (useTaskListSSE)
+16.9  frontend: CommitGroupRow в TaskList
+16.10 frontend: Cancel button + Pause/Resume UI
+```
+
+16.1–16.7 — бэкенд, брать по одному подэтапу. 16.8–16.10 — фронтенд, зависят от 16.7.
+
+### Изменения в бэкенде по подэтапам 16
+
+| Подэтап | Изменения в API/моделях                                                                                                                                                                                                                                                        |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 16.1    | Новая таблица `commit_groups`. Поля `webhook_file_limit`, `pipeline_paused` в `projects`. Поле `commit_group_id` в `tasks`. Статус `cancelled` в CHECK constraint. Миграция                                                                                                    |
+| 16.2    | `pipeline_runner.py`: удалён `PIPELINE_RUN_LOCK`, добавлены `_PIPELINE_QUEUE`, `_DEFERRED_TASKS`, `_PAUSED_PROJECTS`, `_CURRENT_TASK_ID`, `_CURRENT_EXECUTION`, `_queue_worker()`. `main.py`: lifespan запускает воркер, сбрасывает `running→queued`, загружает paused проекты |
+| 16.3    | Новый `POST /tasks/{id}/cancel`. `TaskStatus` enum расширен `cancelled`. `pipeline_runner.cancel_task()`                                                                                                                                                                       |
+| 16.4    | Новые `POST /projects/{id}/pause` и `POST /projects/{id}/resume`. `pipeline_runner.pause_project()`, `resume_project()`. Поля `pipeline_paused`, `webhook_file_limit` в `ProjectRead` и `ProjectUpdate`                                                                        |
+| 16.5    | Bulk-protection блок в `webhook.py`. `asyncio.Semaphore(10)` на GitHub API fetch. Возврат `commit_group_id` в ответе                                                                                                                                                           |
+| 16.6    | Новые `GET /commit-groups`, `POST /commit-groups/{id}/confirm`, `DELETE /commit-groups/{id}`. Файлы: `schemas/commit_group.py`, `services/commit_groups.py`, `api/routes/commit_groups.py`                                                                                     |
+| 16.7    | `task_list_events.py`: `publish_task_status_changed`, `publish_commit_group_event`. Вызовы во всех точках смены статуса в `pipeline_runner.py` и `tasks.py`                                                                                                                    |

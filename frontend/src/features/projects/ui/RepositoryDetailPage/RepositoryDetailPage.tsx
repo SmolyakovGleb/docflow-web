@@ -20,7 +20,9 @@ import {
   useDeleteProjectMutation,
   useGetProjectQuery,
   useGetProjectTasksQuery,
+  usePauseProjectMutation,
   useRegenerateSecretMutation,
+  useResumeProjectMutation,
   useUpdateProjectMutation,
 } from '../../api/projectsApi'
 import type { Project, ProjectTaskListResponse } from '../../model/types'
@@ -100,6 +102,7 @@ function RepositoryDetailContent({
   const { t } = useTranslation(['repositories', 'common'])
   const navigate = useNavigate()
   const [excludePatternsDraft, setExcludePatternsDraft] = useState(() => project.exclude_patterns)
+  const [limitValue, setLimitValue] = useState(String(project.webhook_file_limit))
   const [editBranchesOpen, setEditBranchesOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [confirmSecretOpen, setConfirmSecretOpen] = useState(false)
@@ -107,6 +110,8 @@ function RepositoryDetailContent({
   const [updateProject, { isLoading: isUpdating }] = useUpdateProjectMutation()
   const [deleteProject, { isLoading: isDeleting }] = useDeleteProjectMutation()
   const [regenerateSecret, { isLoading: isRegenerating }] = useRegenerateSecretMutation()
+  const [pauseProject, { isLoading: pausing }] = usePauseProjectMutation()
+  const [resumeProject, { isLoading: resuming }] = useResumeProjectMutation()
 
   async function handleSaveBranches(payload: { source_branch: string; target_branch: string }) {
     try {
@@ -280,6 +285,58 @@ function RepositoryDetailContent({
               onCopyError={(error) => toast.error(translateApiError(error))}
             />
           </Field>
+        </SectionCard>
+
+        <SectionCard label={t('repositories:pipeline_title')}>
+          <div className={styles.pipelineRow}>
+            <label className={styles.pipelineLabel}>{t('repositories:webhook_file_limit')}</label>
+            <input
+              className={styles.pipelineInput}
+              type="number"
+              min={1}
+              max={1000}
+              value={limitValue}
+              onChange={(e) => setLimitValue(e.target.value)}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={isUpdating}
+              onClick={() =>
+                void updateProject({
+                  projectId,
+                  data: { webhook_file_limit: Number(limitValue) },
+                })
+              }
+            >
+              {t('common:save')}
+            </Button>
+            <span className={styles.hint}>{t('repositories:webhook_file_limit_hint')}</span>
+          </div>
+          <div className={styles.pipelineRow}>
+            {project.pipeline_paused ? (
+              <>
+                <span className={styles.pausedBadge}>
+                  {t('repositories:pipeline_paused_label')}
+                </span>
+                <Button
+                  variant="secondary"
+                  loading={resuming}
+                  onClick={() => void resumeProject(project.id)}
+                >
+                  {t('repositories:resume_pipeline')}
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="ghost"
+                loading={pausing}
+                onClick={() => void pauseProject(project.id)}
+              >
+                {t('repositories:pause_pipeline')}
+              </Button>
+            )}
+          </div>
         </SectionCard>
 
         <SectionCard
