@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.commit_group import CommitGroup
     from app.models.task import Task
     from app.models.user import User
 
@@ -37,6 +38,7 @@ class Project(Base):
 
     user: Mapped[User] = relationship(back_populates="projects")
     tasks: Mapped[list[Task]] = relationship(back_populates="project")
+    commit_groups: Mapped[list[CommitGroup]] = relationship(back_populates="project")
 
     @property
     def is_team_project(self) -> bool:

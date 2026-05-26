@@ -1,9 +1,11 @@
-import { Check, ChevronRight } from 'lucide-react'
+import { Check, ChevronRight, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/shared/lib/cn'
 import { formatRelativeShort } from '@/shared/lib/date'
+import { Button } from '@/shared/ui/Button/Button'
 import { StatusPill } from '@/shared/ui/StatusPill/StatusPill'
 import type { TaskSummary } from '@/features/tasks/model/types'
+import { useCancelTaskMutation } from '@/features/tasks/api/tasksApi'
 import { PipelineProgress } from '../PipelineProgress'
 import { TaskTypeIcon } from '../TaskTypeIcon'
 import styles from './TaskRow.module.css'
@@ -19,6 +21,8 @@ interface TaskRowProps {
   onRemove: (taskId: string) => void
   onPublish: (taskId: string) => void
   isPublishing?: boolean
+  isRetrying?: boolean
+  isDownloading?: boolean
 }
 
 export function TaskRow({
@@ -32,8 +36,11 @@ export function TaskRow({
   onRemove,
   onPublish,
   isPublishing = false,
+  isRetrying = false,
+  isDownloading = false,
 }: TaskRowProps) {
   const { t } = useTranslation(['tasks', 'teams'])
+  const [cancelTask, { isLoading: cancelling }] = useCancelTaskMutation()
   const lastSlash = task.file_path.lastIndexOf('/')
   const dir = lastSlash >= 0 ? task.file_path.slice(0, lastSlash + 1) : ''
   const file = lastSlash >= 0 ? task.file_path.slice(lastSlash + 1) : task.file_path
@@ -124,12 +131,13 @@ export function TaskRow({
             <button
               type="button"
               className={styles.quickAction}
+              disabled={isDownloading}
               onClick={(event) => {
                 event.stopPropagation()
                 onDownload(task)
               }}
             >
-              {t('actions.download')}
+              {isDownloading ? `${t('actions.download')}…` : t('actions.download')}
             </button>
             <span className={styles.divider} aria-hidden="true" />
             <button
@@ -150,12 +158,13 @@ export function TaskRow({
           <button
             type="button"
             className={styles.quickActionSingle}
+            disabled={isDownloading}
             onClick={(event) => {
               event.stopPropagation()
               onDownload(task)
             }}
           >
-            {t('actions.download')}
+            {isDownloading ? `${t('actions.download')}…` : t('actions.download')}
           </button>
         ) : null}
 
@@ -163,12 +172,13 @@ export function TaskRow({
           <button
             type="button"
             className={styles.quickActionSingle}
+            disabled={isDownloading}
             onClick={(event) => {
               event.stopPropagation()
               onDownload(task)
             }}
           >
-            {t('actions.download')}
+            {isDownloading ? `${t('actions.download')}…` : t('actions.download')}
           </button>
         ) : null}
 
@@ -176,12 +186,13 @@ export function TaskRow({
           <button
             type="button"
             className={styles.quickActionSingle}
+            disabled={isRetrying}
             onClick={(event) => {
               event.stopPropagation()
               onRetry(task.id)
             }}
           >
-            {t('actions.retry')}
+            {isRetrying ? `${t('actions.retry')}…` : t('actions.retry')}
           </button>
         ) : null}
 
@@ -210,6 +221,20 @@ export function TaskRow({
             {t('actions.resolve')}
           </button>
         ) : null}
+
+        {(task.status === 'queued' || task.status === 'running') && (
+          <Button
+            variant="ghost"
+            size="sm"
+            iconLeft={<X size={13} />}
+            loading={cancelling}
+            title={t('task.cancel_action')}
+            onClick={(e) => {
+              e.stopPropagation()
+              void cancelTask(task.id)
+            }}
+          />
+        )}
 
         <span
           className={cn(

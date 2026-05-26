@@ -1,4 +1,4 @@
-import { GitCommitHorizontal, Terminal } from 'lucide-react'
+import { GitCommitHorizontal, Loader2, Terminal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/shared/lib/cn'
 import { formatCommitTimestamp } from '@/shared/lib/date'
@@ -20,6 +20,8 @@ interface CommitGroupProps {
   onPublish: (taskId: string) => void
   onPublishGroup: (taskIds: string[]) => void
   publishingIds?: Set<string>
+  retryingIds?: Set<string>
+  downloadingIds?: Set<string>
 }
 
 export function CommitGroup({
@@ -34,6 +36,8 @@ export function CommitGroup({
   onPublish,
   onPublishGroup,
   publishingIds,
+  retryingIds,
+  downloadingIds,
 }: CommitGroupProps) {
   const { t } = useTranslation('tasks')
   const publishableIds = group.tasks
@@ -75,8 +79,9 @@ export function CommitGroup({
             disabled={isGroupPublishing}
             onClick={() => onPublishGroup(publishableIds)}
           >
+            {isGroupPublishing ? <Loader2 size={12} className={styles.publishAllSpinner} /> : null}
             {t('actions.publish_all')}
-            <span>{publishableIds.length}</span>
+            {!isGroupPublishing ? <span>{publishableIds.length}</span> : null}
           </button>
         ) : null}
       </header>
@@ -94,6 +99,8 @@ export function CommitGroup({
           onRemove={onRemove}
           onPublish={onPublish}
           isPublishing={publishingIds?.has(task.id) ?? false}
+          isRetrying={retryingIds?.has(task.id) ?? false}
+          isDownloading={downloadingIds?.has(task.id) ?? false}
         />
       ))}
     </section>

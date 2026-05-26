@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
+from app.models.commit_group import CommitGroup
 from app.models.project import Project
 from app.models.task import Task
 from app.models.user import User
@@ -27,6 +28,26 @@ router = APIRouter(tags=["webhook"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 ACTIVE_TASK_STATUSES = ("queued", "running")
 logger = logging.getLogger(__name__)
+
+_GITHUB_FETCH_SEMAPHORE = asyncio.Semaphore(10)
+
+
+async def _fetch_file_metadata(github_client: GitHubClient, project: Project, file_path: str):
+    source_task = github_client.get_file_content(
+        project.source_repo, file_path, project.source_branch
+    )
+    target_task = github_client.get_file_sha(
+        project.target_repo, file_path, project.target_branch
+    )
+    (original_content, source_file_sha), target_file_sha = await asyncio.gather(
+        source_task, target_task
+    )
+    return file_path, original_content, source_file_sha, target_file_sha
+
+
+async def _fetch_file_metadata_safe(github_client: GitHubClient, project: Project, file_path: str):
+    async with _GITHUB_FETCH_SEMAPHORE:
+        return await _fetch_file_metadata(github_client, project, file_path)
 
 
 def _collect_markdown_files(payload: dict[str, Any]) -> list[str]:
@@ -212,21 +233,38 @@ async def github_webhook(
         if isinstance(sender_login, str):
             commit_author_login = sender_login
 
-    async def _fetch_file_metadata(file_path: str):
-        source_task = github_client.get_file_content(
-            project.source_repo, file_path, project.source_branch
+    # Bulk protection: too many files → create CommitGroup for manual confirmation
+    if len(files_to_process) > project.webhook_file_limit:
+        commit_group = CommitGroup(
+            project_id=project.id,
+            user_id=owner.id,
+            team_id=project.team_id,
+            github_sha=payload.get("after"),
+            github_ref=str(payload["ref"]),
+            commit_message=commit_message,
+            commit_author_name=commit_author_name,
+            commit_author_login=commit_author_login,
+            file_paths=files_to_process,
+            status="pending_confirmation",
         )
-        target_task = github_client.get_file_sha(
-            project.target_repo, file_path, project.target_branch
+        session.add(commit_group)
+        await session.commit()
+        task_list_events.publish_commit_group_event(commit_group, event_type="commit_group_created")
+        logger.info(
+            "webhook_bulk_commit_group_created",
+            extra={"project_id": str(project.id), "files_count": len(files_to_process)},
         )
-        (original_content, source_file_sha), target_file_sha = await asyncio.gather(
-            source_task, target_task
-        )
-        return file_path, original_content, source_file_sha, target_file_sha
+        return {
+            "created": 0,
+            "task_ids": [],
+            "skipped": skipped_files,
+            "commit_group_id": str(commit_group.id),
+            "commit_group_status": "pending_confirmation",
+        }
 
     try:
         fetched = await asyncio.gather(
-            *[_fetch_file_metadata(fp) for fp in files_to_process]
+            *[_fetch_file_metadata_safe(github_client, project, fp) for fp in files_to_process]
         )
     except GitHubAPIError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc

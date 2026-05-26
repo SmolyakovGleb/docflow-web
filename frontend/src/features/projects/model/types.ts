@@ -11,6 +11,8 @@ export interface Project {
   created_at: string
   team_id: string | null
   is_team_project: boolean
+  pipeline_paused: boolean
+  webhook_file_limit: number
 }
 
 export interface ProjectCreatePayload {
@@ -32,6 +34,8 @@ export interface ProjectUpdatePayload {
   source_branch?: string
   target_branch?: string
   exclude_patterns?: string[]
+  pipeline_paused?: boolean
+  webhook_file_limit?: number
 }
 
 export interface ProjectWebhookSecretResponse {

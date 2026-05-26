@@ -205,7 +205,13 @@ async def cancel_task_route(
         await session.commit()
         task_list_events.publish_task_status_changed(task, previous_status=previous_status)
     else:
-        # running: asyncio cancel → run_task handles status update
+        # running: update DB immediately so callers get consistent status,
+        # then signal the execution to stop
+        task.status = "cancelled"
+        task.current_stage = None
+        task.completed_at = datetime.now(UTC)
+        await session.commit()
+        task_list_events.publish_task_status_changed(task, previous_status=previous_status)
         await pipeline_runner.cancel_task(task_id)
     return {"id": str(task.id), "status": "cancelled"}
 

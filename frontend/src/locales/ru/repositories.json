@@ -93,6 +93,12 @@
     "branch_required": "Нужно указать ветку",
     "exclude_pattern_required": "Паттерн не может быть пустым"
   },
+  "pipeline_title": "Пайплайн",
+  "webhook_file_limit": "Лимит файлов на коммит",
+  "webhook_file_limit_hint": "Коммиты с большим числом .md файлов потребуют подтверждения",
+  "pause_pipeline": "Поставить на паузу",
+  "resume_pipeline": "Возобновить пайплайн",
+  "pipeline_paused_label": "На паузе",
   "errors": {
     "create_failed": "Не удалось создать проект"
   }

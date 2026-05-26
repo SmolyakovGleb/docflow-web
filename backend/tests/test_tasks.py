@@ -657,30 +657,20 @@ async def test_retry_manual_upload_skips_source_sha_check(
     schedule_task.assert_awaited_once()
 
 
-async def test_delete_queued_task_success(auth_client, db_session, test_project, mocker):
+async def test_delete_queued_task_success(auth_client, db_session, test_project):
     task = await create_task(db_session, test_project, status="queued", translated_content=None)
-    cancel_scheduled_task = mocker.patch(
-        "app.api.routes.tasks.pipeline_runner.cancel_scheduled_task",
-        new=mocker.AsyncMock(return_value=False),
-    )
 
     response = await auth_client.delete(f"/tasks/{task.id}")
 
     assert response.status_code == 204
     assert response.text == ""
     assert await db_session.get(Task, task.id) is None
-    cancel_scheduled_task.assert_awaited_once_with(task.id)
 
 
-async def test_delete_queued_task_rejects_non_queued(auth_client, db_session, test_project, mocker):
+async def test_delete_queued_task_rejects_non_queued(auth_client, db_session, test_project):
     task = await create_task(db_session, test_project, status="done")
-    cancel_scheduled_task = mocker.patch(
-        "app.api.routes.tasks.pipeline_runner.cancel_scheduled_task",
-        new=mocker.AsyncMock(return_value=False),
-    )
 
     response = await auth_client.delete(f"/tasks/{task.id}")
 
     assert response.status_code == 400
     assert response.json() == {"detail": "Cannot remove task with status 'done' from queue"}
-    cancel_scheduled_task.assert_not_awaited()

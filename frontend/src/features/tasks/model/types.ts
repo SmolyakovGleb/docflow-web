@@ -1,4 +1,11 @@
-export type TaskStatus = 'queued' | 'running' | 'done' | 'failed' | 'published' | 'conflict'
+export type TaskStatus =
+  | 'queued'
+  | 'running'
+  | 'done'
+  | 'failed'
+  | 'published'
+  | 'conflict'
+  | 'cancelled'
 export type TaskDetailTab = 'diff' | 'logs' | 'conflict'
 export type TaskPipelineStage = 'prepare' | 'pipeline' | 'persist'
 export type ParsedTaskLogStageId = TaskPipelineStage | 'other'

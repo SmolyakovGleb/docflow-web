@@ -8,6 +8,7 @@ import {
   useDeleteTaskMutation,
   useGetTasksQuery,
   useLazyGetTaskQuery,
+  type GetTasksParams,
   usePublishTaskMutation,
   usePublishTasksBatchMutation,
   useRetryTaskMutation,
@@ -17,6 +18,9 @@ import { PublishDialog } from '../PublishDialog/PublishDialog'
 import { BatchPublishDialog, type BatchPublishItem } from '../BatchPublishDialog/BatchPublishDialog'
 import { useTaskListNotifications } from '@/features/tasks/hooks/useTaskListNotifications'
 import { useTaskFilters } from '@/features/tasks/hooks/useTaskFilters'
+import { useTaskListSSE } from '@/features/tasks/hooks/useTaskListSSE'
+import { useGetCommitGroupsQuery } from '@/features/commit-groups/api/commitGroupsApi'
+import { CommitGroupRow } from '@/features/commit-groups/ui/CommitGroupRow/CommitGroupRow'
 import { groupByCommit } from '@/features/tasks/lib/groupByCommit'
 import {
   clearSelection,
@@ -55,6 +59,17 @@ export function TaskListPage() {
   const batchMode = useAppSelector((state) => state.tasksUI.batchMode)
 
   const { filters, setFilters, resetFilters } = useTaskFilters()
+  const getTasksArgs = useMemo<GetTasksParams>(
+    () => ({
+      status: filters.status,
+      project_id: filters.projectId,
+      search: filters.search,
+      limit: 50,
+      offset: 0,
+    }),
+    [filters.status, filters.projectId, filters.search],
+  )
+  useTaskListSSE(getTasksArgs)
   const [isDialogOpen, setDialogOpen] = useState(false)
   const [dialogTab, setDialogTab] = useState<TriggerDialogTab>('repo')
   const [taskToRemove, setTaskToRemove] = useState<TaskSummary | null>(null)
@@ -64,6 +79,10 @@ export function TaskListPage() {
   const [batchPublishDialogOpen, setBatchPublishDialogOpen] = useState(false)
   const [isBatchPublishing, setIsBatchPublishing] = useState(false)
   const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set())
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set())
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set())
+
+  const { data: pendingGroups } = useGetCommitGroupsQuery({ status: 'pending_confirmation' })
 
   const { data: projects = [] } = useGetProjectsQuery()
   const {
@@ -73,13 +92,7 @@ export function TaskListPage() {
     isFetching,
     error,
     refetch,
-  } = useGetTasksQuery({
-    status: filters.status,
-    project_id: filters.projectId,
-    search: filters.search,
-    limit: 50,
-    offset: 0,
-  })
+  } = useGetTasksQuery(getTasksArgs)
   const isPendingFilter = isFetching && currentTasksResponse === undefined
   const { data: health } = useGetHealthQuery(undefined, { pollingInterval: 30000 })
   const [fetchTask] = useLazyGetTaskQuery()
@@ -175,6 +188,7 @@ export function TaskListPage() {
   }
 
   const handleDownload = async (task: TaskSummary) => {
+    setDownloadingIds((prev) => new Set([...prev, task.id]))
     try {
       const detail = await fetchTask(task.id).unwrap()
       if (!detail.translated_content) {
@@ -184,10 +198,17 @@ export function TaskListPage() {
       downloadMd(task.file_path, detail.translated_content)
     } catch (err) {
       toast.error(translateApiError(err))
+    } finally {
+      setDownloadingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(task.id)
+        return next
+      })
     }
   }
 
   const handleRetry = async (taskId: string) => {
+    setRetryingIds((prev) => new Set([...prev, taskId]))
     try {
       await toast.promise(retryTask({ taskId }).unwrap(), {
         loading: `${t('actions.retry')}...`,
@@ -196,6 +217,12 @@ export function TaskListPage() {
       })
     } catch {
       // promise toast already shows the error state
+    } finally {
+      setRetryingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(taskId)
+        return next
+      })
     }
   }
 
@@ -360,6 +387,9 @@ export function TaskListPage() {
         />
       ) : (
         <div className={styles.list}>
+          {pendingGroups?.items.map((group) => (
+            <CommitGroupRow key={group.id} group={group} />
+          ))}
           {groups.map((group) => (
             <CommitGroup
               key={group.id}
@@ -367,6 +397,8 @@ export function TaskListPage() {
               batchMode={batchMode}
               selectedIds={selectedIdsSet}
               publishingIds={publishingIds}
+              retryingIds={retryingIds}
+              downloadingIds={downloadingIds}
               onToggleSelect={handleToggleSelect}
               onOpenTask={(taskId) => void navigate(`/tasks/${taskId}`)}
               onDownload={(task) => void handleDownload(task)}

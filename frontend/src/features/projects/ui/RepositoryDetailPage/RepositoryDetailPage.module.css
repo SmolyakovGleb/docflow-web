@@ -181,6 +181,53 @@
   gap: 18px;
 }
 
+.pipelineRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.pipelineRow:last-child {
+  border-bottom: none;
+}
+
+.pipelineLabel {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.pipelineInput {
+  width: 72px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  padding: 5px 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.hint {
+  flex-basis: 100%;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pausedBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 @media (max-width: 720px) {
   .row {
     grid-template-columns: 1fr;
