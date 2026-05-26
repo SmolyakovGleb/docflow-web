@@ -17,6 +17,7 @@ export const baseApi = createApi({
     'User',
     'Health',
     'Analytics',
+    'CommitGroup',
   ],
   endpoints: () => ({}),
 })
