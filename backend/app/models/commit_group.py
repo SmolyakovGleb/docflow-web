@@ -31,11 +31,11 @@ class CommitGroup(Base):
     commit_author_name: Mapped[str | None]
     commit_author_login: Mapped[str | None]
     file_paths: Mapped[list[str]] = mapped_column(JSON, nullable=False)
-    status: Mapped[str] = mapped_column(server_default="pending_confirmation")
+    status: Mapped[str] = mapped_column(default="pending_confirmation", server_default="pending_confirmation")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    project: Mapped[Project] = relationship()
+    project: Mapped[Project] = relationship(back_populates="commit_groups")
     tasks: Mapped[list[Task]] = relationship(back_populates="commit_group")
 
     __table_args__ = (

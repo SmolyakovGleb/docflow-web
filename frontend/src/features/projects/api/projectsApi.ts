@@ -93,6 +93,14 @@ export const projectsApi = baseApi.injectEndpoints({
         { type: 'Project', id: projectId },
       ],
     }),
+    pauseProject: builder.mutation<{ pipeline_paused: boolean }, string>({
+      query: (projectId) => ({ url: `/projects/${projectId}/pause`, method: 'POST' }),
+      invalidatesTags: (_r, _e, id) => [{ type: 'Project', id }],
+    }),
+    resumeProject: builder.mutation<{ pipeline_paused: boolean }, string>({
+      query: (projectId) => ({ url: `/projects/${projectId}/resume`, method: 'POST' }),
+      invalidatesTags: (_r, _e, id) => [{ type: 'Project', id }],
+    }),
   }),
 })
 
@@ -104,6 +112,8 @@ export const {
   useGetProjectQuery,
   useGetProjectTasksQuery,
   useGetProjectsQuery,
+  usePauseProjectMutation,
   useRegenerateSecretMutation,
+  useResumeProjectMutation,
   useUpdateProjectMutation,
 } = projectsApi

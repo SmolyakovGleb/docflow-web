@@ -248,6 +248,8 @@ async def pause_project(project_id: UUID) -> None:
         async with session_factory() as session:
             task = await session.get(Task, _CURRENT_TASK_ID)
             if task is not None and task.project_id == project_id:
+                # Save to deferred so resume_project re-enqueues it
+                _DEFERRED_TASKS.setdefault(project_id, []).append(_CURRENT_TASK_ID)
                 _CURRENT_EXECUTION.cancel()
 
 
@@ -297,7 +299,7 @@ async def _queue_worker() -> None:
         try:
             await _CURRENT_EXECUTION
         except asyncio.CancelledError:
-            raise
+            pass  # inner task was cancelled (user cancel or project pause) — worker continues
         except Exception:
             app_logger.exception("queue_worker_unexpected_error", extra={"task_id": str(task_id)})
         finally:
@@ -335,6 +337,7 @@ async def run_task(task_id: UUID) -> None:
             task.conflict_theirs = None
             await session.commit()
             task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
+            task_list_events.publish_task_status_changed(task, previous_status="queued")
             app_logger.info("task_started", extra={"task_id": str(task.id)})
 
             await _emit_event(queue, "stage_update", {"stage": "prepare", "index": 1, "total": 3})
@@ -383,14 +386,24 @@ async def run_task(task_id: UUID) -> None:
             task.completed_at = datetime.now(UTC)
             await session.commit()
             task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
+            task_list_events.publish_task_status_changed(task, previous_status="running")
             await _emit_event(queue, "status_change", {"status": "done"})
             app_logger.info("task_completed", extra={"task_id": str(task.id)})
         except asyncio.CancelledError:
-            task.status = "cancelled"
-            task.current_stage = None
-            task.completed_at = datetime.now(UTC)
-            await session.commit()
-            task_list_events.publish_task_status_changed(task, previous_status="running")
+            is_deferred = any(task.id in ids for ids in _DEFERRED_TASKS.values())
+            if is_deferred:
+                # Cancelled by pause_project — reset to queued so resume can pick it up
+                task.status = "queued"
+                task.current_stage = None
+                await session.commit()
+                task_list_events.publish_task_entered_scope(task, previous_status="running")
+                task_list_events.publish_task_status_changed(task, previous_status="running")
+            else:
+                task.status = "cancelled"
+                task.current_stage = None
+                task.completed_at = datetime.now(UTC)
+                await session.commit()
+                task_list_events.publish_task_status_changed(task, previous_status="running")
             raise
         except Exception:
             task.translated_content = None
@@ -402,6 +415,7 @@ async def run_task(task_id: UUID) -> None:
             task.completed_at = datetime.now(UTC)
             await session.commit()
             task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
+            task_list_events.publish_task_status_changed(task, previous_status="running")
             await _emit_event(queue, "status_change", {"status": "failed"})
             app_logger.exception("task_failed", extra={"task_id": str(task.id)})
         finally:

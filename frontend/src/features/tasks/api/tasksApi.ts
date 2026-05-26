@@ -9,7 +9,7 @@ import type {
   TaskStatus,
 } from '../model/types'
 
-interface GetTasksParams {
+export interface GetTasksParams {
   status?: TaskStatus | null
   project_id?: string | null
   search?: string
@@ -158,10 +158,15 @@ export const tasksApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['History', 'Task'],
     }),
+    cancelTask: builder.mutation<{ id: string; status: string }, string>({
+      query: (taskId) => ({ url: `/tasks/${taskId}/cancel`, method: 'POST' }),
+      invalidatesTags: (_result, _error, taskId) => [{ type: 'Task', id: taskId }],
+    }),
   }),
 })
 
 export const {
+  useCancelTaskMutation,
   useCreateManualRepoTasksMutation,
   useDeleteTaskMutation,
   useGetTaskLogQuery,

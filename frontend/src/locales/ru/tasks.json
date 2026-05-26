@@ -30,7 +30,8 @@
     "done": "готово",
     "failed": "ошибка",
     "published": "опубликовано",
-    "conflict": "конфликт"
+    "conflict": "конфликт",
+    "cancelled": "отменено"
   },
   "detail_tabs": {
     "diff": "Diff",
@@ -183,6 +184,17 @@
     "open_existing": "Для этого файла уже есть активная задача. Открываю её.",
     "create_failed": "Не удалось создать новую задачу для этого файла."
   },
+  "task": {
+    "cancel_action": "Отменить задачу"
+  },
+  "commit_group": {
+    "files_count_one": "{{count}} файл",
+    "files_count_few": "{{count}} файла",
+    "files_count_many": "{{count}} файлов",
+    "pending_label": "ожидает подтверждения",
+    "confirm_action": "Запустить перевод",
+    "cancel_action": "Отклонить"
+  },
   "unsaved_changes": {
     "confirm_navigation": "Есть несохранённые изменения. Покинуть страницу?"
   },
@@ -232,6 +244,7 @@
     "skipped_section_title": "Не созданы",
     "skipped_reason_already_queued": "Уже в очереди",
     "skipped_reason_pipeline_running": "Пайплайн занят",
-    "skipped_reason_excluded_by_pattern": "Исключён паттерном"
+    "skipped_reason_excluded_by_pattern": "Исключён паттерном",
+    "add_more_files": "Добавить ещё файлы"
   }
 }
