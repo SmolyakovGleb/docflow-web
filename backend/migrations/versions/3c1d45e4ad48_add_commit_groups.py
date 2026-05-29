@@ -6,10 +6,8 @@ Create Date: 2026-05-25 11:29:08.068720
 """
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
-
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = '3c1d45e4ad48'
@@ -32,9 +30,14 @@ def upgrade() -> None:
     sa.Column('commit_author_login', sa.String(), nullable=True),
     sa.Column('file_paths', sa.JSON(), nullable=False),
     sa.Column('status', sa.String(), server_default='pending_confirmation', nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column(
+        'created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False
+    ),
     sa.Column('confirmed_at', sa.DateTime(timezone=True), nullable=True),
-    sa.CheckConstraint("status IN ('pending_confirmation', 'processing', 'done', 'cancelled')", name='commit_groups_status_check'),
+    sa.CheckConstraint(
+        "status IN ('pending_confirmation', 'processing', 'done', 'cancelled')",
+        name='commit_groups_status_check',
+    ),
     sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['team_id'], ['teams.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
@@ -43,8 +46,14 @@ def upgrade() -> None:
     op.create_index('idx_commit_groups_project_id', 'commit_groups', ['project_id'], unique=False)
     op.create_index('idx_commit_groups_status', 'commit_groups', ['status'], unique=False)
     op.create_index('idx_commit_groups_user_id', 'commit_groups', ['user_id'], unique=False)
-    op.add_column('projects', sa.Column('webhook_file_limit', sa.Integer(), server_default=sa.text('50'), nullable=False))
-    op.add_column('projects', sa.Column('pipeline_paused', sa.Boolean(), server_default=sa.text('false'), nullable=False))
+    op.add_column(
+        'projects',
+        sa.Column('webhook_file_limit', sa.Integer(), server_default=sa.text('50'), nullable=False),
+    )
+    op.add_column(
+        'projects',
+        sa.Column('pipeline_paused', sa.Boolean(), server_default=sa.text('false'), nullable=False),
+    )
     op.add_column('tasks', sa.Column('commit_group_id', sa.Uuid(), nullable=True))
     op.alter_column('tasks', 'conflict_base',
                existing_type=sa.TEXT(),
@@ -58,7 +67,14 @@ def upgrade() -> None:
                existing_type=sa.TEXT(),
                type_=sa.String(),
                existing_nullable=True)
-    op.create_foreign_key('fk_tasks_commit_group_id', 'tasks', 'commit_groups', ['commit_group_id'], ['id'], ondelete='SET NULL')
+    op.create_foreign_key(
+        'fk_tasks_commit_group_id',
+        'tasks',
+        'commit_groups',
+        ['commit_group_id'],
+        ['id'],
+        ondelete='SET NULL',
+    )
     # Update tasks_status_check to include 'cancelled'
     op.drop_constraint('tasks_status_check', 'tasks', type_='check')
     op.create_check_constraint(

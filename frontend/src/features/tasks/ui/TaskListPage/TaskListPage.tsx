@@ -107,8 +107,7 @@ export function TaskListPage() {
   const groups = useMemo(() => groupByCommit(tasks), [tasks])
   const hasActiveFilters = Boolean(filters.status || filters.projectId || filters.search)
   const hasGithubLinked = Boolean(user?.github_linked)
-  const showToolbar =
-    hasGithubLinked && (isLoading || Boolean(error) || tasks.length > 0 || hasActiveFilters)
+  const showToolbar = isLoading || Boolean(error) || tasks.length > 0 || hasActiveFilters
   const showFooter = !isLoading && !error && tasks.length > 0
 
   const bannerScopeKey = JSON.stringify({
@@ -356,6 +355,7 @@ export function TaskListPage() {
           projects={projects}
           selectedProjectId={filters.projectId}
           showSelectionToggle={tasks.length > 0}
+          hasGithubLinked={hasGithubLinked}
           totalCount={tasksResponse?.total ?? tasks.length}
           onToggleBatchMode={handleToggleBatchMode}
           onProjectChange={(projectId) => setFilters({ projectId })}
@@ -425,6 +425,7 @@ export function TaskListPage() {
       <BatchFloatingBar
         selectedCount={selectedTaskIds.length}
         selectedDoneCount={selectedDoneCount}
+        hasGithubLinked={hasGithubLinked}
         onDownload={() => {
           const selected = tasks.filter((task) => selectedIdsSet.has(task.id))
           void Promise.all(selected.map((task) => handleDownload(task)))

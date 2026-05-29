@@ -42,6 +42,9 @@ const task: TaskDetail = {
   error: null,
   publications: [],
   is_team_task: false,
+  previous_task_id: null,
+  incremental_paragraphs_count: null,
+  incremental_total_paragraphs: null,
 }
 
 describe('DiffEditor save flow', () => {

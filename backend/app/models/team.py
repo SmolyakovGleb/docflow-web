@@ -22,8 +22,12 @@ class Team(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     owner: Mapped[User] = relationship(foreign_keys=[owner_id])
-    members: Mapped[list[TeamMember]] = relationship(back_populates="team", cascade="all, delete-orphan")
-    invites: Mapped[list[TeamInvite]] = relationship(back_populates="team", cascade="all, delete-orphan")
+    members: Mapped[list[TeamMember]] = relationship(
+        back_populates="team", cascade="all, delete-orphan"
+    )
+    invites: Mapped[list[TeamInvite]] = relationship(
+        back_populates="team", cascade="all, delete-orphan"
+    )
 
 
 class TeamMember(Base):

@@ -7,8 +7,7 @@ import pytest
 
 from app.api.routes import tasks as task_routes
 from app.models.task import Task
-from app.services import pipeline_runner
-from app.services import task_list_events
+from app.services import pipeline_runner, task_list_events
 
 
 async def create_task(db_session, test_project, status: str) -> Task:

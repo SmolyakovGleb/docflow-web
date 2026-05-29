@@ -2844,3 +2844,461 @@ const [limitValue, setLimitValue] = useState(String(project.webhook_file_limit))
 | 16.5    | Bulk-protection блок в `webhook.py`. `asyncio.Semaphore(10)` на GitHub API fetch. Возврат `commit_group_id` в ответе                                                                                                                                                           |
 | 16.6    | Новые `GET /commit-groups`, `POST /commit-groups/{id}/confirm`, `DELETE /commit-groups/{id}`. Файлы: `schemas/commit_group.py`, `services/commit_groups.py`, `api/routes/commit_groups.py`                                                                                     |
 | 16.7    | `task_list_events.py`: `publish_task_status_changed`, `publish_commit_group_event`. Вызовы во всех точках смены статуса в `pipeline_runner.py` и `tasks.py`                                                                                                                    |
+
+---
+
+## Этап 17 — Инкрементальный перевод через git diff
+
+**Цель:** переводить только изменившиеся абзацы файла, а не весь файл целиком. Уменьшает стоимость и время перевода при небольших правках в большом документе.
+
+### Концепция
+
+Единица сравнения — **абзац** (блок текста, отделённый пустой строкой). Абзацы устойчивее строк: LLM почти всегда сохраняет структуру абзацев даже при перефразировании.
+
+Синхронизированные репозитории означают совпадающие пути файлов: если source-файл лежит по пути `docs/api/overview.md`, то в target-репозитории переведённая версия лежит по тому же пути `docs/api/overview.md`. Никакого сложного маппинга не нужно.
+
+#### Алгоритм для webhook-события (push в source-репозиторий)
+
+1. Webhook приносит `before_sha` и `after_sha`.
+2. Backend получает `new_en` (новый исходник, `after_sha`) и `old_en` (старый исходник, `before_sha`) через GitHub API.
+3. Backend получает `old_ru` (текущий перевод в target-репозитории) по тому же пути файла.
+4. Разбиваем `new_en` и `old_en` на абзацы, считаем хэш каждого абзаца.
+5. Находим «грязные» абзацы: те, у которых хэш в `new_en` ≠ хэш в `old_en`.
+6. Считаем порог: если `len(dirty) / len(new_en_paragraphs) > incremental_threshold / 100` → полный перевод.
+7. При инкрементальном режиме: находим соответствующие абзацы в `old_ru` (по позиции через `SequenceMatcher`), переводим только грязные, собираем итоговый файл из смеси старых и новых переводов.
+8. На задаче сохраняем `previous_task_id` — ссылка на последнюю опубликованную задачу для этого файла.
+
+#### Когда находить previous_task_id
+
+В `webhook.py` при создании задачи: `SELECT id FROM tasks WHERE file_path = $file_path AND project_id = $project_id AND status = 'published' ORDER BY created_at DESC LIMIT 1`.
+
+### Изменения в бэкенде
+
+#### Новые поля БД
+
+**`tasks`:**
+
+```sql
+previous_task_id UUID REFERENCES tasks(id) NULL
+```
+
+**`projects`:**
+
+```sql
+incremental_threshold INTEGER NOT NULL DEFAULT 40
+```
+
+`incremental_threshold` — процент (0–100). Если доля изменённых абзацев превышает порог, pipeline переключается на полный перевод.
+
+#### Новые поля API
+
+`ProjectRead` / `ProjectUpdate`:
+
+```python
+incremental_threshold: int = 40  # 0 = всегда инкрементально, 100 = всегда полностью
+```
+
+`TaskRead`:
+
+```python
+previous_task_id: UUID | None = None
+```
+
+#### Изменения в pipeline
+
+`pipeline_runner.py` — новая функция `_build_incremental_prompt`:
+
+```python
+async def _build_incremental_prompt(
+    task: Task,
+    new_en: str,
+    old_en: str,
+    old_ru: str,
+    threshold: int,
+) -> tuple[str, bool]:
+    """
+    Возвращает (prompt, is_incremental).
+    is_incremental=False означает полный перевод.
+    """
+    new_paras = split_paragraphs(new_en)
+    old_paras = split_paragraphs(old_en)
+    dirty_indices = find_dirty_paragraphs(new_paras, old_paras)
+
+    ratio = len(dirty_indices) / max(len(new_paras), 1)
+    if ratio * 100 > threshold:
+        return build_full_prompt(new_en), False
+
+    old_ru_paras = split_paragraphs(old_ru)
+    aligned = align_paragraphs(old_paras, old_ru_paras)  # SequenceMatcher
+    return build_incremental_prompt(new_paras, dirty_indices, aligned), True
+```
+
+`pipeline_runner.py` — в основном цикле перед вызовом LLM: если `task.previous_task_id` не None, загружать `old_en` из GitHub (`before_sha` на задаче) и `old_ru` из target-репозитория.
+
+#### Новые поля на Task (в памяти, не обязательно в БД)
+
+При создании задачи через webhook добавлять в meta/payload: `before_sha` — SHA коммита до push, чтобы pipeline мог получить старую версию файла.
+
+### Новые файлы в бэкенде
+
+- `app/services/paragraph_diff.py` — `split_paragraphs`, `find_dirty_paragraphs`, `align_paragraphs`, `merge_translations`
+- `app/services/incremental_translate.py` — оркестрация: GitHub fetch `old_en` + `old_ru`, вызов `paragraph_diff`, сборка финального текста
+
+### Изменения во фронтенде
+
+#### Настройка порога в RepositoryDetailPage
+
+Новая секция «Инкрементальный перевод» рядом с «Пайплайном»:
+
+```tsx
+<div className={styles.pipelineRow}>
+  <label>{t('repositories.incremental_threshold')}</label>
+  <input
+    type="number"
+    min={0}
+    max={100}
+    value={thresholdValue}
+    onChange={(e) => setThresholdValue(e.target.value)}
+  />
+  <span className={styles.hint}>{t('repositories.incremental_threshold_hint')}</span>
+  <Button variant="secondary" size="sm" onClick={saveThreshold}>
+    {t('common.save')}
+  </Button>
+</div>
+```
+
+#### Индикатор в TaskRow / TaskDetailPage
+
+Если `task.previous_task_id != null` — показывать бейдж «Инкрементальный» рядом со статусом. В деталях задачи показывать количество переведённых абзацев из общего числа.
+
+**Ключи локализации** (`repositories.json`):
+
+```json
+{
+  "incremental_threshold": "Порог инкрементального перевода (%)",
+  "incremental_threshold_hint": "Если изменилось больше N% абзацев — файл переводится целиком"
+}
+```
+
+**Ключи локализации** (`tasks.json`):
+
+```json
+{
+  "incremental_badge": "Инкрементальный",
+  "incremental_detail": "Переведено {{dirty}} из {{total}} абзацев"
+}
+```
+
+### Риски и митигация
+
+| Риск                                                             | Митигация                                                                                                                                                          |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| LLM добавляет/убирает абзацы — смещение индексов                 | `SequenceMatcher` на хэшах `new` vs `old_en` (один язык — хэши совпадают) даёт new↔old_en; old_en↔old_ru берётся позиционно (пайплайн сохраняет блочную структуру) |
+| `before_sha` недоступен (ручной запуск)                          | При ручном запуске `previous_task_id = NULL` → всегда полный перевод                                                                                               |
+| target-репозиторий не содержит перевода (первый раз)             | Если файл не найден в target-репозитории → полный перевод, `previous_task_id = NULL`                                                                               |
+| Большой файл, один изменённый абзац — стоимость всё равно высока | В будущем: кэшировать неизменённые абзацы через OpenAI prompt caching                                                                                              |
+
+---
+
+### 17.1 — backend: DB schema + миграция
+
+#### Зависимости
+
+- Бэкенд: нет
+
+#### Что делаем
+
+Добавляем два новых поля через Alembic-миграцию.
+
+**`tasks`:**
+
+```sql
+previous_task_id UUID REFERENCES tasks(id) NULL
+before_sha       TEXT NULL
+```
+
+`before_sha` — SHA коммита до push из GitHub webhook, нужен pipeline для получения старой версии файла через GitHub API.
+
+**`projects`:**
+
+```sql
+incremental_threshold INTEGER NOT NULL DEFAULT 40
+```
+
+Обновляем схемы Pydantic:
+
+- `ProjectRead` / `ProjectUpdate` / `ProjectCreate` — поле `incremental_threshold: int = 40`
+- `TaskRead` — поля `previous_task_id: UUID | None = None`, `before_sha: str | None = None`
+- `TaskCreate` (internal) — поля `previous_task_id`, `before_sha` для webhook
+
+#### Шаги выполнения
+
+- [x] `backend/app/models/task.py` — добавить `previous_task_id`, `before_sha`
+- [x] `backend/app/models/project.py` — добавить `incremental_threshold`
+- [x] `backend/app/schemas/task.py` — `previous_task_id`, `before_sha` в `TaskRead` и `TaskCreate`
+- [x] `backend/app/schemas/project.py` — `incremental_threshold` в `ProjectRead` / `ProjectUpdate` / `ProjectCreate`
+- [x] `backend/migrations/versions/` — новая Alembic-миграция
+- [ ] Проверить: `alembic upgrade head` проходит без ошибок
+
+---
+
+### 17.2 — backend: `paragraph_diff.py`
+
+#### Зависимости
+
+- 17.1 (модели и схемы готовы)
+
+#### Что делаем
+
+Новый файл `backend/app/services/paragraph_diff.py` с чистой функциональностью без I/O:
+
+```python
+def split_paragraphs(text: str) -> list[str]:
+    """Разбивает текст на абзацы по пустым строкам. Возвращает непустые блоки."""
+
+def find_dirty_paragraphs(new_paras: list[str], old_paras: list[str]) -> list[int]:
+    """
+    Возвращает индексы абзацев в new_paras, которых нет в old_paras (по хэшу).
+    Использует SequenceMatcher для выравнивания, чтобы правильно обработать
+    вставку/удаление абзацев в середине.
+    """
+
+def map_unchanged_to_old(new_paras: list[str], old_paras: list[str]) -> dict[int, int]:
+    """
+    Возвращает {индекс_в_new: индекс_в_old} для абзацев, не изменившихся между
+    new и old (одинаковый язык — хэши совпадают). Использует SequenceMatcher на
+    хэшах, поэтому вставка/удаление абзацев корректно сдвигают индексы.
+    """
+    # ВАЖНО: исходно планировался align_paragraphs(old_en, old_ru) на хэшах, но
+    # абзацы на разных языках не совпадают по хэшу. Поэтому выравнивание
+    # old_en↔old_ru делается позиционно (см. 17.4), а map_unchanged_to_old
+    # связывает new↔old_en в пределах одного языка.
+
+def merge_translations(
+    new_paras: list[str],
+    dirty_indices: list[int],
+    new_translations: dict[int, str],
+    aligned_old_ru: dict[int, str],
+) -> str:
+    """
+    Собирает итоговый файл: для чистых абзацев берёт old_ru,
+    для грязных — new_translations[i].
+    """
+```
+
+#### Шаги выполнения
+
+- [x] Создать `backend/app/services/paragraph_diff.py` с функциями выше
+- [x] Покрыть тестами: файл с 10 абзацами, изменить 2 → `find_dirty_paragraphs` возвращает ровно 2 индекса
+- [x] Тест: вставка абзаца в середину → выравнивание корректно сдвигает индексы
+- [x] Тест: `merge_translations` правильно собирает итоговый текст
+
+---
+
+### 17.3 — backend: webhook — сохранение `before_sha` и `previous_task_id`
+
+#### Зависимости
+
+- 17.1 (поля есть в модели и схеме)
+
+#### Что делаем
+
+В `webhook.py` при создании задачи из push-события:
+
+1. Сохранять `before_sha = payload["before"]` на задаче.
+2. Перед созданием задачи выполнять запрос:
+   ```sql
+   SELECT id FROM tasks
+   WHERE file_path = :file_path
+     AND project_id = :project_id
+     AND status = 'published'
+   ORDER BY created_at DESC
+   LIMIT 1
+   ```
+   Если найдено — ставить `previous_task_id = найденный id`.
+3. Если задача создаётся вручную (TriggerTranslationDialog) — `previous_task_id = NULL`, `before_sha = NULL` → всегда полный перевод.
+
+#### Шаги выполнения
+
+- [x] `webhook.py` — при итерации по файлам в push-событии: добавить `before_sha` и запрос `previous_task_id`
+- [x] Проверить: повторный push одного файла → новая задача имеет `previous_task_id` = id предыдущей опубликованной задачи
+- [x] Проверить: первый push (нет опубликованных задач) → `previous_task_id = NULL`
+
+---
+
+### 17.4 — backend: `incremental_translate.py`
+
+#### Зависимости
+
+- 17.2 (`paragraph_diff.py` готов)
+- 17.3 (`before_sha` и `previous_task_id` сохраняются)
+
+#### Что делаем
+
+Новый файл `backend/app/services/incremental_translate.py` — оркестрация инкрементального перевода:
+
+```python
+async def build_translation_context(
+    task: Task,
+    project: Project,
+    new_en: str,
+    github_client: GitHubClient,
+) -> TranslationContext:
+    """
+    Возвращает TranslationContext с полями:
+      - content: str — текст для перевода (полный или только грязные абзацы)
+      - is_incremental: bool
+      - dirty_indices: list[int] — индексы грязных абзацев (пустой при полном переводе)
+      - aligned_old_ru: dict[int, str] — выравненные абзацы old_ru (пустой при полном переводе)
+      - new_paras: list[str] — абзацы new_en (нужны для merge_translations)
+    """
+```
+
+Логика внутри:
+
+1. Если `task.previous_task_id is None` или `task.before_sha is None` → вернуть полный перевод.
+2. Получить `old_en` из GitHub: `github_client.get_file_at_sha(repo, path, task.before_sha)`.
+3. Получить `old_ru` из target-репозитория: `github_client.get_file(target_repo, path)`.
+4. Если `old_ru` не найден → полный перевод.
+5. Вызвать `find_dirty_paragraphs`, посчитать `ratio`.
+6. Если `ratio * 100 > project.incremental_threshold` → полный перевод.
+7. Иначе построить `aligned_old_ru` (new-индекс → старый русский абзац) через `map_unchanged_to_old(new, old_en)` + позиционное `old_en[k] ↔ old_ru[k]`, вернуть инкрементальный контекст.
+
+#### Шаги выполнения
+
+- [x] Создать `backend/app/services/incremental_translate.py` с `build_translation_context`
+- [x] Определить `TranslationContext` dataclass/TypedDict
+- [x] Покрыть тестами: `previous_task_id = None` → возвращает `is_incremental=False`
+- [x] Тест: порог 40%, изменено 30% абзацев → `is_incremental=True`
+- [x] Тест: порог 40%, изменено 50% абзацев → `is_incremental=False`
+- [x] Тест: `old_ru` не найден в target-репо → `is_incremental=False`
+
+---
+
+### 17.5 — backend: pipeline_runner — интеграция инкрементального перевода
+
+#### Зависимости
+
+- 17.4 (`incremental_translate.py` готов)
+
+#### Что делаем
+
+В `pipeline_runner.py` перед вызовом LLM:
+
+1. Вызвать `build_translation_context(task, project, new_en, github_client)`.
+2. Если `is_incremental=True` — передать в LLM только грязные абзацы с контекстом инструкции «переведи только эти абзацы».
+3. После получения ответа LLM: вызвать `merge_translations` для сборки итогового файла.
+4. Записывать в логи задачи: `"Инкрементальный режим: {len(dirty)} из {total} абзацев"` или `"Полный перевод"`.
+5. Сохранять на Task поле `incremental_paragraphs_count: int | None` — количество фактически переведённых абзацев (для отображения во фронтенде).
+
+Новое поле в БД (добавить в миграцию 17.1 или отдельной):
+
+```sql
+incremental_paragraphs_count INTEGER NULL
+incremental_total_paragraphs  INTEGER NULL
+```
+
+#### Шаги выполнения
+
+- [x] `pipeline_runner.py` — интегрировать вызов `build_translation_context` перед LLM
+- [x] Добавить `merge_translations` после получения ответа при `is_incremental=True`
+- [x] Добавить логирование режима перевода в `task.logs`
+- [x] `backend/app/models/task.py` — добавить `incremental_paragraphs_count`, `incremental_total_paragraphs`
+- [x] `TaskRead` — добавить эти два поля (в `TaskSummary`, чтобы были доступны и списку, и детали)
+- [x] Миграция (дополнено в миграции 17.1 `a1b2c3d4e5f6`)
+- [x] Проверить end-to-end: webhook push 2 изменённых абзаца → pipeline переводит 2, итоговый файл корректен (покрыто `test_run_task_incremental_merges_dirty_paragraphs`)
+
+> **Корректировка выравнивания (17.2/17.4):** `align_paragraphs` (хэш en↔ru) удалён — английские и русские абзацы не совпадают по хэшу, поэтому чистые абзацы откатывались на английский. Замена: `map_unchanged_to_old(new, old_en)` (one-language SequenceMatcher) + позиционное `old_en[k] ↔ old_ru[k]`. `aligned_old_ru` теперь индексируется по new-индексу, что корректно при вставке/удалении абзацев.
+
+---
+
+### 17.6 — frontend: настройка порога в RepositoryDetailPage
+
+#### Зависимости
+
+- 17.1 (поле `incremental_threshold` в `ProjectRead`)
+
+#### Что делаем
+
+Новая секция «Инкрементальный перевод» в `RepositoryDetailPage.tsx` рядом с секцией «Пайплайн»:
+
+- Числовой input (0–100) для `incremental_threshold`
+- Кнопка «Сохранить»
+- Подсказка: «Если изменилось больше N% абзацев — файл переводится целиком. 0 — всегда инкрементально, 100 — всегда целиком.»
+
+**Ключи локализации** (`repositories.json`):
+
+```json
+{
+  "incremental_section_title": "Инкрементальный перевод",
+  "incremental_threshold": "Порог полного перевода (%)",
+  "incremental_threshold_hint": "Если изменилось больше {{n}}% абзацев — файл переводится целиком. 0 — всегда инкрементально, 100 — всегда целиком."
+}
+```
+
+#### Шаги выполнения
+
+- [x] `projectsApi.ts` — добавить `incremental_threshold` в тип `Project` и update-мутацию
+- [x] `RepositoryDetailPage.tsx` — секция с числовым input и кнопкой сохранения
+- [x] Добавить ключи локализации
+- [x] Проверить: изменить порог → сохранить → reload → значение сохранилось (покрыто `RepositoryDetailPage.test.tsx`)
+
+> Примечание: backend ограничивает `incremental_threshold` диапазоном 1–100 (`Field(ge=1, le=100)`), поэтому input использует `min=1`, а подсказка скорректирована («1 — почти всегда инкрементально»).
+
+---
+
+### 17.7 — frontend: индикатор инкрементального режима в TaskRow / TaskDetailPage
+
+#### Зависимости
+
+- 17.5 (`incremental_paragraphs_count`, `incremental_total_paragraphs` в `TaskRead`)
+
+#### Что делаем
+
+**`TaskRow.tsx`** — бейдж «Инкрементальный» рядом со статусом, если `task.previous_task_id != null && task.incremental_paragraphs_count != null`.
+
+**`TaskDetailPage.tsx`** — в секции логов или статуса отображать строку:
+«Переведено X из Y абзацев» (только при `is_incremental`).
+
+**Ключи локализации** (`tasks.json`):
+
+```json
+{
+  "incremental_badge": "Инкрементальный",
+  "incremental_detail": "Переведено {{dirty}} из {{total}} абзацев"
+}
+```
+
+#### Шаги выполнения
+
+- [x] `tasksApi.ts` — добавить `incremental_paragraphs_count`, `incremental_total_paragraphs`, `previous_task_id` в тип `Task` (в `TaskSummary`, наследуется `TaskDetail`)
+- [x] `TaskRow.tsx` — бейдж «Инкрементальный»
+- [x] `TaskDetailPage.tsx` — строка с количеством переведённых абзацев (в `TaskDetailHeader` metaRow)
+- [x] Добавить ключи локализации
+- [x] Проверить: инкрементальная задача → бейдж виден в списке и детальной странице (покрыто `TaskDetailPage.test.tsx`)
+
+---
+
+### Порядок подэтапов 17
+
+```
+17.1  backend: DB schema (previous_task_id, before_sha, incremental_threshold + миграция)
+17.2  backend: paragraph_diff.py (split / find_dirty / align / merge)
+17.3  backend: webhook — before_sha + previous_task_id при создании задачи
+17.4  backend: incremental_translate.py (оркестрация: GitHub fetch + порог + контекст)
+17.5  backend: pipeline_runner — интеграция incremental_translate + логи
+17.6  frontend: RepositoryDetailPage — настройка incremental_threshold
+17.7  frontend: TaskRow / TaskDetailPage — бейдж + счётчик абзацев
+```
+
+17.1–17.5 — бэкенд, выполняются последовательно. 17.6 зависит только от 17.1 (API). 17.7 зависит от 17.5.
+
+### Изменения в бэкенде по подэтапам 17
+
+| Подэтап | Изменения в API/моделях                                                                                                                                                      |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 17.1    | Поля `previous_task_id`, `before_sha` в `tasks`. Поле `incremental_threshold` в `projects`. Alembic-миграция. Обновлены `TaskRead`, `ProjectRead/Update`                     |
+| 17.2    | Новый `app/services/paragraph_diff.py`: `split_paragraphs`, `find_dirty_paragraphs`, `map_unchanged_to_old`, `merge_translations`                                            |
+| 17.3    | `webhook.py`: сохраняет `before_sha` из push-payload; ищет `previous_task_id` среди опубликованных задач                                                                     |
+| 17.4    | Новый `app/services/incremental_translate.py`: `build_translation_context` — GitHub fetch `old_en` + `old_ru`, расчёт порога, возврат `TranslationContext`                   |
+| 17.5    | `pipeline_runner.py`: вызов `build_translation_context` перед LLM, `merge_translations` после. Поля `incremental_paragraphs_count`, `incremental_total_paragraphs` в `tasks` |

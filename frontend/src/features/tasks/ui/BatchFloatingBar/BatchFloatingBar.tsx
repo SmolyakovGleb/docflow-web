@@ -7,6 +7,7 @@ import styles from './BatchFloatingBar.module.css'
 interface BatchFloatingBarProps {
   selectedCount: number
   selectedDoneCount: number
+  hasGithubLinked: boolean
   onDownload: () => void
   onPublish: () => void
   onClose: () => void
@@ -15,6 +16,7 @@ interface BatchFloatingBarProps {
 export function BatchFloatingBar({
   selectedCount,
   selectedDoneCount,
+  hasGithubLinked,
   onDownload,
   onPublish,
   onClose,
@@ -44,17 +46,19 @@ export function BatchFloatingBar({
             <span>{t('batch.download')}</span>
             <span className={styles.actionCount}>{selectedCount}</span>
           </button>
-          <button
-            type="button"
-            className={cn(styles.actionButton, styles.actionButtonPrimary)}
-            aria-label={t('batch.publish_ready', { count: selectedDoneCount })}
-            disabled={selectedDoneCount === 0}
-            onClick={onPublish}
-          >
-            <ArrowUpFromLine size={13} />
-            <span>{t('batch.publish_action')}</span>
-            <span className={styles.actionCount}>{selectedDoneCount}</span>
-          </button>
+          {hasGithubLinked ? (
+            <button
+              type="button"
+              className={cn(styles.actionButton, styles.actionButtonPrimary)}
+              aria-label={t('batch.publish_ready', { count: selectedDoneCount })}
+              disabled={selectedDoneCount === 0}
+              onClick={onPublish}
+            >
+              <ArrowUpFromLine size={13} />
+              <span>{t('batch.publish_action')}</span>
+              <span className={styles.actionCount}>{selectedDoneCount}</span>
+            </button>
+          ) : null}
         </div>
       }
     />

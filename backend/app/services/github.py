@@ -113,6 +113,23 @@ class GitHubClient:
 
         return self._decode_content(str(encoded_content)), str(sha)
 
+    async def get_file_at_sha(self, repo: str, path: str, sha: str) -> str | None:
+        """Return file content at a specific commit SHA, or None if the file doesn't exist."""
+        repo_name = quote(repo, safe="/")
+        file_path = quote(path, safe="/")
+        response = await self._get(
+            f"{GITHUB_API_BASE_URL}/repos/{repo_name}/contents/{file_path}",
+            params={"ref": sha},
+        )
+        if response.status_code == 404:
+            return None
+        self._raise_for_error(response)
+        payload = response.json()
+        encoded_content = payload.get("content")
+        if not encoded_content:
+            raise GitHubAPIError(status_code=502, detail="GitHub returned an invalid file payload")
+        return self._decode_content(str(encoded_content))
+
     async def get_file_sha(self, repo: str, path: str, ref: str) -> str | None:
         repo_name = quote(repo, safe="/")
         file_path = quote(path, safe="/")
@@ -214,7 +231,9 @@ class GitHubClient:
         self._raise_for_error(response)
         sha = response.json().get("tree", {}).get("sha")
         if not sha:
-            raise GitHubAPIError(status_code=502, detail="GitHub returned an invalid commit payload")
+            raise GitHubAPIError(
+                status_code=502, detail="GitHub returned an invalid commit payload"
+            )
         return str(sha)
 
     async def _create_blob(self, repo: str, content: str) -> str:
@@ -263,7 +282,9 @@ class GitHubClient:
         self._raise_for_error(response)
         sha = response.json().get("sha")
         if not sha:
-            raise GitHubAPIError(status_code=502, detail="GitHub returned an invalid commit payload")
+            raise GitHubAPIError(
+                status_code=502, detail="GitHub returned an invalid commit payload"
+            )
         return str(sha)
 
     async def _update_ref(self, repo: str, branch: str, commit_sha: str) -> None:
@@ -292,9 +313,10 @@ class GitHubClient:
         blob_shas = await asyncio.gather(
             *[self._create_blob(repo, content) for _, content in files]
         )
-        new_tree_sha = await self._create_tree(
-            repo, base_tree_sha, [(path, sha) for (path, _), sha in zip(files, blob_shas)]
-        )
+        tree_entries = [
+            (path, sha) for (path, _), sha in zip(files, blob_shas, strict=True)
+        ]
+        new_tree_sha = await self._create_tree(repo, base_tree_sha, tree_entries)
         new_commit_sha = await self._create_commit(repo, message, new_tree_sha, parent_commit_sha)
         await self._update_ref(repo, branch, new_commit_sha)
         return new_commit_sha

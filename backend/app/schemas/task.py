@@ -30,6 +30,15 @@ class TaskSummary(BaseModel):
     updated_at: datetime
     team_id: UUID | None = Field(None, description="Team ID; null for personal tasks")
     is_team_task: bool = Field(False, description="True if task belongs to a team")
+    previous_task_id: UUID | None = Field(
+        None, description="Previous published task for incremental translation"
+    )
+    incremental_paragraphs_count: int | None = Field(
+        None, description="Number of paragraphs actually translated; null for full translation"
+    )
+    incremental_total_paragraphs: int | None = Field(
+        None, description="Total paragraphs in the file; null for full translation"
+    )
 
 
 class TaskDetail(TaskSummary):
@@ -40,11 +49,22 @@ class TaskDetail(TaskSummary):
     target_file_sha: str | None = Field(None, description="Target repository blob SHA")
     original_content: str = Field(..., description="Original source content")
     translated_content: str | None = Field(None, description="Translated content")
-    conflict_base: str | None = Field(None, description="Original content snapshot for publish conflict")
-    conflict_ours: str | None = Field(None, description="Local translated content snapshot for publish conflict")
-    conflict_theirs: str | None = Field(None, description="Remote target content snapshot for publish conflict")
+    conflict_base: str | None = Field(
+        None, description="Original content snapshot for publish conflict"
+    )
+    conflict_ours: str | None = Field(
+        None, description="Local translated content snapshot for publish conflict"
+    )
+    conflict_theirs: str | None = Field(
+        None, description="Remote target content snapshot for publish conflict"
+    )
     error: str | None = Field(None, description="Pipeline traceback for failed tasks")
-    publications: list[PublicationRead] = Field(default_factory=list, description="Task publications")
+    before_sha: str | None = Field(
+        None, description="GitHub SHA before the push for incremental diff"
+    )
+    publications: list[PublicationRead] = Field(
+        default_factory=list, description="Task publications"
+    )
 
 
 class TaskUpdate(BaseModel):
@@ -75,7 +95,9 @@ class SkippedFile(BaseModel):
             "`excluded_by_pattern` - filtered by project exclude_patterns"
         ),
     )
-    existing_task_id: UUID | None = Field(None, description="Existing active task ID when available")
+    existing_task_id: UUID | None = Field(
+        None, description="Existing active task ID when available"
+    )
 
 
 class TaskCreateResponse(BaseModel):
@@ -118,14 +140,20 @@ class ConflictDetail(BaseModel):
 
 
 class PublishRequest(BaseModel):
-    commit_message: str | None = Field(None, description="Custom commit message for the GitHub commit")
+    commit_message: str | None = Field(
+        None, description="Custom commit message for the GitHub commit"
+    )
     target_path: str | None = Field(None, description="Override target file path in repository")
 
 
 class BatchPublishRequest(BaseModel):
     task_ids: list[UUID]
-    commit_message: str | None = Field(None, description="Custom commit message for the GitHub commit")
-    per_task_paths: dict[UUID, str] | None = Field(None, description="Override target path per task ID")
+    commit_message: str | None = Field(
+        None, description="Custom commit message for the GitHub commit"
+    )
+    per_task_paths: dict[UUID, str] | None = Field(
+        None, description="Override target path per task ID"
+    )
 
 
 class BatchPublishResponse(BaseModel):

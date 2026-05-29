@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import UTC, datetime
 from typing import Annotated, AsyncIterator
 from uuid import UUID
-
-import asyncio
-import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
@@ -18,16 +17,15 @@ from app.schemas.task import (
     BatchPublishResponse,
     PublishRequest,
     RetryRequest,
-    TaskPublishResponse,
     TaskCreateResponse,
     TaskDetail,
     TaskListResponse,
+    TaskPublishResponse,
     TaskStatus,
     TaskSummary,
     TaskUpdate,
 )
-from app.services import pipeline_runner
-from app.services import task_list_events
+from app.services import pipeline_runner, task_list_events
 from app.services.auth import get_current_user
 from app.services.projects import _get_user_team_id, get_project_visible_or_404
 from app.services.tasks import (
@@ -46,6 +44,7 @@ from app.services.tasks import (
     reset_task_for_retry,
     update_task_content,
 )
+
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
@@ -185,7 +184,9 @@ async def task_list_events_stream(
     "/{task_id}/cancel",
     status_code=200,
     summary="Отменить задачу",
-    description="Отменяет задачу со статусом `queued` или `running`. Статус становится `cancelled`.",
+    description=(
+        "Отменяет задачу со статусом `queued` или `running`. Статус становится `cancelled`."
+    ),
 )
 async def cancel_task_route(
     task_id: UUID,
@@ -234,7 +235,10 @@ async def get_task(task_id: UUID, session: DbSession, current_user: CurrentUser)
 @router.get(
     "/{task_id}/log",
     summary="Лог пайплайна",
-    description="Сырой текстовый лог выполнения пайплайна (`text/plain`). `204` если задача ещё в очереди и лог пуст.",
+    description=(
+        "Сырой текстовый лог выполнения пайплайна (`text/plain`). "
+        "`204` если задача ещё в очереди и лог пуст."
+    ),
     responses={
         200: {"description": "Лог (text/plain)"},
         204: {"description": "Лог пуст"},
@@ -284,7 +288,8 @@ async def patch_task(
         "```json\n{\"project_id\": \"...\", \"file_paths\": [\"docs/crm-deal-get.md\"]}\n```\n"
         "Требует привязанный GitHub-аккаунт. Скачивает файлы через GitHub API.\n\n"
         "**B — загрузка файла** (`multipart/form-data`):\n"
-        "Поля: `project_id` (необязательно), `target_path`, `file` (только `.md`, UTF-8, максимум 1 MB).\n"
+        "Поля: `project_id` (необязательно), `target_path`, "
+        "`file` (только `.md`, UTF-8, максимум 1 MB).\n"
         "GitHub-аккаунт не требуется.\n\n"
         "Поддерживает частичный успех: `skipped` содержит пропущенные файлы с причиной."
     ),
@@ -300,7 +305,10 @@ async def create_manual_tasks(
     current_user: CurrentUser,
 ) -> TaskCreateResponse:
     content_type = request.headers.get("content-type", "")
-    logger.info("create_manual_tasks called", extra={"content_type": content_type, "user_id": str(current_user.id)})
+    logger.info(
+        "create_manual_tasks called",
+        extra={"content_type": content_type, "user_id": str(current_user.id)},
+    )
 
     if content_type.startswith("application/json"):
         payload = parse_manual_repo_payload(await request.json())
@@ -334,7 +342,8 @@ async def create_manual_tasks(
     status_code=202,
     summary="Повторить перевод",
     description=(
-        "Сбрасывает результаты задачи (`translated_content`, `log`, `error`) и запускает пайплайн заново. "
+        "Сбрасывает результаты задачи (`translated_content`, `log`, `error`) "
+        "и запускает пайплайн заново. "
         "Применимо для статусов `done` и `failed`.\n\n"
         "Если source-файл изменился в GitHub с момента создания задачи — возвращает `409`. "
         "Передайте `force: true` чтобы продолжить со старой версией файла. "
@@ -496,7 +505,8 @@ async def publish_tasks_batch_route(
         "- `log_line` — строка лога: `{line}`\n"
         "- `status_change` — финальный статус: `{status}` (`done` или `failed`)\n\n"
         "После `status_change` поток закрывается. "
-        "Если задача уже завершена или ещё в `queued` — сразу отправляется одно событие `status_change`."
+        "Если задача уже завершена или ещё в `queued` — "
+        "сразу отправляется одно событие `status_change`."
     ),
     responses={
         200: {"description": "SSE-поток (text/event-stream)"},

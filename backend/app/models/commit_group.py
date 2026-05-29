@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, JSON, func
+from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -31,7 +31,9 @@ class CommitGroup(Base):
     commit_author_name: Mapped[str | None]
     commit_author_login: Mapped[str | None]
     file_paths: Mapped[list[str]] = mapped_column(JSON, nullable=False)
-    status: Mapped[str] = mapped_column(default="pending_confirmation", server_default="pending_confirmation")
+    status: Mapped[str] = mapped_column(
+        default="pending_confirmation", server_default="pending_confirmation"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

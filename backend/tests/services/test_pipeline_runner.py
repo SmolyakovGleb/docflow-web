@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.models.task import Task
 from app.services import pipeline_runner
 from app.services.dictionary_merger import MergedPipelineData
+from app.services.incremental_translate import TranslationContext
 
 
 async def create_task(db_session, test_project):
@@ -37,6 +38,18 @@ def drain_queue(queue):
     while not queue.empty():
         items.append(queue.get_nowait())
     return items
+
+
+def reset_pipeline_runner_state():
+    pipeline_runner.TASK_EVENT_QUEUES.clear()
+    pipeline_runner._SCHEDULED_PIPELINES.clear()
+    pipeline_runner._DEFERRED_TASKS.clear()
+    pipeline_runner._PAUSED_PROJECTS.clear()
+    pipeline_runner._BACKGROUND_TASKS.clear()
+    pipeline_runner._CURRENT_TASK_ID = None
+    pipeline_runner._CURRENT_EXECUTION = None
+    pipeline_runner._WORKER_TASK = None
+    pipeline_runner._PIPELINE_QUEUE = asyncio.Queue()
 
 
 async def test_run_task_success(engine, db_session, test_project, mocker):
@@ -95,6 +108,74 @@ async def test_run_task_success(engine, db_session, test_project, mocker):
     assert "[pipeline] pipeline log" in (updated_task.log or "")
     assert updated_task.error is None
     assert updated_task.completed_at is not None
+    assert updated_task.incremental_paragraphs_count is None
+    assert updated_task.incremental_total_paragraphs is None
+    assert "[prepare] Полный перевод" in (updated_task.log or "")
+
+
+async def test_run_task_incremental_merges_dirty_paragraphs(
+    engine, db_session, test_project, mocker
+):
+    reset_pipeline_runner_state()
+    task = await create_task(db_session, test_project)
+
+    mocker.patch(
+        "app.services.pipeline_runner.get_session_factory",
+        return_value=make_session_factory(engine),
+    )
+    mocker.patch(
+        "app.services.pipeline_runner.dictionary_merger.merge_pipeline_data",
+        new=mocker.AsyncMock(
+            return_value=MergedPipelineData(
+                dictionary={},
+                glossary={},
+                prompt="Prompt",
+                pre_translator_files={
+                    "static_terms": {},
+                    "section_headings": {},
+                    "note_titles": {},
+                    "include_labels": {},
+                },
+            )
+        ),
+    )
+
+    ctx = TranslationContext(
+        content="Changed B",
+        is_incremental=True,
+        dirty_indices=[1],
+        aligned_old_ru={0: "RU A", 2: "RU C"},
+        new_paras=["A", "Changed B", "C"],
+    )
+    mocker.patch(
+        "app.services.pipeline_runner._build_translation_context",
+        new=mocker.AsyncMock(return_value=ctx),
+    )
+
+    async def fake_execute(*, input_file, output_dir, logger, **kwargs):
+        # only the dirty paragraph is fed to the pipeline
+        assert input_file.read_text(encoding="utf-8") == "Changed B"
+        logger.info("translating dirty")
+        output_path = output_dir / input_file.name
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("RU B", encoding="utf-8")
+        return output_path
+
+    mocker.patch("app.services.pipeline_runner._execute_pipeline", side_effect=fake_execute)
+
+    await pipeline_runner.run_task(task.id)
+
+    session_factory = make_session_factory(engine)
+    async with session_factory() as session:
+        updated_task = await session.get(Task, task.id)
+
+    assert updated_task is not None
+    assert updated_task.status == "done"
+    # clean paragraphs reuse old RU, dirty paragraph uses fresh translation
+    assert updated_task.translated_content == "RU A\n\nRU B\n\nRU C"
+    assert updated_task.incremental_paragraphs_count == 1
+    assert updated_task.incremental_total_paragraphs == 3
+    assert "[prepare] Инкрементальный режим: 1 из 3 абзацев" in (updated_task.log or "")
 
 
 async def test_run_task_failure_sets_failed_status(engine, db_session, test_project, mocker):
@@ -244,13 +325,12 @@ async def test_run_task_emits_sse_events(engine, db_session, test_project, mocke
 
     assert events[0]["event"] == "stage_update"
     assert events[0]["data"]["stage"] == "prepare"
-    assert events[1]["event"] == "stage_update"
-    assert events[1]["data"]["stage"] == "pipeline"
-    assert any(
-        event["event"] == "stage_update" and event["data"]["stage"] == "persist"
+    stage_updates = [
+        event["data"]["stage"]
         for event in events
-        if event is not None
-    )
+        if event is not None and event["event"] == "stage_update"
+    ]
+    assert stage_updates == ["prepare", "pipeline", "persist"]
     assert any(
         event["event"] == "log_line" and event["data"]["line"] == "[pipeline] pipeline log"
         for event in events
@@ -260,8 +340,8 @@ async def test_run_task_emits_sse_events(engine, db_session, test_project, mocke
     assert events[-1] is None
 
 
-async def test_run_task_uses_lock(engine, db_session, test_project, mocker):
-    pipeline_runner.TASK_EVENT_QUEUES.clear()
+async def test_schedule_task_preserves_queue_order(engine, db_session, test_project, mocker):
+    reset_pipeline_runner_state()
     first_task = await create_task(db_session, test_project)
     second_task = await create_task(db_session, test_project)
 
@@ -269,81 +349,54 @@ async def test_run_task_uses_lock(engine, db_session, test_project, mocker):
         "app.services.pipeline_runner.get_session_factory",
         return_value=make_session_factory(engine),
     )
-    mocker.patch(
-        "app.services.pipeline_runner.dictionary_merger.merge_pipeline_data",
-        new=mocker.AsyncMock(
-            return_value=MergedPipelineData(
-                dictionary={},
-                glossary={},
-                prompt="Prompt",
-                pre_translator_files={
-                    "static_terms": {},
-                    "section_headings": {},
-                    "note_titles": {},
-                    "include_labels": {},
-                },
-            )
-        ),
-    )
 
-    call_order: list[int] = []
-    first_started = asyncio.Event()
-    release_first = asyncio.Event()
-    call_count = 0
+    await pipeline_runner.schedule_task(first_task.id)
+    await pipeline_runner.schedule_task(second_task.id)
+    queued_task_ids = [
+        await asyncio.wait_for(pipeline_runner._PIPELINE_QUEUE.get(), timeout=0.1),
+        await asyncio.wait_for(pipeline_runner._PIPELINE_QUEUE.get(), timeout=0.1),
+    ]
 
-    async def fake_execute(*, input_file, output_dir, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        n = call_count
-        call_order.append(n)
-        if n == 1:
-            first_started.set()
-            await release_first.wait()
-        output_path = output_dir / input_file.name
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text("# done", encoding="utf-8")
-        return output_path
+    session_factory = make_session_factory(engine)
+    async with session_factory() as session:
+        first_updated = await session.get(Task, first_task.id)
+        second_updated = await session.get(Task, second_task.id)
 
-    mocker.patch("app.services.pipeline_runner._execute_pipeline", side_effect=fake_execute)
-
-    first_run = asyncio.create_task(pipeline_runner.run_task(first_task.id))
-    second_run = asyncio.create_task(pipeline_runner.run_task(second_task.id))
-
-    await first_started.wait()
-    await asyncio.sleep(0.05)
-    assert call_order == [1]  # second task hasn't entered yet — lock is held
-
-    release_first.set()
-    await asyncio.gather(first_run, second_run)
-
-    assert call_order == [1, 2]  # both ran, sequentially
+    assert first_updated is not None
+    assert second_updated is not None
+    assert first_updated.status == "queued"
+    assert second_updated.status == "queued"
+    assert queued_task_ids == [first_task.id, second_task.id]
+    assert first_task.id in pipeline_runner._SCHEDULED_PIPELINES
+    assert second_task.id in pipeline_runner._SCHEDULED_PIPELINES
 
 
-async def test_schedule_task_marks_task_failed_when_scheduling_breaks(
+async def test_schedule_task_enqueues_task_only_once(
     engine,
     db_session,
     test_project,
     mocker,
 ):
+    reset_pipeline_runner_state()
     task = await create_task(db_session, test_project)
 
     mocker.patch(
         "app.services.pipeline_runner.get_session_factory",
         return_value=make_session_factory(engine),
     )
-    mocker.patch(
-        "app.services.pipeline_runner._spawn_pipeline_task",
-        side_effect=RuntimeError("no running event loop"),
-    )
 
-    scheduled = await pipeline_runner.schedule_task(task.id)
+    first_scheduled = await pipeline_runner.schedule_task(task.id)
+    second_scheduled = await pipeline_runner.schedule_task(task.id)
+    queued_task_id = await asyncio.wait_for(pipeline_runner._PIPELINE_QUEUE.get(), timeout=0.1)
 
     session_factory = make_session_factory(engine)
     async with session_factory() as session:
         updated_task = await session.get(Task, task.id)
 
-    assert scheduled is False
+    assert first_scheduled is True
+    assert second_scheduled is False
+    assert queued_task_id == task.id
     assert updated_task is not None
-    assert updated_task.status == "failed"
-    assert "Failed to schedule pipeline run" in (updated_task.error or "")
-    assert updated_task.completed_at is not None
+    assert updated_task.status == "queued"
+    assert task.id in pipeline_runner._SCHEDULED_PIPELINES
+    assert pipeline_runner._PIPELINE_QUEUE.empty()

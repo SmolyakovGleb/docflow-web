@@ -12,6 +12,7 @@ interface TaskListToolbarProps {
   projects: Project[]
   selectedProjectId: string | null
   showSelectionToggle: boolean
+  hasGithubLinked: boolean
   totalCount: number
   onToggleBatchMode: () => void
   onProjectChange: (projectId: string | null) => void
@@ -23,6 +24,7 @@ export function TaskListToolbar({
   projects,
   selectedProjectId,
   showSelectionToggle,
+  hasGithubLinked,
   totalCount,
   onToggleBatchMode,
   onProjectChange,
@@ -44,30 +46,36 @@ export function TaskListToolbar({
           </button>
         ) : null}
 
-        <div
-          className={cn(
-            styles.webhook,
-            isWebhookActive ? styles.webhookActive : styles.webhookInactive,
-          )}
-        >
-          <span
+        {hasGithubLinked ? (
+          <div
             className={cn(
-              styles.webhookDot,
-              isWebhookActive ? styles.webhookDotActive : styles.webhookDotInactive,
+              styles.webhook,
+              isWebhookActive ? styles.webhookActive : styles.webhookInactive,
             )}
-          />
-          <span>{t(isWebhookActive ? 'toolbar.webhook_active' : 'toolbar.webhook_inactive')}</span>
-        </div>
+          >
+            <span
+              className={cn(
+                styles.webhookDot,
+                isWebhookActive ? styles.webhookDotActive : styles.webhookDotInactive,
+              )}
+            />
+            <span>
+              {t(isWebhookActive ? 'toolbar.webhook_active' : 'toolbar.webhook_inactive')}
+            </span>
+          </div>
+        ) : null}
       </div>
 
-      <div className={styles.right}>
-        <ProjectFilterPopover
-          projects={projects}
-          selectedId={selectedProjectId}
-          totalCount={totalCount}
-          onChange={onProjectChange}
-        />
-      </div>
+      {hasGithubLinked ? (
+        <div className={styles.right}>
+          <ProjectFilterPopover
+            projects={projects}
+            selectedId={selectedProjectId}
+            totalCount={totalCount}
+            onChange={onProjectChange}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }

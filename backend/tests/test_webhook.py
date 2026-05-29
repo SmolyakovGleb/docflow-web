@@ -414,3 +414,135 @@ async def test_webhook_is_atomic_if_github_download_fails(
     tasks = (await db_session.scalars(select(Task).where(Task.project_id == test_project.id))).all()
     assert tasks == []
     schedule_task.assert_not_awaited()
+
+
+async def test_webhook_saves_before_sha(client, db_session, test_project, test_user, mocker):
+    test_user.github_id = 123456
+    test_user.github_login = "octocat"
+    test_user.github_access_token = encrypt_github_access_token("github-token")
+    await db_session.commit()
+
+    github_client = mocker.Mock()
+    github_client.get_file_content = mocker.AsyncMock(return_value=("# Source", "source-sha"))
+    github_client.get_file_sha = mocker.AsyncMock(return_value="target-sha")
+    mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
+    mocker.patch("app.api.routes.webhook.pipeline_runner.schedule_task", new=mocker.AsyncMock())
+
+    payload = {
+        "ref": "refs/heads/main",
+        "before": "before-sha-abc",
+        "after": "after-sha-xyz",
+        "head_commit": {"message": "Update docs", "author": {"name": "Dev"}},
+        "commits": [{"added": ["docs/index.md"], "modified": []}],
+    }
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
+
+    response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
+
+    assert response.status_code == 202
+    task = (
+        await db_session.scalars(select(Task).where(Task.project_id == test_project.id))
+    ).one()
+    assert task.before_sha == "before-sha-abc"
+    assert task.previous_task_id is None
+
+
+async def test_webhook_sets_previous_task_id_from_published_task(
+    client, db_session, test_project, test_user, mocker
+):
+    test_user.github_id = 123456
+    test_user.github_login = "octocat"
+    test_user.github_access_token = encrypt_github_access_token("github-token")
+
+    published = Task(
+        user_id=test_project.user_id,
+        project_id=test_project.id,
+        file_path="docs/index.md",
+        github_ref="refs/heads/main",
+        github_sha="old-sha",
+        commit_message="Previous translation",
+        source_file_sha="s-sha",
+        target_file_sha="t-sha",
+        original_content="# Old",
+        status="published",
+    )
+    db_session.add(published)
+    await db_session.commit()
+    await db_session.refresh(published)
+
+    github_client = mocker.Mock()
+    github_client.get_file_content = mocker.AsyncMock(return_value=("# New", "new-source-sha"))
+    github_client.get_file_sha = mocker.AsyncMock(return_value="new-target-sha")
+    mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
+    mocker.patch("app.api.routes.webhook.pipeline_runner.schedule_task", new=mocker.AsyncMock())
+
+    payload = {
+        "ref": "refs/heads/main",
+        "before": "before-sha-abc",
+        "after": "after-sha-xyz",
+        "head_commit": {"message": "Update docs", "author": {"name": "Dev"}},
+        "commits": [{"modified": ["docs/index.md"], "added": []}],
+    }
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
+
+    response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
+
+    assert response.status_code == 202
+    new_task = (
+        await db_session.scalars(
+            select(Task)
+            .where(Task.project_id == test_project.id, Task.status == "queued")
+        )
+    ).one()
+    assert new_task.previous_task_id == published.id
+    assert new_task.before_sha == "before-sha-abc"
+
+
+async def test_webhook_ignores_non_published_tasks_for_previous_task_id(
+    client, db_session, test_project, test_user, mocker
+):
+    """Done (not published) tasks must not be picked as previous_task_id."""
+    test_user.github_id = 123456
+    test_user.github_login = "octocat"
+    test_user.github_access_token = encrypt_github_access_token("github-token")
+
+    done_task = Task(
+        user_id=test_project.user_id,
+        project_id=test_project.id,
+        file_path="docs/index.md",
+        github_ref="refs/heads/main",
+        github_sha="old-sha",
+        commit_message="Done but not published",
+        source_file_sha="s-sha",
+        target_file_sha="t-sha",
+        original_content="# Old",
+        status="done",
+    )
+    db_session.add(done_task)
+    await db_session.commit()
+
+    github_client = mocker.Mock()
+    github_client.get_file_content = mocker.AsyncMock(return_value=("# New", "new-sha"))
+    github_client.get_file_sha = mocker.AsyncMock(return_value="t-sha-new")
+    mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
+    mocker.patch("app.api.routes.webhook.pipeline_runner.schedule_task", new=mocker.AsyncMock())
+
+    payload = {
+        "ref": "refs/heads/main",
+        "before": "before-abc",
+        "after": "after-xyz",
+        "head_commit": {"message": "Another push", "author": {"name": "Dev"}},
+        "commits": [{"modified": ["docs/index.md"], "added": []}],
+    }
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
+
+    response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
+
+    assert response.status_code == 202
+    new_task = (
+        await db_session.scalars(
+            select(Task)
+            .where(Task.project_id == test_project.id, Task.status == "queued")
+        )
+    ).one()
+    assert new_task.previous_task_id is None

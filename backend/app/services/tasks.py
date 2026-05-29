@@ -14,16 +14,15 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.publication import Publication
 from app.models.project import Project
+from app.models.publication import Publication
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.task import ManualTaskFromRepo, TaskStatus, TaskUpdate
-from app.services import bitrix_notify
-from app.services import task_list_events
+from app.services import bitrix_notify, task_list_events
 from app.services.auth import decrypt_github_access_token
 from app.services.github import GitHubClient
-from app.services.projects import _get_user_team_id, get_project_or_404, get_project_visible_or_404
+from app.services.projects import _get_user_team_id, get_project_visible_or_404
 
 ACTIVE_TASK_STATUSES = ("queued", "running")
 ALL_TASK_STATUSES = ("queued", "running", "done", "failed", "published", "conflict")
@@ -383,7 +382,11 @@ async def create_manual_tasks_from_repo(
 ) -> ManualTaskCreationResult:
     project = await get_project_visible_or_404(session, payload.project_id, current_user)
     # Use project owner's GitHub token — team members may not have GitHub linked
-    project_owner = current_user if project.user_id == current_user.id else await session.get(User, project.user_id)
+    project_owner = (
+        current_user
+        if project.user_id == current_user.id
+        else await session.get(User, project.user_id)
+    )
     access_token = ensure_github_access(project_owner)
     github_client = GitHubClient(access_token)
 
@@ -741,7 +744,9 @@ async def publish_tasks_batch(
     rows = await session.execute(stmt)
     tasks = list(rows.scalars().all())
 
-    publishable = [t for t in tasks if t.status in PUBLISHABLE_TASK_STATUSES and t.project is not None]
+    publishable = [
+        t for t in tasks if t.status in PUBLISHABLE_TASK_STATUSES and t.project is not None
+    ]
     if not publishable:
         return BatchPublishResult()
 
@@ -762,7 +767,7 @@ async def publish_tasks_batch(
         )
 
         clean_tasks: list[Task] = []
-        for task, current_sha in zip(group_tasks, current_shas):
+        for task, current_sha in zip(group_tasks, current_shas, strict=True):
             if task.target_file_sha is not None and current_sha != task.target_file_sha:
                 previous_status = task.status
                 theirs = ""
@@ -798,7 +803,7 @@ async def publish_tasks_batch(
         )
         result.commit_sha = commit_sha
 
-        for task, (effective_path, _) in zip(clean_tasks, files):
+        for task, (effective_path, _) in zip(clean_tasks, files, strict=True):
             publication = Publication(
                 task_id=task.id,
                 published_by=current_user.id,
@@ -813,7 +818,10 @@ async def publish_tasks_batch(
             clear_task_conflict(task)
             result.published_task_ids.append(task.id)
             task_list_events.publish_task_entered_scope(task, previous_status=previous_status)
-            logger.info("task_published_batch", extra={"task_id": str(task.id), "commit_sha": commit_sha})
+            logger.info(
+                "task_published_batch",
+                extra={"task_id": str(task.id), "commit_sha": commit_sha},
+            )
 
         await session.commit()
 

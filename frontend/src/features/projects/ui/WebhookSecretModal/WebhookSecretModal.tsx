@@ -31,6 +31,7 @@ export function WebhookSecretModal({
     <DialogShell
       open={open}
       title={t('secret_modal_title')}
+      description={t('secret_modal_description')}
       size="md"
       preventClose
       overlayTestId="webhook-secret-overlay"

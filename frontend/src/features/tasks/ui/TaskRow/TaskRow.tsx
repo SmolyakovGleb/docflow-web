@@ -45,6 +45,7 @@ export function TaskRow({
   const dir = lastSlash >= 0 ? task.file_path.slice(0, lastSlash + 1) : ''
   const file = lastSlash >= 0 ? task.file_path.slice(lastSlash + 1) : task.file_path
   const canPublish = task.status === 'done' && Boolean(task.project_id)
+  const isIncremental = task.previous_task_id != null && task.incremental_paragraphs_count != null
   const hasReplacementContent =
     task.status === 'done' ||
     task.status === 'published' ||
@@ -121,6 +122,11 @@ export function TaskRow({
         ) : (
           <StatusPill status={task.status} />
         )}
+        {isIncremental ? (
+          <span className={styles.incrementalBadge} title={t('incremental_badge_title')}>
+            {t('incremental_badge')}
+          </span>
+        ) : null}
       </div>
 
       <div className={styles.time}>{formatRelativeShort(task.completed_at ?? task.updated_at)}</div>

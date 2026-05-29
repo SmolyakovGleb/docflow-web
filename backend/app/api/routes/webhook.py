@@ -9,7 +9,7 @@ from uuid import UUID
 from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
@@ -17,8 +17,7 @@ from app.models.commit_group import CommitGroup
 from app.models.project import Project
 from app.models.task import Task
 from app.models.user import User
-from app.services import pipeline_runner
-from app.services import task_list_events
+from app.services import pipeline_runner, task_list_events
 from app.services.auth import decrypt_github_access_token, decrypt_webhook_secret
 from app.services.github import GitHubAPIError, GitHubClient
 from app.services.tasks import _apply_exclude_patterns
@@ -79,6 +78,42 @@ async def _get_project_owner(session: AsyncSession, project: Project) -> User:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
 
+async def _get_previous_task_ids(
+    session: AsyncSession,
+    project_id: UUID,
+    file_paths: list[str],
+) -> dict[str, UUID]:
+    """Return {file_path: task_id} for the most recent published task per file."""
+    if not file_paths:
+        return {}
+
+    subq = (
+        select(Task.file_path, func.max(Task.created_at).label("max_created_at"))
+        .where(
+            Task.project_id == project_id,
+            Task.file_path.in_(file_paths),
+            Task.status == "published",
+        )
+        .group_by(Task.file_path)
+        .subquery()
+    )
+
+    rows = (
+        await session.execute(
+            select(Task.file_path, Task.id).join(
+                subq,
+                and_(
+                    Task.file_path == subq.c.file_path,
+                    Task.created_at == subq.c.max_created_at,
+                ),
+            )
+            .where(Task.project_id == project_id, Task.status == "published")
+        )
+    ).all()
+
+    return {row.file_path: row.id for row in rows}
+
+
 @router.post(
     "/webhook/{project_id}",
     status_code=status.HTTP_202_ACCEPTED,
@@ -94,7 +129,8 @@ async def _get_project_owner(session: AsyncSession, project: Project) -> User:
         "4. Применить `exclude_patterns`, дедупликацию (`queued`/`running`)\n"
         "5. Скачать файлы через GitHub API (атомарно — при ошибке задачи не создаются)\n"
         "6. Создать задачи и запустить пайплайн в фоне\n\n"
-        "**Возможные `skipped.reason`:** `already_queued`, `pipeline_running`, `excluded_by_pattern`."
+        "**Возможные `skipped.reason`:** "
+        "`already_queued`, `pipeline_running`, `excluded_by_pattern`."
     ),
     responses={
         202: {"description": "Задачи созданы и поставлены в очередь"},
@@ -111,7 +147,9 @@ async def github_webhook(
 ) -> dict[str, Any]:
     raw_body = await request.body()
     if len(raw_body) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Payload too large")
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Payload too large"
+        )
     project = await _get_project_or_404(session, project_id)
 
     signature = request.headers.get("X-Hub-Signature-256")
@@ -209,8 +247,9 @@ async def github_webhook(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="GitHub access token is corrupted — please re-link your GitHub account",
-        )
+        ) from None
     github_client = GitHubClient(access_token)
+    before_sha: str | None = payload.get("before") or None
     commit_message = None
     commit_author_name = None
     commit_author_login = None
@@ -278,6 +317,8 @@ async def github_webhook(
             detail=f"Unexpected error fetching files: {type(exc).__name__}: {exc}",
         ) from exc
 
+    previous_task_by_path = await _get_previous_task_ids(session, project.id, files_to_process)
+
     tasks_to_create: list[Task] = [
         Task(
             user_id=owner.id,
@@ -293,6 +334,8 @@ async def github_webhook(
             target_file_sha=target_file_sha,
             original_content=original_content,
             status="queued",
+            before_sha=before_sha,
+            previous_task_id=previous_task_by_path.get(file_path),
         )
         for file_path, original_content, source_file_sha, target_file_sha in fetched
     ]

@@ -103,6 +103,7 @@ function RepositoryDetailContent({
   const navigate = useNavigate()
   const [excludePatternsDraft, setExcludePatternsDraft] = useState(() => project.exclude_patterns)
   const [limitValue, setLimitValue] = useState(String(project.webhook_file_limit))
+  const [thresholdValue, setThresholdValue] = useState(String(project.incremental_threshold))
   const [editBranchesOpen, setEditBranchesOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [confirmSecretOpen, setConfirmSecretOpen] = useState(false)
@@ -136,6 +137,24 @@ function RepositoryDetailContent({
       }).unwrap()
       setExcludePatternsDraft(response.exclude_patterns)
       toast.success(t('repositories:exclude_patterns_saved'))
+    } catch (error) {
+      toast.error(translateApiError(error))
+    }
+  }
+
+  async function handleSaveThreshold() {
+    const parsed = Number(thresholdValue)
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
+      toast.error(t('repositories:incremental_threshold_invalid'))
+      return
+    }
+    try {
+      const response = await updateProject({
+        projectId,
+        data: { incremental_threshold: parsed },
+      }).unwrap()
+      setThresholdValue(String(response.incremental_threshold))
+      toast.success(t('repositories:incremental_threshold_saved'))
     } catch (error) {
       toast.error(translateApiError(error))
     }
@@ -336,6 +355,33 @@ function RepositoryDetailContent({
                 {t('repositories:pause_pipeline')}
               </Button>
             )}
+          </div>
+        </SectionCard>
+
+        <SectionCard label={t('repositories:incremental_section_title')}>
+          <div className={styles.pipelineRow}>
+            <label className={styles.pipelineLabel}>
+              {t('repositories:incremental_threshold')}
+            </label>
+            <input
+              className={styles.pipelineInput}
+              type="number"
+              min={1}
+              max={100}
+              value={thresholdValue}
+              onChange={(e) => setThresholdValue(e.target.value)}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={isUpdating}
+              onClick={() => void handleSaveThreshold()}
+            >
+              {t('common:save')}
+            </Button>
+            <span className={styles.hint}>
+              {t('repositories:incremental_threshold_hint', { n: thresholdValue })}
+            </span>
           </div>
         </SectionCard>
 

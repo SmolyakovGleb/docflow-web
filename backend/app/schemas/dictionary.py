@@ -32,8 +32,12 @@ class DictionaryEntryRead(BaseModel):
 
     key: str = Field(..., description="Ключ (RU термин или `main` для `prompt`)")
     value: str = Field(..., description="Значение (EN перевод или текст промпта)")
-    source: DictionaryEntrySource = Field(..., description="`base` — из submodule файла; `user` — правка в БД")
-    entry_id: UUID | None = Field(None, description="ID записи в БД; `null` для базовых записей без правок")
+    source: DictionaryEntrySource = Field(
+        ..., description="`base` — из submodule файла; `user` — правка в БД"
+    )
+    entry_id: UUID | None = Field(
+        None, description="ID записи в БД; `null` для базовых записей без правок"
+    )
     updated_by: str | None = Field(None, description="Имя пользователя, создавшего правку")
     updated_at: datetime | None = Field(None, description="Дата последней правки")
 

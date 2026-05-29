@@ -28,6 +28,9 @@ export interface TaskSummary {
   completed_at: string | null
   updated_at: string
   is_team_task: boolean
+  previous_task_id: string | null
+  incremental_paragraphs_count: number | null
+  incremental_total_paragraphs: number | null
 }
 
 export interface TaskDetail extends TaskSummary {

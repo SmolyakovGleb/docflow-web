@@ -48,3 +48,18 @@ testpaths = ["tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency-injection markers are intended to be called in argument
+# defaults; this is idiomatic and not a B008 mutable-default-call bug.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.Body",
+    "fastapi.Form",
+    "fastapi.File",
+    "fastapi.Security",
+]

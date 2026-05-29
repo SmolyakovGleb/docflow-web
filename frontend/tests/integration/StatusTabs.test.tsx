@@ -21,6 +21,9 @@ const baseTask: TaskSummary = {
   completed_at: '2026-05-12T10:05:00Z',
   updated_at: '2026-05-12T10:05:00Z',
   is_team_task: false,
+  previous_task_id: null,
+  incremental_paragraphs_count: null,
+  incremental_total_paragraphs: null,
 }
 
 describe('StatusTabs', () => {

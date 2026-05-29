@@ -22,6 +22,9 @@ function createProjectState() {
     webhook_url: `http://localhost:8080/webhook/${projectId}`,
     version: 1,
     created_at: '2026-05-08T10:00:00Z',
+    pipeline_paused: false,
+    webhook_file_limit: 50,
+    incremental_threshold: 40,
   }
 }
 
@@ -119,6 +122,41 @@ describe('RepositoryDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText('develop')).toBeInTheDocument()
       expect(screen.getByText('production')).toBeInTheDocument()
+    })
+  })
+
+  it('saves incremental threshold', async () => {
+    let project = createProjectState()
+    let patchedBody: { incremental_threshold?: number } | null = null
+
+    server.use(
+      http.get('/api/projects/:currentProjectId', () => HttpResponse.json(project)),
+      http.get('/api/tasks', () => HttpResponse.json({ items: [], total: 0, limit: 5, offset: 0 })),
+      http.patch('/api/projects/:currentProjectId', async ({ request }) => {
+        patchedBody = (await request.json()) as { incremental_threshold?: number }
+        project = {
+          ...project,
+          incremental_threshold: patchedBody.incremental_threshold ?? project.incremental_threshold,
+        }
+        return HttpResponse.json(project)
+      }),
+    )
+
+    const user = userEvent.setup()
+
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Docs EN' })
+    const input = screen.getByDisplayValue('40')
+    await user.clear(input)
+    await user.type(input, '25')
+    const section = screen
+      .getByText(i18n.t('repositories:incremental_section_title'))
+      .closest('section') as HTMLElement
+    await user.click(within(section).getByRole('button', { name: i18n.t('common:save') }))
+
+    await waitFor(() => {
+      expect(patchedBody).toEqual({ incremental_threshold: 25 })
     })
   })
 

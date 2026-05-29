@@ -3,7 +3,9 @@ from __future__ import annotations
 from app.services.auth import encrypt_github_access_token
 
 
-async def test_get_github_repos_returns_current_user_repos(auth_client, db_session, test_user, mocker):
+async def test_get_github_repos_returns_current_user_repos(
+    auth_client, db_session, test_user, mocker
+):
     test_user.github_id = 123456
     test_user.github_login = "octocat"
     test_user.github_access_token = encrypt_github_access_token("github-token")

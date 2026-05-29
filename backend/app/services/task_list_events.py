@@ -117,7 +117,10 @@ def publish_task_status_changed(task: Any, *, previous_status: str) -> None:
                 continue
         if subscription.search:
             needle = subscription.search
-            if needle not in task.file_path.lower() and needle not in (task.commit_message or "").lower():
+            if (
+                needle not in task.file_path.lower()
+                and needle not in (task.commit_message or "").lower()
+            ):
                 continue
         subscription.queue.put_nowait({"event": "task_updated", "data": payload})
 
@@ -142,7 +145,10 @@ def publish_commit_group_event(commit_group: Any, *, event_type: str) -> None:
         )
         if not belongs_to_user and not belongs_to_team:
             continue
-        if subscription.project_id is not None and commit_group.project_id != subscription.project_id:
+        if (
+            subscription.project_id is not None
+            and commit_group.project_id != subscription.project_id
+        ):
             continue
         subscription.queue.put_nowait({"event": event_type, "data": payload})
 

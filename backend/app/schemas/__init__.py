@@ -1,5 +1,4 @@
 from app.schemas.analytics import AnalyticsResponse, TasksPerDayBucket, TopErrorStat
-from app.schemas.health import HealthResponse
 from app.schemas.dictionary import (
     DictionaryEntryCreate,
     DictionaryEntryRead,
@@ -8,6 +7,7 @@ from app.schemas.dictionary import (
     DictionarySummaryItem,
     DictionarySummaryResponse,
 )
+from app.schemas.health import HealthResponse
 from app.schemas.notification import (
     NotificationChannelCreate,
     NotificationChannelRead,

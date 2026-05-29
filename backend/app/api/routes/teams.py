@@ -114,8 +114,12 @@ def _require_owner(team: Team, user_id: uuid.UUID) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Owner access required")
 
 
-@router.post("", response_model=TeamDetail, status_code=status.HTTP_201_CREATED, summary="Создать команду")
-async def create_team(payload: TeamCreate, session: DbSession, current_user: CurrentUser) -> TeamDetail:
+@router.post(
+    "", response_model=TeamDetail, status_code=status.HTTP_201_CREATED, summary="Создать команду"
+)
+async def create_team(
+    payload: TeamCreate, session: DbSession, current_user: CurrentUser
+) -> TeamDetail:
     existing = await _get_membership(session, current_user.id)
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Already in a team")
@@ -140,7 +144,9 @@ async def get_my_team(session: DbSession, current_user: CurrentUser) -> TeamDeta
 
 
 @router.patch("/me", response_model=TeamDetail, summary="Переименовать команду")
-async def rename_team(payload: TeamRename, session: DbSession, current_user: CurrentUser) -> TeamDetail:
+async def rename_team(
+    payload: TeamRename, session: DbSession, current_user: CurrentUser
+) -> TeamDetail:
     membership = await _require_member(session, current_user.id)
     team = await _load_team_full(session, membership.team_id)
     _require_owner(team, current_user.id)
@@ -166,7 +172,11 @@ async def delete_team(session: DbSession, current_user: CurrentUser) -> None:
     logger.info("team_deleted", extra={"team_id": str(team.id)})
 
 
-@router.delete("/me/members/{target_user_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Исключить участника")
+@router.delete(
+    "/me/members/{target_user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Исключить участника",
+)
 async def remove_member(
     target_user_id: UUID,
     session: DbSession,
@@ -184,17 +194,26 @@ async def remove_member(
             detail="Owner cannot remove themselves; delete the team instead",
         )
     if target_user_id == team.owner_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove the team owner")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove the team owner"
+        )
 
     target_membership = await session.scalar(
-        select(TeamMember).where(TeamMember.team_id == team.id, TeamMember.user_id == target_user_id)
+        select(TeamMember).where(
+            TeamMember.team_id == team.id, TeamMember.user_id == target_user_id
+        )
     )
     if target_membership is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
+        )
 
     await session.delete(target_membership)
     await session.commit()
-    logger.info("team_member_removed", extra={"team_id": str(team.id), "user_id": str(target_user_id)})
+    logger.info(
+        "team_member_removed",
+        extra={"team_id": str(team.id), "user_id": str(target_user_id)},
+    )
 
 
 @router.post("/me/leave", status_code=status.HTTP_204_NO_CONTENT, summary="Покинуть команду")
@@ -283,10 +302,15 @@ async def revoke_invite(invite_id: UUID, session: DbSession, current_user: Curre
     invite = await session.get(TeamInvite, invite_id)
     if invite is None or invite.team_id != team.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found")
+    if invite.used_by_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot revoke a used invite",
+        )
 
-    await session.delete(invite)
+    invite.expires_at = datetime.now(timezone.utc)
     await session.commit()
-    logger.info("team_invite_deleted", extra={"invite_id": str(invite_id)})
+    logger.info("team_invite_revoked", extra={"invite_id": str(invite_id)})
 
 
 @router.get(
@@ -327,5 +351,8 @@ async def join_team(payload: TeamJoin, session: DbSession, current_user: Current
     await session.commit()
 
     team = await _load_team_full(session, invite.team_id)
-    logger.info("team_joined", extra={"team_id": str(invite.team_id), "user_id": str(current_user.id)})
+    logger.info(
+        "team_joined",
+        extra={"team_id": str(invite.team_id), "user_id": str(current_user.id)},
+    )
     return _to_team_detail(team)

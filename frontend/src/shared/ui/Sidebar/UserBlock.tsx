@@ -25,6 +25,7 @@ export function UserBlock() {
     >
       <Avatar name={userLabel} size={26} />
       <span className={styles.userMeta}>
+        <span className={styles.userName}>{userLabel}</span>
         {user.is_admin && <span className={styles.adminBadge}>{t('admin_badge')}</span>}
         <span className={styles.userStatus}>
           <span

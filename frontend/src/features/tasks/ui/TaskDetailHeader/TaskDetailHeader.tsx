@@ -78,6 +78,14 @@ export function TaskDetailHeader({
               </span>
             ) : null}
             <span>{formatRelativeShort(updatedAt, { withSuffix: true })}</span>
+            {task.previous_task_id != null && task.incremental_paragraphs_count != null ? (
+              <span className={styles.incrementalMeta}>
+                {t('incremental_detail', {
+                  dirty: task.incremental_paragraphs_count,
+                  total: task.incremental_total_paragraphs ?? 0,
+                })}
+              </span>
+            ) : null}
           </div>
         </div>
 

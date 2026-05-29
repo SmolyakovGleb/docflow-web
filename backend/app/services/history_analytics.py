@@ -42,7 +42,9 @@ def apply_history_filters(
     date_from: datetime | None,
     date_to: datetime | None,
 ):
-    query = query.join(Task, Publication.task_id == Task.id).join(Project, Task.project_id == Project.id)
+    query = query.join(Task, Publication.task_id == Task.id).join(
+        Project, Task.project_id == Project.id
+    )
     query = apply_source_repo_filter(query, visible_source_repos)
 
     if project_id is not None:

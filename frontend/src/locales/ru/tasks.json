@@ -8,6 +8,9 @@
   "running_now": "сейчас",
   "download_missing": "У задачи пока нет переведённого контента для скачивания.",
   "manual_group": "Ручной запуск",
+  "incremental_badge": "Инкрементальный",
+  "incremental_badge_title": "Переведены только изменённые абзацы, остальные взяты из прошлого перевода",
+  "incremental_detail": "Переведено {{dirty}} из {{total}} абзацев",
   "load_error_title": "Не удалось загрузить задачи",
   "load_error_description": "Проверьте соединение и повторите попытку.",
   "group": {

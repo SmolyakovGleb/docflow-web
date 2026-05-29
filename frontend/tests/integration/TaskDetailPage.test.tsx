@@ -63,6 +63,9 @@ const baseTask: TaskDetail = {
   error: null,
   publications: [],
   is_team_task: false,
+  previous_task_id: null,
+  incremental_paragraphs_count: null,
+  incremental_total_paragraphs: null,
 }
 
 function getFileName(filePath: string) {
@@ -181,6 +184,19 @@ describe('TaskDetailPage', () => {
       expect(await screen.findByText(/Повторить/i)).toBeInTheDocument()
     },
   )
+
+  it('shows incremental translation detail when task is incremental', async () => {
+    const task: TaskDetail = {
+      ...baseTask,
+      previous_task_id: 'task-0',
+      incremental_paragraphs_count: 2,
+      incremental_total_paragraphs: 8,
+    }
+
+    renderTaskDetail(task, '')
+
+    expect(await screen.findByText('Переведено 2 из 8 абзацев')).toBeInTheDocument()
+  })
 
   it('polls queued task after retry until it becomes running and opens SSE', async () => {
     vi.stubGlobal('EventSource', FakeEventSource)

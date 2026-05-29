@@ -57,7 +57,8 @@ async def list_dictionaries(
     response_model=DictionaryResponse,
     summary="Получить словарь",
     description=(
-        "Возвращает мёрж базовых записей (из `pipeline/data/` submodule) и пользовательских правок из БД. "
+        "Возвращает мёрж базовых записей (из `pipeline/data/` submodule) "
+        "и пользовательских правок из БД. "
         "Поле `source`: `base` — из submodule, `user` — правка в БД.\n\n"
         "**Поддерживаемые типы (`dict_type`):**\n"
         "| Значение | Файл |\n"

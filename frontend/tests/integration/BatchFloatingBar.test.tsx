@@ -10,6 +10,7 @@ describe('BatchFloatingBar', () => {
       <BatchFloatingBar
         selectedCount={0}
         selectedDoneCount={0}
+        hasGithubLinked={true}
         onDownload={() => {}}
         onPublish={() => {}}
         onClose={() => {}}
@@ -25,6 +26,7 @@ describe('BatchFloatingBar', () => {
       <BatchFloatingBar
         selectedCount={3}
         selectedDoneCount={1}
+        hasGithubLinked={true}
         onDownload={() => {}}
         onPublish={() => {}}
         onClose={() => {}}
@@ -43,6 +45,7 @@ describe('BatchFloatingBar', () => {
       <BatchFloatingBar
         selectedCount={5}
         selectedDoneCount={2}
+        hasGithubLinked={true}
         onDownload={() => {}}
         onPublish={() => {}}
         onClose={() => {}}
@@ -59,6 +62,7 @@ describe('BatchFloatingBar', () => {
       <BatchFloatingBar
         selectedCount={3}
         selectedDoneCount={0}
+        hasGithubLinked={true}
         onDownload={() => {}}
         onPublish={() => {}}
         onClose={() => {}}
@@ -74,6 +78,7 @@ describe('BatchFloatingBar', () => {
       <BatchFloatingBar
         selectedCount={3}
         selectedDoneCount={2}
+        hasGithubLinked={true}
         onDownload={() => {}}
         onPublish={() => {}}
         onClose={() => {}}
@@ -92,6 +97,7 @@ describe('BatchFloatingBar', () => {
       <BatchFloatingBar
         selectedCount={2}
         selectedDoneCount={1}
+        hasGithubLinked={true}
         onDownload={onDownload}
         onPublish={() => {}}
         onClose={() => {}}
@@ -110,6 +116,7 @@ describe('BatchFloatingBar', () => {
       <BatchFloatingBar
         selectedCount={2}
         selectedDoneCount={2}
+        hasGithubLinked={true}
         onDownload={() => {}}
         onPublish={onPublish}
         onClose={() => {}}

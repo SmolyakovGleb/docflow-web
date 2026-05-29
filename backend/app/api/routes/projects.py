@@ -21,13 +21,13 @@ from app.schemas.project import (
     ProjectUpdate,
     ProjectWebhookSecretResponse,
 )
+from app.services import pipeline_runner
 from app.services.auth import (
     decrypt_github_access_token,
     encrypt_webhook_secret,
     get_current_user,
 )
 from app.services.github import GitHubClient
-from app.services import pipeline_runner
 from app.services.projects import (
     ensure_github_linked,
     get_project_or_404,
@@ -61,10 +61,15 @@ def _validate_tree_path(path: str) -> str:
     "",
     response_model=list[ProjectRead],
     summary="Список проектов",
-    description="Возвращает проекты текущего пользователя + проекты его команды (если состоит). `webhook_secret` в ответе отсутствует.",
+    description=(
+        "Возвращает проекты текущего пользователя + проекты его команды (если состоит). "
+        "`webhook_secret` в ответе отсутствует."
+    ),
 )
 async def get_projects(session: DbSession, current_user: CurrentUser) -> list[Project]:
-    membership = await session.scalar(select(TeamMember).where(TeamMember.user_id == current_user.id))
+    membership = await session.scalar(
+        select(TeamMember).where(TeamMember.user_id == current_user.id)
+    )
     if membership is not None:
         cond = or_(Project.user_id == current_user.id, Project.team_id == membership.team_id)
     else:
@@ -81,7 +86,8 @@ async def get_projects(session: DbSession, current_user: CurrentUser) -> list[Pr
     summary="Создать проект",
     description=(
         "Создаёт пару source/target репозиториев и генерирует `webhook_secret`. "
-        "`webhook_secret` возвращается **только здесь** — сохраните его для настройки GitHub Webhook. "
+        "`webhook_secret` возвращается **только здесь** — "
+        "сохраните его для настройки GitHub Webhook. "
         "`source_repo` и `target_repo` должны быть в формате `owner/repo`. "
         "Требует привязанный GitHub-аккаунт."
     ),
@@ -149,7 +155,11 @@ async def get_project_files(
     project = await get_project_visible_or_404(session, project_id, current_user)
     normalized_path = _validate_tree_path(path)
     # Use project owner's GitHub token — team members may not have GitHub linked
-    project_owner = current_user if project.user_id == current_user.id else await session.get(User, project.user_id)
+    project_owner = (
+        current_user
+        if project.user_id == current_user.id
+        else await session.get(User, project.user_id)
+    )
     ensure_github_linked(project_owner)
     github_client = GitHubClient(decrypt_github_access_token(project_owner.github_access_token))
     repo = project.target_repo if use_target else project.source_repo
@@ -175,7 +185,10 @@ async def get_project(project_id: UUID, session: DbSession, current_user: Curren
     "/{project_id}",
     response_model=ProjectRead,
     summary="Обновить проект",
-    description="Частичное обновление: передавайте только изменяемые поля. `source_repo` и `target_repo` изменить нельзя.",
+    description=(
+        "Частичное обновление: передавайте только изменяемые поля. "
+        "`source_repo` и `target_repo` изменить нельзя."
+    ),
     responses={
         200: {"description": "Проект обновлён"},
         404: {"description": "Проект не найден или не принадлежит текущему пользователю"},

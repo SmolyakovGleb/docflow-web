@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from uuid import UUID
@@ -122,11 +121,18 @@ async def update_user(
     task_count = await session.scalar(
         select(func.count(Task.id)).where(Task.user_id == user.id)
     ) or 0
-    logger.info("admin_user_updated", extra={"target_user_id": str(user_id), "is_admin": payload.is_admin})
+    logger.info(
+        "admin_user_updated",
+        extra={"target_user_id": str(user_id), "is_admin": payload.is_admin},
+    )
     return _to_admin_user_read(user, task_count)
 
 
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Удалить пользователя")
+@router.delete(
+    "/users/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Удалить пользователя",
+)
 async def delete_user(
     user_id: UUID,
     session: DbSession,
@@ -152,7 +158,9 @@ async def delete_user(
     # 4. Projects (tasks already removed; tasks.project_id has SET NULL but is moot now)
     await session.execute(delete(Project).where(Project.user_id == user_id))
     # 5. Notification channels
-    await session.execute(delete(NotificationChannel).where(NotificationChannel.created_by == user_id))
+    await session.execute(
+        delete(NotificationChannel).where(NotificationChannel.created_by == user_id)
+    )
     # 6. Dictionary entries: null out updated_by refs, then delete owned entries
     await session.execute(
         update(DictionaryEntry)

@@ -13,7 +13,6 @@ from app.models.team import Team, TeamInvite, TeamMember
 from app.models.user import User
 from app.services.auth import encrypt_webhook_secret, hash_password
 
-
 # ── DB helpers ────────────────────────────────────────────────────────────────
 
 async def create_user(db_session, email: str, *, password: str = "testpassword") -> User:
@@ -189,7 +188,9 @@ async def test_delete_team_as_owner(auth_client, db_session, test_user):
     assert await db_session.get(Team, team.id) is None
 
 
-async def test_delete_team_nullifies_project_team_id(auth_client, db_session, test_user, test_project):
+async def test_delete_team_nullifies_project_team_id(
+    auth_client, db_session, test_user, test_project
+):
     team = await create_team(db_session, test_user)
     test_project.team_id = team.id
     await db_session.commit()

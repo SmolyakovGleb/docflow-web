@@ -56,6 +56,12 @@ class Task(Base):
     commit_group_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("commit_groups.id", ondelete="SET NULL"), nullable=True
     )
+    previous_task_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True
+    )
+    before_sha: Mapped[str | None]
+    incremental_paragraphs_count: Mapped[int | None]
+    incremental_total_paragraphs: Mapped[int | None]
 
     user: Mapped[User] = relationship(back_populates="tasks")
     project: Mapped[Project | None] = relationship(back_populates="tasks")
@@ -72,7 +78,8 @@ class Task(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'done', 'failed', 'published', 'conflict', 'cancelled')",
+            "status IN ('queued', 'running', 'done', 'failed', "
+            "'published', 'conflict', 'cancelled')",
             name="tasks_status_check",
         ),
         Index("idx_tasks_user_id", "user_id"),

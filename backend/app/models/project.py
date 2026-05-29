@@ -30,10 +30,15 @@ class Project(Base):
     target_repo: Mapped[str]
     target_branch: Mapped[str] = mapped_column(default="main", server_default="main")
     webhook_secret: Mapped[str]
-    exclude_patterns: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, server_default="{}")
+    exclude_patterns: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=list, server_default="{}"
+    )
     version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     webhook_file_limit: Mapped[int] = mapped_column(default=50, server_default=text("50"))
     pipeline_paused: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
+    incremental_threshold: Mapped[int] = mapped_column(
+        Integer, default=40, server_default=text("40")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="projects")

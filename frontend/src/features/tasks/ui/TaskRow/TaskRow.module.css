@@ -123,8 +123,24 @@
 
 .statusCell {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 3px;
   min-width: 96px;
+}
+
+.incrementalBadge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--accent, var(--text-dim));
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
 }
 
 .time {

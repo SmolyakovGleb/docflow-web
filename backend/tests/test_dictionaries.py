@@ -10,7 +10,9 @@ def write_json(path, payload):
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
 
-async def test_get_dictionary_returns_merged_entries(auth_client, db_session, test_user, monkeypatch, tmp_path):
+async def test_get_dictionary_returns_merged_entries(
+    auth_client, db_session, test_user, monkeypatch, tmp_path
+):
     data_dir = tmp_path / "data"
     pre_dir = data_dir / "pre_translator"
     pre_dir.mkdir(parents=True)
@@ -61,7 +63,9 @@ async def test_get_dictionary_returns_merged_entries(auth_client, db_session, te
     }
 
 
-async def test_get_prompt_returns_single_main_entry(auth_client, db_session, test_user, monkeypatch, tmp_path):
+async def test_get_prompt_returns_single_main_entry(
+    auth_client, db_session, test_user, monkeypatch, tmp_path
+):
     data_dir = tmp_path / "data"
     pre_dir = data_dir / "pre_translator"
     pre_dir.mkdir(parents=True)
@@ -137,7 +141,9 @@ async def test_get_prompt_returns_base_when_no_override(auth_client, monkeypatch
     }
 
 
-async def test_get_prompt_returns_base_when_deleted(auth_client, db_session, test_user, monkeypatch, tmp_path):
+async def test_get_prompt_returns_base_when_deleted(
+    auth_client, db_session, test_user, monkeypatch, tmp_path
+):
     data_dir = tmp_path / "data"
     pre_dir = data_dir / "pre_translator"
     pre_dir.mkdir(parents=True)
@@ -170,7 +176,9 @@ async def test_get_prompt_returns_base_when_deleted(auth_client, db_session, tes
     assert response.json()["entries"][0]["value"] == "Base prompt"
 
 
-async def test_get_dictionary_hides_deleted_entries(auth_client, db_session, test_user, monkeypatch, tmp_path):
+async def test_get_dictionary_hides_deleted_entries(
+    auth_client, db_session, test_user, monkeypatch, tmp_path
+):
     data_dir = tmp_path / "data"
     pre_dir = data_dir / "pre_translator"
     pre_dir.mkdir(parents=True)

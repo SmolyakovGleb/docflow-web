@@ -13,13 +13,18 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from cryptography.fernet import InvalidToken
 from starlette.concurrency import run_in_threadpool
 
 from app.core.config import get_settings
 from app.db.session import get_session_factory
+from app.models.project import Project
 from app.models.task import Task
-from app.services import dictionary_merger
-from app.services import task_list_events
+from app.models.user import User
+from app.services import dictionary_merger, incremental_translate, paragraph_diff, task_list_events
+from app.services.auth import decrypt_github_access_token
+from app.services.github import GitHubClient
+from app.services.incremental_translate import TranslationContext
 
 PIPELINE_ROOT = Path(__file__).resolve().parents[3] / "pipeline"
 TASK_EVENT_QUEUES: dict[UUID, asyncio.Queue[dict[str, Any] | None]] = {}
@@ -136,6 +141,7 @@ async def _set_stage(
 def _prepare_workspace(
     task: Task,
     merged_data: dictionary_merger.MergedPipelineData,
+    content: str,
 ) -> tuple[Path, Path, Path, Path]:
     workspace = Path(tempfile.mkdtemp(prefix=f"docflow_{task.id}_"))
     input_dir = workspace / "input"
@@ -150,7 +156,7 @@ def _prepare_workspace(
     )
 
     input_file = input_dir / Path(task.file_path).name
-    input_file.write_text(task.original_content, encoding="utf-8")
+    input_file.write_text(content, encoding="utf-8")
     return workspace, input_file, output_dir, pre_translator_dir
 
 
@@ -308,6 +314,77 @@ async def _queue_worker() -> None:
             _CURRENT_TASK_ID = None
 
 
+async def _build_github_client(session, project: Project) -> GitHubClient | None:
+    owner = await session.get(User, project.user_id)
+    if owner is None or not owner.github_access_token:
+        return None
+    try:
+        token = decrypt_github_access_token(owner.github_access_token)
+    except InvalidToken:
+        return None
+    return GitHubClient(token)
+
+
+async def _build_translation_context(
+    session,
+    task: Task,
+) -> TranslationContext | None:
+    """Best-effort incremental translation context.
+
+    Returns None to mean "translate the full original content". Any failure
+    (no project, no GitHub link, GitHub error) degrades gracefully to full
+    translation rather than failing the task.
+    """
+    if task.project_id is None or task.previous_task_id is None or task.before_sha is None:
+        return None
+    project = await session.get(Project, task.project_id)
+    if project is None:
+        return None
+    github_client = await _build_github_client(session, project)
+    if github_client is None:
+        return None
+    try:
+        return await incremental_translate.build_translation_context(
+            task, project, task.original_content, github_client
+        )
+    except Exception:
+        app_logger.exception(
+            "incremental_context_failed", extra={"task_id": str(task.id)}
+        )
+        return None
+
+
+def _assemble_translation(
+    ctx: TranslationContext | None,
+    output_text: str,
+    logger: logging.Logger,
+) -> tuple[str, int | None, int | None]:
+    """Build the final translated content from the pipeline output.
+
+    Returns (translated_content, incremental_paragraphs_count, incremental_total_paragraphs).
+    For full translation the two counts are None.
+    """
+    if ctx is None or not ctx.is_incremental:
+        return output_text, None, None
+
+    dirty = ctx.dirty_indices
+    out_paras = paragraph_diff.split_paragraphs(output_text)
+    if len(out_paras) != len(dirty):
+        logger.warning(
+            "Инкрементальный перевод: ожидалось %d абзацев, получено %d — "
+            "сборка по доступным",
+            len(dirty),
+            len(out_paras),
+        )
+    new_translations = {
+        dirty[k]: out_paras[k] for k in range(min(len(dirty), len(out_paras)))
+    }
+    merged = paragraph_diff.merge_translations(
+        ctx.new_paras, dirty, new_translations, ctx.aligned_old_ru
+    )
+    return merged, len(dirty), len(ctx.new_paras)
+
+
 async def run_task(task_id: UUID) -> None:
     session_factory = get_session_factory()
 
@@ -342,14 +419,27 @@ async def run_task(task_id: UUID) -> None:
 
             await _emit_event(queue, "stage_update", {"stage": "prepare", "index": 1, "total": 3})
             merged_data = await dictionary_merger.merge_pipeline_data(session)
+            translation_ctx = await _build_translation_context(session, task)
+            content_to_translate = (
+                translation_ctx.content if translation_ctx is not None else task.original_content
+            )
             workspace, input_file, output_dir, pre_translator_dir = _prepare_workspace(
                 task,
                 merged_data,
+                content_to_translate,
             )
 
             loop = asyncio.get_running_loop()
             log_handler = QueueLogHandler(loop, queue, stage="prepare")
             logger = _build_task_logger(task.id, log_handler)
+            if translation_ctx is not None and translation_ctx.is_incremental:
+                logger.info(
+                    "Инкрементальный режим: %d из %d абзацев",
+                    len(translation_ctx.dirty_indices),
+                    len(translation_ctx.new_paras),
+                )
+            else:
+                logger.info("Полный перевод")
 
             await _set_stage(
                 session,
@@ -377,7 +467,12 @@ async def run_task(task_id: UUID) -> None:
                 index=3,
                 total=3,
             )
-            task.translated_content = output_file.read_text(encoding="utf-8")
+            output_text = output_file.read_text(encoding="utf-8")
+            (
+                task.translated_content,
+                task.incremental_paragraphs_count,
+                task.incremental_total_paragraphs,
+            ) = _assemble_translation(translation_ctx, output_text, logger)
             task.log = log_handler.get_log()
             task.error = None
             previous_status = task.status

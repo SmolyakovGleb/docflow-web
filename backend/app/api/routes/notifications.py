@@ -29,7 +29,10 @@ def _raise_not_implemented() -> None:
     "/channels",
     response_model=list[NotificationChannelRead],
     summary="Список каналов уведомлений",
-    description="Возвращает все каналы уведомлений. `webhook_url` и `bitrix_token` в ответе не включаются.",
+    description=(
+        "Возвращает все каналы уведомлений. "
+        "`webhook_url` и `bitrix_token` в ответе не включаются."
+    ),
 )
 async def get_notification_channels(current_user: CurrentUser) -> list[NotificationChannelRead]:
     _ = current_user
@@ -46,8 +49,10 @@ async def get_notification_channels(current_user: CurrentUser) -> list[Notificat
         "\"webhook_url\": \"https://...\", \"events\": [\"failure\"]}\n```\n\n"
         "**REST API** (`method: rest_api`) — гибче, можно выбрать адресат:\n"
         "```json\n{\"name\": \"...\", \"method\": \"rest_api\", \"bitrix_token\": \"...\", "
-        "\"destination_type\": \"user\", \"destination_id\": \"42\", \"events\": [\"done\"]}\n```\n\n"
-        "`destination_type`: `user` (личное сообщение), `chat` (групповой чат), `channel` (открытый канал).\n\n"
+        "\"destination_type\": \"user\", \"destination_id\": \"42\", "
+        "\"events\": [\"done\"]}\n```\n\n"
+        "`destination_type`: `user` (личное сообщение), `chat` (групповой чат), "
+        "`channel` (открытый канал).\n\n"
         "**Поддерживаемые события:** `failure`, `conflict`, `done`, `published`.\n\n"
         "**MVP: не реализовано** — возвращает `501`."
     ),
@@ -67,7 +72,10 @@ async def create_notification_channel(
 @router.patch(
     "/channels/{channel_id}",
     summary="Обновить канал уведомлений",
-    description="Частичное обновление: `name`, `events`, `is_active`. **MVP: не реализовано** — возвращает `501`.",
+    description=(
+        "Частичное обновление: `name`, `events`, `is_active`. "
+        "**MVP: не реализовано** — возвращает `501`."
+    ),
     responses={
         200: {"description": "Канал обновлён"},
         404: {"description": "Канал не найден"},
@@ -104,7 +112,10 @@ async def delete_notification_channel(
 @router.post(
     "/channels/{channel_id}/test",
     summary="Отправить тестовое уведомление",
-    description="Отправляет тестовое сообщение через канал для проверки настроек. **MVP: не реализовано** — возвращает `501`.",
+    description=(
+        "Отправляет тестовое сообщение через канал для проверки настроек. "
+        "**MVP: не реализовано** — возвращает `501`."
+    ),
     responses={
         200: {"description": "Сообщение отправлено"},
         404: {"description": "Канал не найден"},

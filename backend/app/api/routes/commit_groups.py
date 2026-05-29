@@ -61,7 +61,9 @@ async def confirm_group_route(
 ) -> dict:
     group = await _get_group_or_404(session, group_id, current_user)
     if group.status != "pending_confirmation":
-        raise HTTPException(status_code=400, detail=f"Cannot confirm group with status '{group.status}'")
+        raise HTTPException(
+            status_code=400, detail=f"Cannot confirm group with status '{group.status}'"
+        )
     if not current_user.github_linked or not current_user.github_access_token:
         raise HTTPException(status_code=400, detail="GitHub account is not linked")
 
@@ -80,7 +82,9 @@ async def cancel_group_route(
 ) -> None:
     group = await _get_group_or_404(session, group_id, current_user)
     if group.status != "pending_confirmation":
-        raise HTTPException(status_code=400, detail=f"Cannot cancel group with status '{group.status}'")
+        raise HTTPException(
+            status_code=400, detail=f"Cannot cancel group with status '{group.status}'"
+        )
     group.status = "cancelled"
     await session.commit()
     task_list_events.publish_commit_group_event(group, event_type="commit_group_updated")

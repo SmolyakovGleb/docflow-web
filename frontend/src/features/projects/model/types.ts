@@ -13,6 +13,7 @@ export interface Project {
   is_team_project: boolean
   pipeline_paused: boolean
   webhook_file_limit: number
+  incremental_threshold: number
 }
 
 export interface ProjectCreatePayload {
@@ -36,6 +37,7 @@ export interface ProjectUpdatePayload {
   exclude_patterns?: string[]
   pipeline_paused?: boolean
   webhook_file_limit?: number
+  incremental_threshold?: number
 }
 
 export interface ProjectWebhookSecretResponse {

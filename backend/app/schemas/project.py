@@ -25,6 +25,7 @@ class ProjectCreate(BaseModel):
     target_branch: str = "main"
     exclude_patterns: list[str] = Field(default_factory=list)
     team_id: UUID | None = None
+    incremental_threshold: int = Field(40, ge=1, le=100)
 
     @field_validator("source_repo", "target_repo")
     @classmethod
@@ -49,6 +50,7 @@ class ProjectRead(BaseModel):
     is_team_project: bool
     pipeline_paused: bool
     webhook_file_limit: int
+    incremental_threshold: int
 
 
 class ProjectCreateResponse(ProjectRead):
@@ -76,3 +78,4 @@ class ProjectUpdate(BaseModel):
     exclude_patterns: list[str] | None = None
     pipeline_paused: bool | None = None
     webhook_file_limit: int | None = Field(None, ge=1, le=1000)
+    incremental_threshold: int | None = Field(None, ge=1, le=100)

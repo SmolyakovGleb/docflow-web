@@ -60,7 +60,11 @@ async def get_project_visible_or_404(
 
     logger.info(
         "get_project_visible_or_404",
-        extra={"project_id": str(project_id), "user_id": str(current_user.id), "team_id": str(team_id)},
+        extra={
+            "project_id": str(project_id),
+            "user_id": str(current_user.id),
+            "team_id": str(team_id),
+        },
     )
 
     if team_id is not None:
@@ -74,7 +78,11 @@ async def get_project_visible_or_404(
 
     logger.warning(
         "get_project_visible_or_404 not found",
-        extra={"project_id": str(project_id), "user_id": str(current_user.id), "team_id": str(team_id)},
+        extra={
+            "project_id": str(project_id),
+            "user_id": str(current_user.id),
+            "team_id": str(team_id),
+        },
     )
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,

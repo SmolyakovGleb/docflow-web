@@ -415,7 +415,9 @@ async def test_get_project_files(auth_client, db_session, test_project, test_use
     )
     mocker.patch("app.api.routes.projects.GitHubClient", return_value=github_client)
 
-    response = await auth_client.get(f"/projects/{test_project.id}/files", params={"path": "docs/api"})
+    response = await auth_client.get(
+        f"/projects/{test_project.id}/files", params={"path": "docs/api"}
+    )
 
     assert response.status_code == 200
     assert response.json() == {"items": ["docs/api/index.md", "docs/api/deals.md"]}

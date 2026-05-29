@@ -11,7 +11,9 @@ from app.models.task import Task
 from app.models.user import User
 
 
-async def create_user(db_session, *, email: str, display_name: str, github_login: str | None = None) -> User:
+async def create_user(
+    db_session, *, email: str, display_name: str, github_login: str | None = None
+) -> User:
     user = User(
         email=email,
         password_hash="hash",
@@ -135,7 +137,10 @@ async def test_history_shared_by_source_repo(auth_client, db_session, test_user)
     payload = response.json()
     assert payload["total"] == 2
     assert {item["file_path"] for item in payload["items"]} == {"docs/shared.md", "docs/own.md"}
-    assert {publisher["label"] for publisher in payload["publishers"]} == {"Teammate", test_user.display_name}
+    assert {publisher["label"] for publisher in payload["publishers"]} == {
+        "Teammate",
+        test_user.display_name,
+    }
 
     teammate_item = next(item for item in payload["items"] if item["file_path"] == "docs/shared.md")
     assert teammate_item["id"] == str(publication.id)

@@ -8,4 +8,8 @@ export const handlers = [
   http.get(`${API_BASE}/auth/me`, () =>
     HttpResponse.json({ detail: 'Not authenticated' }, { status: 401 }),
   ),
+
+  http.get(`${API_BASE}/teams/me`, () =>
+    HttpResponse.json({ detail: 'Team not found' }, { status: 404 }),
+  ),
 ]

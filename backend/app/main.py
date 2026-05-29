@@ -93,6 +93,7 @@ class _LoggingMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     from sqlalchemy import select
+
     from app.models.project import Project
     from app.services import pipeline_runner
 
@@ -186,7 +187,8 @@ def create_app() -> FastAPI:
                 "name": "webhook",
                 "description": (
                     "Приём `push`-событий от GitHub. "
-                    "Не требует авторизации — аутентификация через HMAC-подпись (`X-Hub-Signature-256`)."
+                    "Не требует авторизации — аутентификация через "
+                    "HMAC-подпись (`X-Hub-Signature-256`)."
                 ),
             },
             {

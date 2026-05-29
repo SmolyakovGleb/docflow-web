@@ -45,7 +45,9 @@ def main() -> None:
 
     create_admin = subparsers.add_parser("create-admin", help="Create or promote an admin user")
     create_admin.add_argument("--email", required=True, help="Admin email")
-    create_admin.add_argument("--password", required=True, help="Admin password (min 8 chars, 1 digit)")
+    create_admin.add_argument(
+        "--password", required=True, help="Admin password (min 8 chars, 1 digit)"
+    )
 
     args = parser.parse_args()
 

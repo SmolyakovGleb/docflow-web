@@ -142,7 +142,9 @@ async def test_publish_conflict_detected(auth_client, db_session, test_project, 
     assert task.conflict_base == "# Source"
     assert task.conflict_ours == "# Target"
     assert task.conflict_theirs == "# Theirs"
-    assert await db_session.scalar(select(Publication).where(Publication.task_id == task.id)) is None
+    assert (
+        await db_session.scalar(select(Publication).where(Publication.task_id == task.id)) is None
+    )
     github_client.create_or_update_file.assert_not_awaited()
     notify.assert_not_awaited()
 
@@ -235,7 +237,9 @@ async def test_publish_conflict_task_uses_updated_target_sha(
 
 async def test_publish_new_file(auth_client, db_session, test_project, test_user, mocker):
     await link_github(test_user, db_session)
-    task = await create_task(db_session, test_project, target_file_sha=None, file_path="docs/new.md")
+    task = await create_task(
+        db_session, test_project, target_file_sha=None, file_path="docs/new.md"
+    )
 
     github_client = mocker.Mock()
     github_client.get_file_sha = mocker.AsyncMock(return_value=None)
@@ -375,7 +379,9 @@ async def test_publish_with_custom_target_path(
     auth_client, db_session, test_project, test_user, mocker
 ):
     await link_github(test_user, db_session)
-    task = await create_task(db_session, test_project, file_path="docs/index.md", target_file_sha="sha-a")
+    task = await create_task(
+        db_session, test_project, file_path="docs/index.md", target_file_sha="sha-a"
+    )
 
     github_client = mocker.Mock()
     github_client.get_file_sha = mocker.AsyncMock(return_value=None)

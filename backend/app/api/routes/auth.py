@@ -185,7 +185,10 @@ def build_github_callback_redirect(
     response_model=UserRead,
     status_code=status.HTTP_201_CREATED,
     summary="Регистрация",
-    description="Создаёт нового пользователя и устанавливает `session` cookie (httponly). Лимит: 10 запросов/мин с одного IP.",
+    description=(
+        "Создаёт нового пользователя и устанавливает `session` cookie (httponly). "
+        "Лимит: 10 запросов/мин с одного IP."
+    ),
     responses={
         201: {"description": "Пользователь создан, cookie установлен"},
         400: {"description": "Email уже занят"},
@@ -256,7 +259,10 @@ async def register(
     "/login",
     response_model=UserRead,
     summary="Вход",
-    description="Аутентификация по email/паролю. Устанавливает `session` cookie (httponly, 30 дней). Лимит: 10 запросов/мин с одного IP.",
+    description=(
+        "Аутентификация по email/паролю. Устанавливает `session` cookie (httponly, 30 дней). "
+        "Лимит: 10 запросов/мин с одного IP."
+    ),
     responses={
         200: {"description": "Успешный вход, cookie установлен"},
         401: {"description": "Неверный email или пароль"},
@@ -293,7 +299,10 @@ async def login(
     "/me",
     response_model=UserRead,
     summary="Текущий пользователь",
-    description="Возвращает данные авторизованного пользователя. `github_linked=true` означает привязанный GitHub-аккаунт.",
+    description=(
+        "Возвращает данные авторизованного пользователя. "
+        "`github_linked=true` означает привязанный GitHub-аккаунт."
+    ),
     responses={
         200: {"description": "Данные пользователя"},
         401: {"description": "Нет валидного session cookie"},
@@ -306,7 +315,10 @@ async def me(current_user: CurrentUser) -> UserRead:
 @router.get(
     "/github/connect",
     summary="Начать привязку GitHub",
-    description="Редирект на GitHub OAuth (scope: `repo`). CSRF-токен сохраняется в httponly cookie на 5 минут.",
+    description=(
+        "Редирект на GitHub OAuth (scope: `repo`). "
+        "CSRF-токен сохраняется в httponly cookie на 5 минут."
+    ),
     responses={
         302: {"description": "Редирект на github.com/login/oauth/authorize"},
         401: {"description": "Нет активной сессии"},
@@ -487,7 +499,10 @@ async def logout(
 @router.delete(
     "/github/connect",
     summary="Отвязать GitHub",
-    description="Обнуляет GitHub-поля пользователя. Проекты сохраняются, но создавать задачи и публиковать будет нельзя.",
+    description=(
+        "Обнуляет GitHub-поля пользователя. Проекты сохраняются, "
+        "но создавать задачи и публиковать будет нельзя."
+    ),
     responses={
         200: {"description": "GitHub отвязан"},
         401: {"description": "Нет активной сессии"},
