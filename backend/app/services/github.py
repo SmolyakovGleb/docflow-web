@@ -8,6 +8,8 @@ from urllib.parse import quote
 
 import httpx
 
+from app.services.file_formats import is_translatable_path
+
 GITHUB_API_BASE_URL = "https://api.github.com"
 
 
@@ -172,7 +174,7 @@ class GitHubClient:
                 continue
             if prefix and not item_path.startswith(prefix):
                 continue
-            if not item_path.lower().endswith(".md"):
+            if not is_translatable_path(item_path):
                 continue
             files.append(item_path)
 

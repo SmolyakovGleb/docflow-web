@@ -32,7 +32,7 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('РАБОТА')).toBeInTheDocument()
     expect(screen.getByText('КОНФИГУРАЦИЯ')).toBeInTheDocument()
-    expect(screen.getByText('Anna Kuznetsova')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Anna Kuznetsova' })).toBeInTheDocument()
     expect(screen.getByText('GitHub подключён')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Задачи' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByText('task detail')).toBeInTheDocument()

@@ -236,6 +236,81 @@ describe('TaskListPage', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('renders a pending commit group even when the task list is empty', async () => {
+    server.use(
+      http.get('/api/projects', () =>
+        HttpResponse.json([
+          {
+            id: 'project-1',
+            name: 'CRM Docs',
+            source_repo: 'team/docs-ru',
+            source_branch: 'main',
+            target_repo: 'team/docs-en',
+            target_branch: 'main',
+            exclude_patterns: [],
+            webhook_url: 'http://localhost:8080/webhook/project-1',
+            version: 1,
+            created_at: '2026-05-10T09:00:00Z',
+          },
+        ]),
+      ),
+      http.get('/api/health', () =>
+        HttpResponse.json({ status: 'ok', pipeline_version: 'abc1234', last_webhook_at: null }),
+      ),
+      http.get('/api/analytics', () =>
+        HttpResponse.json({ done: 0, failed: 0, published: 0, running: 0 }),
+      ),
+      http.get('/api/tasks', () =>
+        HttpResponse.json({ items: [], total: 0, limit: 50, offset: 0 }),
+      ),
+      http.get('/api/commit-groups', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'group-1',
+              project_id: 'project-1',
+              github_sha: 'abcdef1234567',
+              github_ref: 'refs/heads/main',
+              commit_message: 'Bulk docs import',
+              commit_author_name: 'Anna',
+              commit_author_login: 'anna',
+              file_paths: ['docs/a.md', 'docs/b.md'],
+              files_count: 2,
+              status: 'pending_confirmation',
+              created_at: '2026-05-12T09:50:00Z',
+              confirmed_at: null,
+            },
+          ],
+          total: 1,
+        }),
+      ),
+    )
+
+    const store = createAppStore()
+    store.dispatch(
+      setUser({
+        id: 'user-1',
+        email: 'anna@example.com',
+        display_name: 'Anna',
+        github_linked: true,
+        github_login: 'anna',
+      }),
+    )
+
+    renderWithProviders(
+      <MemoryRouter>
+        <TaskListPage />
+      </MemoryRouter>,
+      { store },
+    )
+
+    expect(await screen.findByText('Bulk docs import')).toBeInTheDocument()
+    expect(screen.getByText('ожидает подтверждения')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Отклонить' })).toBeInTheDocument()
+    // The "no tasks" empty state must NOT take over the pending group.
+    expect(screen.queryByText('Нет задач')).not.toBeInTheDocument()
+  })
+
   it('renders dashboard error state with retry action', async () => {
     server.use(
       http.get('/api/projects', () => HttpResponse.json([])),
@@ -454,7 +529,7 @@ describe('TaskListPage', () => {
     )
 
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('Markdown-файл')).toBeInTheDocument()
+    expect(within(dialog).getByText('Файл')).toBeInTheDocument()
     // No project is available so the "no project" option is pre-selected;
     // target-path input only appears when a project is selected
     expect(within(dialog).queryByText('Проект')).not.toBeInTheDocument()

@@ -13,6 +13,7 @@ class CommitGroupRead(BaseModel):
     project_id: uuid.UUID
     github_sha: str
     github_ref: str
+    before_sha: str | None
     commit_message: str | None
     commit_author_name: str | None
     commit_author_login: str | None

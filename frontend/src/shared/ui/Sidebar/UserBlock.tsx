@@ -21,18 +21,18 @@ export function UserBlock() {
     <button
       className={styles.userButton}
       type="button"
+      aria-label={userLabel}
       onClick={() => void navigate('/settings/profile')}
     >
       <Avatar name={userLabel} size={26} />
       <span className={styles.userMeta}>
-        <span className={styles.userName}>{userLabel}</span>
-        {user.is_admin && <span className={styles.adminBadge}>{t('admin_badge')}</span>}
         <span className={styles.userStatus}>
           <span
             className={user.github_linked ? styles.githubDot : styles.githubDotOff}
             aria-hidden
           />
-          <span>{githubStatus}</span>
+          <span className={styles.userStatusText}>{githubStatus}</span>
+          {user.is_admin && <span className={styles.adminBadge}>{t('admin_badge')}</span>}
         </span>
       </span>
     </button>

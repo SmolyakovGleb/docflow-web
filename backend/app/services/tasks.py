@@ -21,6 +21,7 @@ from app.models.user import User
 from app.schemas.task import ManualTaskFromRepo, TaskStatus, TaskUpdate
 from app.services import bitrix_notify, task_list_events
 from app.services.auth import decrypt_github_access_token
+from app.services.file_formats import is_translatable_path, translatable_error_text
 from app.services.github import GitHubClient
 from app.services.projects import _get_user_team_id, get_project_visible_or_404
 
@@ -443,10 +444,10 @@ async def create_manual_task_from_upload(
         else None
     )
 
-    if not payload.filename.endswith(".md"):
+    if not is_translatable_path(payload.filename):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only .md files are allowed",
+            detail=translatable_error_text(),
         )
 
     candidate_paths, skipped = _apply_exclude_patterns(
@@ -515,10 +516,10 @@ def parse_upload_payload(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="File is too large",
         )
-    if not target_path.endswith(".md"):
+    if not is_translatable_path(target_path):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only .md files are allowed",
+            detail=translatable_error_text(),
         )
     _ensure_safe_relative_path(target_path, field="target_path")
 

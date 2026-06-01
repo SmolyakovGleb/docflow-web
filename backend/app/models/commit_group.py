@@ -27,6 +27,7 @@ class CommitGroup(Base):
     )
     github_sha: Mapped[str]
     github_ref: Mapped[str]
+    before_sha: Mapped[str | None]
     commit_message: Mapped[str | None]
     commit_author_name: Mapped[str | None]
     commit_author_login: Mapped[str | None]

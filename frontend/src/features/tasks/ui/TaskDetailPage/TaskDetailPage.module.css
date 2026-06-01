@@ -442,6 +442,10 @@
   overflow: auto;
 }
 
+.editablePane:focus-visible {
+  box-shadow: none;
+}
+
 .columnFooter {
   display: flex;
   align-items: center;

@@ -6,6 +6,7 @@ import json
 
 from sqlalchemy import select
 
+from app.models.commit_group import CommitGroup
 from app.models.task import Task
 from app.services.auth import encrypt_github_access_token
 
@@ -496,6 +497,71 @@ async def test_webhook_sets_previous_task_id_from_published_task(
     ).one()
     assert new_task.previous_task_id == published.id
     assert new_task.before_sha == "before-sha-abc"
+
+
+async def test_webhook_bulk_commit_group_preserves_incremental_context(
+    client, db_session, test_project, test_user, mocker
+):
+    test_project.webhook_file_limit = 1
+    test_user.github_id = 123456
+    test_user.github_login = "octocat"
+    test_user.github_access_token = encrypt_github_access_token("github-token")
+
+    published = Task(
+        user_id=test_project.user_id,
+        project_id=test_project.id,
+        file_path="docs/index.md",
+        github_ref="refs/heads/main",
+        github_sha="old-after",
+        commit_message="Published task",
+        source_file_sha="old-source",
+        target_file_sha="old-target",
+        original_content="# Old",
+        translated_content="# Старый",
+        status="published",
+    )
+    db_session.add(published)
+    await db_session.commit()
+    await db_session.refresh(published)
+
+    github_client = mocker.Mock()
+    github_client.get_file_content = mocker.AsyncMock(return_value=("# Source", "source-sha"))
+    github_client.get_file_sha = mocker.AsyncMock(return_value="target-sha")
+    mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
+    mocker.patch(
+        "app.services.commit_groups.pipeline_runner.schedule_task",
+        new=mocker.AsyncMock(),
+    )
+
+    payload = {
+        "ref": "refs/heads/main",
+        "before": "before-sha-abc",
+        "after": "after-sha",
+        "head_commit": {"message": "Bulk update"},
+        "commits": [{"added": ["docs/index.md"], "modified": ["docs/guide.md"]}],
+    }
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
+
+    response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
+
+    assert response.status_code == 202
+    group = await db_session.scalar(
+        select(CommitGroup).where(CommitGroup.project_id == test_project.id)
+    )
+    assert group is not None
+    assert group.before_sha == "before-sha-abc"
+
+    from app.services.commit_groups import confirm_commit_group
+
+    await db_session.refresh(group, ["project"])
+    tasks = await confirm_commit_group(db_session, group, test_user, github_client)
+
+    index_task = next(task for task in tasks if task.file_path == "docs/index.md")
+    assert index_task.before_sha == "before-sha-abc"
+    assert index_task.previous_task_id == published.id
+    guide_task = next(task for task in tasks if task.file_path == "docs/guide.md")
+    assert guide_task.before_sha == "before-sha-abc"
+    assert guide_task.previous_task_id is None
 
 
 async def test_webhook_ignores_non_published_tasks_for_previous_task_id(

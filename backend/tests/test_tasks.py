@@ -323,6 +323,38 @@ async def test_manual_task_upload_success(auth_client, db_session, test_project,
     schedule_task.assert_awaited_once()
 
 
+async def test_manual_task_upload_yaml_success(auth_client, db_session, test_project, mocker):
+    schedule_task = mocker.patch(
+        "app.api.routes.tasks.pipeline_runner.schedule_task",
+        new=mocker.AsyncMock(),
+    )
+
+    response = await auth_client.post(
+        "/tasks/manual",
+        data={
+            "project_id": str(test_project.id),
+            "target_path": "api-reference/tasks/b24-toc.yaml",
+        },
+        files={
+            "file": (
+                "b24-toc.yaml",
+                io.BytesIO("title: Задачи\nitems: []\n".encode("utf-8")),
+                "application/yaml",
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["created"] == 1
+
+    task = await db_session.scalar(
+        select(Task).where(Task.file_path == "api-reference/tasks/b24-toc.yaml")
+    )
+    assert task is not None
+    assert task.original_content == "title: Задачи\nitems: []\n"
+    schedule_task.assert_awaited_once()
+
+
 async def test_manual_task_upload_without_github_link_allowed(
     auth_client,
     db_session,
@@ -352,7 +384,7 @@ async def test_manual_task_upload_without_github_link_allowed(
     schedule_task.assert_awaited_once()
 
 
-async def test_upload_non_md_rejected(auth_client, test_project):
+async def test_upload_unsupported_file_rejected(auth_client, test_project):
     response = await auth_client.post(
         "/tasks/manual",
         data={
@@ -363,7 +395,7 @@ async def test_upload_non_md_rejected(auth_client, test_project):
     )
 
     assert response.status_code == 400
-    assert response.json() == {"detail": "Only .md files are allowed"}
+    assert response.json() == {"detail": "Only .md, .yaml and .yml files are allowed"}
 
 
 async def test_upload_too_large_rejected(auth_client, test_project):

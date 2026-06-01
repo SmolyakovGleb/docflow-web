@@ -34,5 +34,25 @@ describe('downloadMd', () => {
     }
     const content = new TextDecoder().decode(await markdownBlob.arrayBuffer())
     expect(content).toBe('# Hello')
+    expect(markdownBlob.type).toBe('text/markdown;charset=utf-8')
+  })
+
+  it('creates a yaml blob for yaml files', () => {
+    createObjectURL.mockImplementation(() => 'blob:yaml')
+    revokeObjectURL.mockImplementation(() => {})
+
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    })
+
+    downloadMd('api-reference/tasks/b24-toc.yaml', 'title: Tasks\n')
+
+    const yamlBlob = createObjectURL.mock.calls[0]?.[0]
+    if (!(yamlBlob instanceof Blob)) {
+      throw new Error('Expected yaml blob to be captured')
+    }
+    expect(yamlBlob.type).toBe('text/yaml;charset=utf-8')
   })
 })

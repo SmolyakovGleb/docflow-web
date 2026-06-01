@@ -92,7 +92,7 @@ class _LoggingMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    from sqlalchemy import select
+    from sqlalchemy import or_, select
 
     from app.models.project import Project
     from app.services import pipeline_runner
@@ -122,10 +122,16 @@ async def _lifespan(app: FastAPI):
 
     # Enqueue all queued tasks (skip paused projects)
     async with session_factory() as session:
+        paused_project_ids = list(pipeline_runner._PAUSED_PROJECTS)
         queued_ids = (await session.scalars(
             select(Task.id).where(
                 Task.status == "queued",
-                Task.project_id.notin_(list(pipeline_runner._PAUSED_PROJECTS)),
+                # NULL project_id (upload/orphan tasks) must still enqueue; SQL
+                # `NOT IN (...)` is never true for NULL, so handle it explicitly.
+                or_(
+                    Task.project_id.is_(None),
+                    Task.project_id.notin_(paused_project_ids),
+                ),
             ).order_by(Task.created_at)
         )).all()
         for task_id in queued_ids:
@@ -153,7 +159,8 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=_lifespan,
         description=(
-            "API сервиса DocFlow — автоматический перевод `.md` документации RU→EN "
+            "API сервиса DocFlow — автоматический перевод `.md`, `.yaml` и `.yml` "
+            "документации RU→EN "
             "через Bitrix GPT с публикацией в GitHub."
         ),
         openapi_tags=[

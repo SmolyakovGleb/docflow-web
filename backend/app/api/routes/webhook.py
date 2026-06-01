@@ -19,6 +19,7 @@ from app.models.task import Task
 from app.models.user import User
 from app.services import pipeline_runner, task_list_events
 from app.services.auth import decrypt_github_access_token, decrypt_webhook_secret
+from app.services.file_formats import is_translatable_path
 from app.services.github import GitHubAPIError, GitHubClient
 from app.services.tasks import _apply_exclude_patterns
 from app.services.webhook import is_valid_github_signature
@@ -49,13 +50,13 @@ async def _fetch_file_metadata_safe(github_client: GitHubClient, project: Projec
         return await _fetch_file_metadata(github_client, project, file_path)
 
 
-def _collect_markdown_files(payload: dict[str, Any]) -> list[str]:
+def _collect_translatable_files(payload: dict[str, Any]) -> list[str]:
     files: list[str] = []
 
     for commit in payload.get("commits", []):
         for key in ("added", "modified"):
             for file_path in commit.get(key, []):
-                if isinstance(file_path, str) and file_path.lower().endswith(".md"):
+                if isinstance(file_path, str) and is_translatable_path(file_path):
                     files.append(file_path)
 
     return list(dict.fromkeys(files))
@@ -125,7 +126,8 @@ async def _get_previous_task_ids(
         "**Алгоритм:**\n"
         "1. Верифицировать HMAC-подпись\n"
         "2. `ping` → `200 {ok: true}`\n"
-        "3. Фильтр: только `.md` из `commits[*].added/modified` в `source_branch`\n"
+        "3. Фильтр: только `.md`, `.yaml`, `.yml` из "
+        "`commits[*].added/modified` в `source_branch`\n"
         "4. Применить `exclude_patterns`, дедупликацию (`queued`/`running`)\n"
         "5. Скачать файлы через GitHub API (атомарно — при ошибке задачи не создаются)\n"
         "6. Создать задачи и запустить пайплайн в фоне\n\n"
@@ -134,7 +136,11 @@ async def _get_previous_task_ids(
     ),
     responses={
         202: {"description": "Задачи созданы и поставлены в очередь"},
-        400: {"description": "Неверный branch / нет .md файлов / нет GitHub-привязки у владельца"},
+        400: {
+            "description": (
+                "Неверный branch / нет переводимых файлов / нет GitHub-привязки у владельца"
+            )
+        },
         403: {"description": "Неверная HMAC-подпись"},
         404: {"description": "Проект не найден"},
         502: {"description": "Ошибка GitHub API при скачивании файла"},
@@ -186,25 +192,25 @@ async def github_webhook(
             detail="Push is not for the configured source branch",
         )
 
-    markdown_files = _collect_markdown_files(payload)
-    if not markdown_files:
+    translatable_files = _collect_translatable_files(payload)
+    if not translatable_files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No translatable files in this push",
         )
 
-    markdown_files, skipped_files = _apply_exclude_patterns(
-        markdown_files,
+    translatable_files, skipped_files = _apply_exclude_patterns(
+        translatable_files,
         project.exclude_patterns,
     )
 
     active_tasks_by_path: dict[str, Task] = {}
-    if markdown_files:
+    if translatable_files:
         active_tasks = (
             await session.scalars(
                 select(Task).where(
                     Task.project_id == project.id,
-                    Task.file_path.in_(markdown_files),
+                    Task.file_path.in_(translatable_files),
                     Task.status.in_(ACTIVE_TASK_STATUSES),
                 )
             )
@@ -212,7 +218,7 @@ async def github_webhook(
         active_tasks_by_path = {task.file_path: task for task in active_tasks}
 
     files_to_process: list[str] = []
-    for file_path in markdown_files:
+    for file_path in translatable_files:
         existing_task = active_tasks_by_path.get(file_path)
         if existing_task is None:
             files_to_process.append(file_path)
@@ -280,6 +286,7 @@ async def github_webhook(
             team_id=project.team_id,
             github_sha=payload.get("after"),
             github_ref=str(payload["ref"]),
+            before_sha=before_sha,
             commit_message=commit_message,
             commit_author_name=commit_author_name,
             commit_author_login=commit_author_login,

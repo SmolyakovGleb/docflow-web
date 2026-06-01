@@ -160,6 +160,24 @@ describe('RepositoryDetailPage', () => {
     })
   })
 
+  it('describes incremental threshold according to backend behavior', async () => {
+    const project = createProjectState()
+
+    server.use(
+      http.get('/api/projects/:currentProjectId', () => HttpResponse.json(project)),
+      http.get('/api/tasks', () => HttpResponse.json({ items: [], total: 0, limit: 5, offset: 0 })),
+    )
+
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Docs EN' })
+    expect(
+      screen.getByText(
+        'Если изменилось больше 40% абзацев — файл переводится целиком. 1 — почти всегда целиком, 100 — почти всегда инкрементально.',
+      ),
+    ).toBeInTheDocument()
+  })
+
   it('opens webhook secret modal after regeneration', async () => {
     const project = createProjectState()
 

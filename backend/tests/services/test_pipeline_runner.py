@@ -178,6 +178,127 @@ async def test_run_task_incremental_merges_dirty_paragraphs(
     assert "[prepare] Инкрементальный режим: 1 из 3 абзацев" in (updated_task.log or "")
 
 
+async def test_run_task_incremental_fails_when_pipeline_returns_too_few_paragraphs(
+    engine, db_session, test_project, mocker
+):
+    reset_pipeline_runner_state()
+    task = await create_task(db_session, test_project)
+
+    mocker.patch(
+        "app.services.pipeline_runner.get_session_factory",
+        return_value=make_session_factory(engine),
+    )
+    mocker.patch(
+        "app.services.pipeline_runner.dictionary_merger.merge_pipeline_data",
+        new=mocker.AsyncMock(
+            return_value=MergedPipelineData(
+                dictionary={},
+                glossary={},
+                prompt="Prompt",
+                pre_translator_files={
+                    "static_terms": {},
+                    "section_headings": {},
+                    "note_titles": {},
+                    "include_labels": {},
+                },
+            )
+        ),
+    )
+    mocker.patch(
+        "app.services.pipeline_runner._build_translation_context",
+        new=mocker.AsyncMock(
+            return_value=TranslationContext(
+                content="Changed B\n\nChanged C",
+                is_incremental=True,
+                dirty_indices=[1, 2],
+                aligned_old_ru={0: "RU A"},
+                new_paras=["A", "Changed B", "Changed C"],
+            )
+        ),
+    )
+
+    async def fake_execute(*, input_file, output_dir, logger, **kwargs):
+        assert input_file.read_text(encoding="utf-8") == "Changed B\n\nChanged C"
+        output_path = output_dir / input_file.name
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("RU B", encoding="utf-8")
+        return output_path
+
+    mocker.patch("app.services.pipeline_runner._execute_pipeline", side_effect=fake_execute)
+
+    await pipeline_runner.run_task(task.id)
+
+    session_factory = make_session_factory(engine)
+    async with session_factory() as session:
+        updated_task = await session.get(Task, task.id)
+
+    assert updated_task is not None
+    assert updated_task.status == "failed"
+    assert updated_task.translated_content is None
+    assert "YAML" not in (updated_task.error or "")
+    assert "Incremental translation paragraph count mismatch" in (updated_task.error or "")
+
+
+async def test_run_task_yaml_skips_incremental_and_preserves_relative_input_path(
+    engine, db_session, test_project, mocker
+):
+    reset_pipeline_runner_state()
+    task = await create_task(db_session, test_project)
+    task.file_path = "api-reference/tasks/b24-toc.yaml"
+    task.original_content = "title: Задачи\nitems: []\n"
+    task.previous_task_id = task.id
+    task.before_sha = "before-sha"
+    await db_session.commit()
+
+    mocker.patch(
+        "app.services.pipeline_runner.get_session_factory",
+        return_value=make_session_factory(engine),
+    )
+    mocker.patch(
+        "app.services.pipeline_runner.dictionary_merger.merge_pipeline_data",
+        new=mocker.AsyncMock(
+            return_value=MergedPipelineData(
+                dictionary={},
+                glossary={},
+                prompt="Prompt",
+                pre_translator_files={
+                    "static_terms": {},
+                    "section_headings": {},
+                    "note_titles": {},
+                    "include_labels": {},
+                },
+            )
+        ),
+    )
+    build_ctx = mocker.patch(
+        "app.services.pipeline_runner.incremental_translate.build_translation_context",
+        new=mocker.AsyncMock(),
+    )
+
+    async def fake_execute(*, input_file, output_dir, logger, **kwargs):
+        assert input_file.as_posix().endswith("input/api-reference/tasks/b24-toc.yaml")
+        assert input_file.read_text(encoding="utf-8") == "title: Задачи\nitems: []\n"
+        logger.info("yaml pipeline")
+        output_path = output_dir / input_file.name
+        output_path.write_text("title: Tasks\nitems: []\n", encoding="utf-8")
+        return output_path
+
+    mocker.patch("app.services.pipeline_runner._execute_pipeline", side_effect=fake_execute)
+
+    await pipeline_runner.run_task(task.id)
+
+    session_factory = make_session_factory(engine)
+    async with session_factory() as session:
+        updated_task = await session.get(Task, task.id)
+
+    build_ctx.assert_not_awaited()
+    assert updated_task is not None
+    assert updated_task.status == "done"
+    assert updated_task.translated_content == "title: Tasks\nitems: []\n"
+    assert updated_task.incremental_paragraphs_count is None
+    assert updated_task.incremental_total_paragraphs is None
+
+
 async def test_run_task_failure_sets_failed_status(engine, db_session, test_project, mocker):
     pipeline_runner.TASK_EVENT_QUEUES.clear()
     task = await create_task(db_session, test_project)

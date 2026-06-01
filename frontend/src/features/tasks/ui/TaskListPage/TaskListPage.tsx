@@ -83,6 +83,8 @@ export function TaskListPage() {
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set())
 
   const { data: pendingGroups } = useGetCommitGroupsQuery({ status: 'pending_confirmation' })
+  const pendingGroupItems = pendingGroups?.items ?? []
+  const hasPendingGroups = pendingGroupItems.length > 0
 
   const { data: projects = [] } = useGetProjectsQuery()
   const {
@@ -366,7 +368,7 @@ export function TaskListPage() {
         <TaskListSkeleton />
       ) : error ? (
         <TaskListError isRetrying={isFetching} onRetry={() => void refetch()} />
-      ) : tasks.length === 0 ? (
+      ) : tasks.length === 0 && !hasPendingGroups ? (
         <TaskListEmpty
           userGithubLinked={hasGithubLinked}
           hasFilters={hasActiveFilters}
@@ -387,7 +389,7 @@ export function TaskListPage() {
         />
       ) : (
         <div className={styles.list}>
-          {pendingGroups?.items.map((group) => (
+          {pendingGroupItems.map((group) => (
             <CommitGroupRow key={group.id} group={group} />
           ))}
           {groups.map((group) => (

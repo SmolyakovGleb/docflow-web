@@ -47,7 +47,7 @@ async def confirm_commit_group(
     owner: User,
     github_client: GitHubClient,
 ) -> list[Task]:
-    from app.api.routes.webhook import _fetch_file_metadata_safe
+    from app.api.routes.webhook import _fetch_file_metadata_safe, _get_previous_task_ids
 
     commit_group.status = "processing"
     commit_group.confirmed_at = datetime.now(UTC)
@@ -76,6 +76,10 @@ async def confirm_commit_group(
         task_list_events.publish_commit_group_event(commit_group, event_type="commit_group_updated")
         raise
 
+    previous_task_by_path = await _get_previous_task_ids(
+        session, commit_group.project_id, to_process
+    )
+
     tasks_to_create = [
         Task(
             user_id=owner.id,
@@ -92,6 +96,8 @@ async def confirm_commit_group(
             target_file_sha=target_sha,
             original_content=content,
             status="queued",
+            before_sha=commit_group.before_sha,
+            previous_task_id=previous_task_by_path.get(fp),
         )
         for fp, content, source_sha, target_sha in fetched
     ]

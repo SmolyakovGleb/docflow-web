@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.routes.webhook import _get_project_owner
 from app.db.session import get_db_session
 from app.models.commit_group import CommitGroup
 from app.models.user import User
@@ -23,8 +24,13 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 async def _get_group_or_404(session: AsyncSession, group_id: UUID, user: User) -> CommitGroup:
     group = await session.get(CommitGroup, group_id)
-    if group is None or group.user_id != user.id:
+    if group is None:
         raise HTTPException(status_code=404, detail="Commit group not found")
+    if group.user_id != user.id:
+        # A team member may act on a group that belongs to their team.
+        team_id = await _get_user_team_id(session, user.id)
+        if team_id is None or group.team_id != team_id:
+            raise HTTPException(status_code=404, detail="Commit group not found")
     return group
 
 
@@ -64,13 +70,17 @@ async def confirm_group_route(
         raise HTTPException(
             status_code=400, detail=f"Cannot confirm group with status '{group.status}'"
         )
-    if not current_user.github_linked or not current_user.github_access_token:
+
+    await session.refresh(group, ["project"])
+    # Tasks always run with the project owner's GitHub token, so a team member
+    # can confirm a group even if their own GitHub account is not linked.
+    owner = await _get_project_owner(session, group.project)
+    if not owner.github_linked or not owner.github_access_token:
         raise HTTPException(status_code=400, detail="GitHub account is not linked")
 
-    access_token = decrypt_github_access_token(current_user.github_access_token)
+    access_token = decrypt_github_access_token(owner.github_access_token)
     github_client = GitHubClient(access_token)
-    await session.refresh(group, ["project"])
-    tasks = await confirm_commit_group(session, group, current_user, github_client)
+    tasks = await confirm_commit_group(session, group, owner, github_client)
     return {"created": len(tasks), "task_ids": [str(t.id) for t in tasks]}
 
 

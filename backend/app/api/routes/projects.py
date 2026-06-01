@@ -138,9 +138,12 @@ async def create_project(
     "/{project_id}/files",
     response_model=ProjectFilesResponse,
     summary="List project source files",
-    description="Возвращает markdown-файлы из source-репозитория проекта под указанным путём.",
+    description=(
+        "Возвращает .md, .yaml и .yml файлы из source-репозитория проекта "
+        "под указанным путём."
+    ),
     responses={
-        200: {"description": "Список markdown-файлов"},
+        200: {"description": "Список файлов для перевода"},
         400: {"description": "GitHub не привязан или path невалиден"},
         404: {"description": "Проект не найден"},
     },

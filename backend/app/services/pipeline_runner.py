@@ -23,6 +23,7 @@ from app.models.task import Task
 from app.models.user import User
 from app.services import dictionary_merger, incremental_translate, paragraph_diff, task_list_events
 from app.services.auth import decrypt_github_access_token
+from app.services.file_formats import is_yaml_path
 from app.services.github import GitHubClient
 from app.services.incremental_translate import TranslationContext
 
@@ -155,7 +156,12 @@ def _prepare_workspace(
         merged_data.pre_translator_files,
     )
 
-    input_file = input_dir / Path(task.file_path).name
+    input_file = (
+        input_dir / task.file_path
+        if is_yaml_path(task.file_path)
+        else input_dir / Path(task.file_path).name
+    )
+    input_file.parent.mkdir(parents=True, exist_ok=True)
     input_file.write_text(content, encoding="utf-8")
     return workspace, input_file, output_dir, pre_translator_dir
 
@@ -335,6 +341,8 @@ async def _build_translation_context(
     (no project, no GitHub link, GitHub error) degrades gracefully to full
     translation rather than failing the task.
     """
+    if is_yaml_path(task.file_path):
+        return None
     if task.project_id is None or task.previous_task_id is None or task.before_sha is None:
         return None
     project = await session.get(Project, task.project_id)
@@ -370,12 +378,30 @@ def _assemble_translation(
     dirty = ctx.dirty_indices
     out_paras = paragraph_diff.split_paragraphs(output_text)
     if len(out_paras) != len(dirty):
-        logger.warning(
-            "Инкрементальный перевод: ожидалось %d абзацев, получено %d — "
-            "сборка по доступным",
-            len(dirty),
-            len(out_paras),
+        message = (
+            "Incremental translation paragraph count mismatch: "
+            f"expected {len(dirty)}, got {len(out_paras)}"
         )
+        logger.error(
+            "%s",
+            message,
+        )
+        raise RuntimeError(message)
+    missing_clean = [
+        idx
+        for idx in range(len(ctx.new_paras))
+        if idx not in dirty and idx not in ctx.aligned_old_ru
+    ]
+    if missing_clean:
+        message = (
+            "Incremental translation old paragraph mapping is incomplete: "
+            f"missing clean indices {missing_clean}"
+        )
+        logger.error(
+            "%s",
+            message,
+        )
+        raise RuntimeError(message)
     new_translations = {
         dirty[k]: out_paras[k] for k in range(min(len(dirty), len(out_paras)))
     }
@@ -439,6 +465,8 @@ async def run_task(task_id: UUID) -> None:
                     len(translation_ctx.new_paras),
                 )
             else:
+                if is_yaml_path(task.file_path):
+                    logger.info("Формат: yaml")
                 logger.info("Полный перевод")
 
             await _set_stage(

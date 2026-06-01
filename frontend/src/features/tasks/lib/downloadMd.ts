@@ -1,6 +1,8 @@
 export function downloadMd(filePath: string, content: string) {
   const filename = filePath.split('/').at(-1) || 'translation.md'
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+  const extension = filename.toLowerCase().split('.').at(-1)
+  const mimeType = extension === 'yaml' || extension === 'yml' ? 'text/yaml' : 'text/markdown'
+  const blob = new Blob([content], { type: `${mimeType};charset=utf-8` })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
 

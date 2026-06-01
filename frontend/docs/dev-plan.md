@@ -3302,3 +3302,422 @@ incremental_total_paragraphs  INTEGER NULL
 | 17.3    | `webhook.py`: сохраняет `before_sha` из push-payload; ищет `previous_task_id` среди опубликованных задач                                                                     |
 | 17.4    | Новый `app/services/incremental_translate.py`: `build_translation_context` — GitHub fetch `old_en` + `old_ru`, расчёт порога, возврат `TranslationContext`                   |
 | 17.5    | `pipeline_runner.py`: вызов `build_translation_context` перед LLM, `merge_translations` после. Поля `incremental_paragraphs_count`, `incremental_total_paragraphs` в `tasks` |
+
+---
+
+## Этап 18 — Перевод YAML TOC-файлов отдельной веткой пайплайна
+
+> **Актуальный полный план вынесен в отдельный документ:** [`yaml-translation-pipeline-plan.md`](yaml-translation-pipeline-plan.md).
+> Этот черновой этап оставлен только как исторический контекст и не должен использоваться как основной план реализации.
+
+### Концепция
+
+Добавить поддержку `.yaml` / `.yml` без передачи YAML-структуры в LLM. Markdown и YAML переводятся двумя независимыми форматными ветками:
+
+- `.md` — существующий `TranslationPipeline` без изменения поведения.
+- `.yaml` / `.yml` — новый YAML-пайплайн: извлечь только переводимые строковые значения, перевести их отдельным prompt/dictionary, собрать исходный YAML обратно с сохранением структуры.
+
+Первичный целевой сценарий — TOC-файлы вида `api-reference/calendar/b24-toc.yaml`:
+
+```yaml
+title: Календарь
+href: index.md
+items:
+  - name: Обзор методов
+    href: index.md
+  - name: События календаря
+    include:
+      path: calendar-event/b24-toc.yaml
+      mode: link
+```
+
+Переводятся только значения `title`, `name` и другие явно разрешённые текстовые поля. `href`, `path`, `mode`, `id`, `slug`, `url`, `include` и технические ключи не отправляются в LLM и не меняются.
+
+### Ключевые решения
+
+1. **YAML — отдельный processor в submodule `pipeline/`**  
+   Логика формата живёт в `pipeline/src/processors/yaml_translator/`, а не в `backend`. Backend только разрешает новый формат и запускает пайплайн как раньше.
+
+2. **Отдельный prompt и словарь для YAML**  
+   YAML TOC — это навигационные заголовки, а не markdown-документация. Для него нужны отдельные данные:
+   - `pipeline/data/yaml_prompt.txt`
+   - `pipeline/data/yaml_dictionary.json`
+   - `pipeline/data/yaml_glossary.json` при необходимости
+   - `pipeline/data/yaml_tm/cache.json` для коротких повторяющихся пунктов меню
+
+3. **LLM получает только текстовые значения**  
+   Payload в LLM строится как нумерованный список строк, без YAML-ключей и отступов:
+
+   ```text
+   1. Календарь
+   2. Обзор методов
+   3. Добавить новый календарь
+   ```
+
+   Ответ ожидается в таком же нумерованном формате. Processor валидирует количество строк и номера; если ответ некорректен — делает один retry с более жёсткой инструкцией.
+
+4. **Структура YAML сохраняется round-trip parser-ом**  
+   Использовать `ruamel.yaml`, потому что `PyYAML` хуже сохраняет исходное форматирование, порядок, кавычки и комментарии. Даже если в текущих TOC комментариев нет, навигационные YAML лучше не пересобирать “с нуля”.
+
+5. **Whitelist вместо эвристики "всё русское"**  
+   Не переводить все строки с кириллицей автоматически. В TOC могут появиться технические значения или примеры. Базовый whitelist:
+   - `title`
+   - `name`
+   - `label`
+   - `description`
+
+   Whitelist хранить рядом с processor-ом как константу. В дальнейшем можно вынести в `pipeline/data/yaml_keys.json`.
+
+6. **Инкрементальный перевод для YAML — отдельный механизм, не markdown paragraph diff**  
+   На первом этапе YAML всегда переводится целиком на уровне извлечённых строк. Это безопаснее, чем применять `paragraph_diff.py`, рассчитанный на markdown-абзацы. Оптимизация позже: сравнивать YAML-path строк (`items[3].name`) и переводить только изменившиеся значения.
+
+7. **Markdown fixers/validators не применяются к YAML**  
+   `CellTypeFixer`, `TableClosersFixer`, `TabsIndentFixer`, `InlineCodeFixer`, `StructureValidator` остаются только для `.md`. YAML-пайплайн имеет собственную валидацию: YAML парсится до и после, набор ключей/путей не меняется, изменены только whitelisted values.
+
+### Изменения в pipeline submodule
+
+#### 18.1 — Pipeline dependencies
+
+**Файлы:**
+
+- Изменить: `pipeline/pyproject.toml`
+- Изменить: `pipeline/uv.lock` или lock-файл, который используется в submodule
+
+**Что делаем:**
+
+- Добавить зависимость `ruamel.yaml>=0.18`.
+- Проверить импорт в локальном окружении pipeline.
+
+**Проверка:**
+
+```bash
+cd pipeline
+uv sync
+uv run python -c "from ruamel.yaml import YAML; print('yaml ok')"
+```
+
+#### 18.2 — YAML translator processor
+
+**Файлы:**
+
+- Создать: `pipeline/src/processors/yaml_translator/__init__.py`
+- Создать: `pipeline/src/processors/yaml_translator/models.py`
+- Создать: `pipeline/src/processors/yaml_translator/extractor.py`
+- Создать: `pipeline/src/processors/yaml_translator/batcher.py`
+- Создать: `pipeline/src/processors/yaml_translator/facade.py`
+- Создать: `pipeline/tests/test_yaml_translator.py`
+
+**Модель:**
+
+```python
+@dataclass(frozen=True)
+class YamlTextUnit:
+    index: int
+    path: tuple[str | int, ...]
+    key: str
+    source: str
+```
+
+**Extractor:**
+
+- Загружает YAML через `ruamel.yaml.YAML(typ="rt")`.
+- Рекурсивно обходит `CommentedMap` / `CommentedSeq`.
+- Создаёт `YamlTextUnit` только для строковых значений, у которых ключ входит в whitelist.
+- Пропускает пустые строки и строки без кириллицы.
+- Не трогает ключи и не меняет порядок.
+
+**Batcher:**
+
+- Делит units на батчи по размеру, например `max_batch_chars=2500`, потому что TOC-строки короткие.
+- Формирует payload вида `1. ...`.
+- Парсит ответ строго по номерам.
+- При несовпадении количества/номеров делает retry с prompt: “Верни ровно N строк, сохрани номера, без пояснений”.
+- Если retry тоже невалиден — падает с понятной ошибкой, задача становится `failed`.
+
+**Facade:**
+
+```python
+class YamlTranslator:
+    def __init__(self, translator: TranslatorClient, prompt: str, dictionary: dict[str, str], logger: logging.Logger): ...
+    def translate(self, content: str) -> str: ...
+```
+
+Шаги внутри:
+
+1. Parse YAML.
+2. Extract text units.
+3. Apply exact dictionary/TM hits до LLM.
+4. Translate unresolved units через batcher.
+5. Записать переводы обратно в YAML tree по `path`.
+6. Dump YAML в строку через `ruamel.yaml`.
+7. Validate: YAML парсится, количество extracted paths совпадает, non-whitelisted values не изменились.
+
+**Тесты:**
+
+- `b24-toc.yaml` пример: переводятся `title` и `items[*].name`, `href/include.path/mode` не меняются.
+- Вложенный `items -> include` не ломается.
+- Строка без кириллицы не отправляется в LLM.
+- Dictionary hit не отправляется в LLM.
+- Некорректный LLM-ответ вызывает retry.
+- После второго некорректного ответа — исключение с текстом `YAML translation response is invalid`.
+
+#### 18.3 — YAML prompt/dictionary data
+
+**Файлы:**
+
+- Создать: `pipeline/data/yaml_prompt.txt`
+- Создать: `pipeline/data/yaml_dictionary.json`
+- Создать: `pipeline/data/yaml_glossary.json`
+- Создать: `pipeline/data/yaml_tm/cache.json`
+
+**Prompt требования:**
+
+- Переводить короткие навигационные заголовки Bitrix24 REST docs.
+- Не добавлять точку в конце, если её не было.
+- Не расширять текст пояснениями.
+- Сохранять стиль title case/sentence case по принятому для docs правилу.
+- Сохранять номера строк ответа.
+- Не переводить technical identifiers, method names, API object names без словаря.
+
+**Dictionary стартовый набор:**
+
+```json
+{
+  "Календарь": "Calendar",
+  "Обзор методов": "Methods overview",
+  "События": "Events",
+  "События календаря": "Calendar events",
+  "Бронирование ресурсов": "Resource booking"
+}
+```
+
+Словарь должен быть отдельным от markdown `dictionary.json`, потому что короткие TOC-лейблы часто требуют других формулировок, чем фразы внутри статьи.
+
+#### 18.4 — Pipeline dispatch по расширению
+
+**Файлы:**
+
+- Изменить: `pipeline/src/pipeline.py`
+- Изменить: `pipeline/src/processors/parser.py`
+- Изменить: `pipeline/src/processors/writer.py`
+- Создать: `pipeline/tests/test_pipeline_yaml_dispatch.py`
+
+**Что делаем:**
+
+- Добавить helper:
+
+```python
+def detect_document_format(file_path: str | Path) -> Literal["markdown", "yaml"]:
+    suffix = Path(file_path).suffix.lower()
+    if suffix == ".md": return "markdown"
+    if suffix in {".yaml", ".yml"}: return "yaml"
+    raise ValueError(...)
+```
+
+- `MarkdownParser` оставить markdown-only или переименовать в `TextFileParser`; главное — не ломать текущие тесты.
+- `MarkdownWriter.save()` расширить до writer-а, который сохраняет исходное расширение:
+  - `.md` → `.md`
+  - `.yaml` → `.yaml`
+  - `.yml` → `.yml`
+- В `run()` сделать dispatch:
+
+```python
+if detect_document_format(file_path) == "yaml":
+    YamlTranslationPipeline(...).run()
+else:
+    TranslationPipeline(...).run()
+```
+
+- YAML ветка не вызывает markdown pre_translator/protector/fixers/validator.
+- Markdown ветка остаётся byte-for-byte совместимой по поведению.
+
+**Тесты:**
+
+- `.md` вызывает существующий markdown pipeline.
+- `.yaml` вызывает YAML pipeline и создаёт output с тем же расширением.
+- `.yml` создаёт `.yml`.
+- Unsupported extension падает с понятной ошибкой.
+
+### Изменения в docflow-web backend
+
+#### 18.5 — Общая утилита поддерживаемых форматов
+
+**Файлы:**
+
+- Создать: `backend/app/services/file_formats.py`
+- Изменить: `backend/app/services/tasks.py`
+- Изменить: `backend/app/api/routes/webhook.py`
+- Изменить: `backend/app/services/github.py`
+
+**Что делаем:**
+
+```python
+TRANSLATABLE_SUFFIXES = {".md", ".yaml", ".yml"}
+
+def is_translatable_path(path: str) -> bool: ...
+def ensure_translatable_path(path: str, field: str) -> None: ...
+def content_type_for_path(path: str) -> str: ...
+```
+
+Заменить все проверки `.endswith(".md")` на `is_translatable_path`.
+
+Точки замены:
+
+- `webhook._collect_markdown_files` → `_collect_translatable_files`
+- `GitHubClient.get_repo_tree()` — возвращать `.md`, `.yaml`, `.yml`
+- `create_manual_task_from_upload()` — разрешить YAML
+- `parse_upload_payload()` — разрешить target path YAML
+- Swagger/API descriptions — заменить “markdown-файлы” на “поддерживаемые текстовые файлы”
+
+**Тесты:**
+
+- Webhook создаёт задачу для `b24-toc.yaml`.
+- Webhook создаёт задачу для `.yml`.
+- Webhook игнорирует `.json`.
+- Manual repo trigger принимает `.yaml`.
+- Upload принимает `.yaml`, отклоняет `.json`.
+
+#### 18.6 — `pipeline_runner.py` output path
+
+**Файлы:**
+
+- Изменить: `backend/app/services/pipeline_runner.py`
+- Изменить: `backend/tests/test_pipeline_runner.py`
+
+**Что делаем:**
+
+Сейчас runner ожидает:
+
+```python
+output_file = output_dir / input_file.name
+```
+
+Это корректно только если pipeline сохраняет output с тем же именем. В плане закрепить контракт: pipeline для любого поддерживаемого формата пишет output с тем же basename и suffix. Добавить явную проверку:
+
+```python
+if not output_file.exists():
+    raise FileNotFoundError(f"Pipeline output not found: {output_file}")
+```
+
+Дополнить лог:
+
+```text
+Полный перевод
+Формат: yaml
+```
+
+Инкрементальный markdown-контекст отключать для YAML:
+
+```python
+if is_yaml_path(task.file_path):
+    translation_ctx = None
+```
+
+**Тесты:**
+
+- YAML task запускает pipeline и читает `output/b24-toc.yaml`.
+- Для YAML не вызывается `incremental_translate.build_translation_context`.
+- Missing output даёт `failed` с понятной ошибкой.
+
+### Изменения во frontend
+
+#### 18.7 — UI: выбор, upload, download YAML
+
+**Файлы:**
+
+- Изменить: `frontend/src/features/tasks/ui/TriggerTranslationDialog/TriggerTranslationDialog.tsx`
+- Изменить: `frontend/src/features/tasks/lib/downloadMd.ts`
+- Изменить: `frontend/src/features/tasks/ui/TaskTypeIcon/TaskTypeIcon.tsx`
+- Изменить: `frontend/src/locales/ru/tasks.json`
+- Изменить: `frontend/tests/integration/TaskListPage.test.tsx`
+- Изменить: `frontend/tests/unit/downloadMd.test.ts`
+
+**Что делаем:**
+
+- Upload `accept` заменить на:
+
+```tsx
+accept = '.md,.yaml,.yml,text/markdown,text/yaml,application/yaml,application/x-yaml'
+```
+
+- Переименовать `downloadMd.ts` в `downloadTextFile.ts` или оставить имя с обратной совместимостью, но MIME выбирать по расширению:
+  - `.md` → `text/markdown;charset=utf-8`
+  - `.yaml`, `.yml` → `text/yaml;charset=utf-8`
+  - fallback → `text/plain;charset=utf-8`
+
+- В диалоге запуска заменить тексты “.md файл” на “.md, .yaml или .yml файл”.
+- `TaskTypeIcon` может показывать отдельный YAML icon/label или общий file icon с `YAML` badge.
+
+**Тесты:**
+
+- Upload input принимает `.yaml`.
+- Download YAML создаёт blob с `text/yaml`.
+- В списке/детали YAML задача отображает путь без markdown-specific текста.
+
+### Документация и API
+
+#### 18.8 — Обновить docs
+
+**Файлы:**
+
+- Изменить: `docs/api.md`
+- Изменить: `docs/architecture.md`
+- Изменить: `docs/pipeline-integration.md`
+- Изменить: `backend/README.md`
+- Изменить: `frontend/docs/pages.md`
+
+**Что обновить:**
+
+- В webhook описать “translatable files: `.md`, `.yaml`, `.yml`”.
+- В manual trigger/upload описать новые расширения.
+- В architecture добавить два pipeline формата: Markdown и YAML.
+- В pipeline integration описать `yaml_translator` processor и отдельные `yaml_*` data files.
+
+### Порядок подэтапов 18
+
+```
+18.1  pipeline: добавить ruamel.yaml dependency
+18.2  pipeline: yaml_translator processor + unit tests
+18.3  pipeline: yaml_prompt/yaml_dictionary/yaml_tm data
+18.4  pipeline: dispatch .md vs .yaml/.yml + writer output suffix
+18.5  backend: разрешить translatable suffixes во webhook/manual/upload/repo tree
+18.6  backend: pipeline_runner contract + отключение incremental для YAML
+18.7  frontend: upload/download/UI labels для YAML
+18.8  docs: обновить API/architecture/pipeline docs
+```
+
+18.1–18.4 выполняются в submodule `pipeline/` и коммитятся в репозиторий DocFlowAI. После этого в `docflow-web` обновляется pointer submodule (`git add pipeline`). 18.5–18.8 выполняются в основном репозитории.
+
+### Изменения в бэкенде по подэтапам 18
+
+| Подэтап | Изменения                                                                                                                                                       |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 18.5    | Новый `file_formats.py`; `.md/.yaml/.yml` в webhook, manual repo trigger, upload validation, GitHub tree listing. Обновить тексты ошибок и OpenAPI descriptions |
+| 18.6    | `pipeline_runner.py`: формат в логах, YAML без incremental context, явная проверка output-файла с тем же suffix                                                 |
+
+### Риски и митигация
+
+| Риск                                      | Митигация                                                                                            |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| LLM вернул меньше/больше строк            | Строгий numbered protocol + retry; после второго сбоя задача `failed`                                |
+| LLM перевёл method/API identifiers        | Отдельный YAML prompt + yaml dictionary + запрет переводить identifiers без словаря                  |
+| YAML форматирование изменилось            | `ruamel.yaml` round-trip mode; тесты на сохранение `href/include/path/mode`                          |
+| Markdown pipeline сломался из-за dispatch | Тест на `.md` ветку и запрет менять markdown processor/fixers в 18.4                                 |
+| Инкрементальный перевод применился к YAML | Явный guard в `pipeline_runner`: YAML всегда full на первом этапе                                    |
+| Смешались markdown и YAML словари         | Отдельные `yaml_*` data files; markdown `dictionary.json/prompt.txt` не используются в YAML pipeline |
+
+### Definition of Done
+
+- Push с изменением `api-reference/calendar/b24-toc.yaml` создаёт задачу.
+- Задача переводится в фоне и получает `status=done`.
+- В `translated_content` переведены только `title` и `name`.
+- `href`, `include.path`, `include.mode` остались без изменений.
+- Публикация пишет `.yaml` в target repo по тому же path.
+- `.md` задачи проходят старые тесты без изменения поведения.
+- Тесты зелёные:
+
+```bash
+cd pipeline && uv run pytest
+cd backend && python -m pytest
+npm --prefix frontend test -- TaskListPage.test.tsx downloadMd.test.ts
+```

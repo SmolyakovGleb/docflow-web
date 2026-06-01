@@ -259,7 +259,7 @@ export function TriggerTranslationDialog({
       if (result.skipped.length > 0) {
         setSubmitResult(result)
       } else {
-        onOpenChange(false)
+        closeAndReset(false)
       }
     } catch {
       // promise toast already shows the error state
@@ -284,7 +284,7 @@ export function TriggerTranslationDialog({
         success: t('tasks:trigger.created_success', { count: uploadedFiles.length }),
         error: (error) => translateApiError(error),
       })
-      onOpenChange(false)
+      closeAndReset(false)
     } catch {
       // promise toast already shows the error state
     }
@@ -632,7 +632,7 @@ export function TriggerTranslationDialog({
                     ref={fileInputRef}
                     className={styles.fileInput}
                     type="file"
-                    accept=".md,text/markdown"
+                    accept=".md,.yaml,.yml,text/markdown,text/yaml,application/yaml,application/x-yaml"
                     multiple
                     onChange={(event) => handleFilesChange(event.target.files)}
                   />

@@ -81,7 +81,7 @@ async def test_get_file_sha_returns_none_if_404(mocked_async_client):
     assert sha is None
 
 
-async def test_get_repo_tree_filters_markdown_recursively(mocked_async_client):
+async def test_get_repo_tree_filters_translatable_files_recursively(mocked_async_client):
     mocked_async_client.get.return_value = make_response(
         "GET",
         "https://api.github.com/repos/acme/docs/git/trees/main",
@@ -90,6 +90,8 @@ async def test_get_repo_tree_filters_markdown_recursively(mocked_async_client):
             "tree": [
                 {"path": "docs/index.md", "type": "blob"},
                 {"path": "docs/guide/setup.md", "type": "blob"},
+                {"path": "docs/api/b24-toc.yaml", "type": "blob"},
+                {"path": "docs/api/legacy/b24-toc.yml", "type": "blob"},
                 {"path": "docs/image.png", "type": "blob"},
                 {"path": "README.md", "type": "blob"},
                 {"path": "docs/nested", "type": "tree"},
@@ -101,7 +103,12 @@ async def test_get_repo_tree_filters_markdown_recursively(mocked_async_client):
 
     files = await client.get_repo_tree("acme/docs", "main", "docs")
 
-    assert files == ["docs/guide/setup.md", "docs/index.md"]
+    assert files == [
+        "docs/api/b24-toc.yaml",
+        "docs/api/legacy/b24-toc.yml",
+        "docs/guide/setup.md",
+        "docs/index.md",
+    ]
     _, kwargs = mocked_async_client.get.call_args
     assert kwargs["params"] == {"recursive": "1"}
 
