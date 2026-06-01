@@ -11,7 +11,7 @@ interface TaskListFooterProps {
 
 export function TaskListFooter({ health, visibleCount, totalCount }: TaskListFooterProps) {
   const { t } = useTranslation('tasks')
-  const pipelineVersion = health?.pipeline_version ? health.pipeline_version.slice(0, 7) : '—'
+  const pipelineVersion = health?.pipeline_version || '—'
 
   return (
     <footer className={styles.footer}>

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.api.routes import health as health_module
 from app.models.task import Task
 
 
@@ -39,3 +40,24 @@ async def test_health_includes_pipeline_version_and_last_webhook_at(
         "pipeline_version": "abc1234",
         "last_webhook_at": "2026-05-12T10:30:00Z",
     }
+
+
+def test_pipeline_version_read_from_pyproject():
+    """Версия читается из pipeline/pyproject.toml и не бывает 'unknown'."""
+    version = health_module._read_pyproject_version()
+    assert version is not None
+    assert version != "unknown"
+    combined = health_module.get_pipeline_version()
+    assert combined != "unknown"
+    assert combined.startswith(version)
+
+
+def test_pipeline_version_falls_back_to_sha_without_pyproject(mocker):
+    """Если pyproject не прочитался, остаётся git SHA, а не 'unknown'."""
+    mocker.patch.object(health_module, "_read_pyproject_version", return_value=None)
+    mocker.patch.object(health_module, "_read_git_sha", return_value="deadbee")
+    health_module.get_pipeline_version.cache_clear()
+    try:
+        assert health_module.get_pipeline_version() == "deadbee"
+    finally:
+        health_module.get_pipeline_version.cache_clear()
