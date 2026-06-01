@@ -1,0 +1,48 @@
+# Build context = repo root (см. docker-compose.yml: context: .)
+# Исключаем зависимости/сборки/мусор. Чинит конфликт `COPY frontend/ ./`
+# (хостовый node_modules затирал установленный `npm ci`) и режет контекст с ~690MB.
+
+# --- зависимости ---
+**/node_modules
+**/.venv
+venv
+
+# --- python кэши/артефакты ---
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+.coverage
+**/htmlcov
+
+# --- frontend сборки/отчёты тестов ---
+**/dist
+frontend/coverage
+frontend/playwright-report
+frontend/test-results
+**/.vite
+**/.vitest
+
+# --- git и метаданные ---
+.git
+**/.git
+.gitignore
+.gitmodules
+
+# --- локальные данные пайплайна (не нужны в образе) ---
+pipeline/output
+pipeline/logs
+pipeline/input
+pipeline/tools/debug
+
+# --- секреты и локальные конфиги ---
+.env
+.env.*.local
+
+# --- IDE / OS ---
+.idea
+.vscode
+**/.DS_Store
+Thumbs.db
