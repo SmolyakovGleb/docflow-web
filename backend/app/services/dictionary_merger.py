@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlalchemy import select
@@ -28,10 +28,18 @@ class MergedPipelineData:
     glossary: dict[str, str]
     prompt: str
     pre_translator_files: dict[str, dict[str, str]]
+    yaml_dictionary: dict[str, str] = field(default_factory=dict)
+    yaml_prompt: str = ""
 
 
 def _load_json(path: Path) -> dict[str, str]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_json_optional(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    return _load_json(path)
 
 
 async def _load_entries(session: AsyncSession, dict_type: str) -> list[DictionaryEntry]:
@@ -65,6 +73,17 @@ async def _merge_prompt(session: AsyncSession) -> str:
     return prompt
 
 
+async def _merge_yaml_prompt(session: AsyncSession, yaml_dir: Path) -> str:
+    base = yaml_dir / "prompt.txt"
+    prompt = base.read_text(encoding="utf-8") if base.exists() else ""
+    for entry in await _load_entries(session, "yaml_prompt"):
+        if entry.key != "main":
+            continue
+        prompt = "" if entry.is_deleted else entry.value
+
+    return prompt
+
+
 async def merge_pipeline_data(session: AsyncSession) -> MergedPipelineData:
     dictionary = _merge_mapping(
         _load_json(PIPELINE_DATA_DIR / "dictionary.json"),
@@ -82,11 +101,19 @@ async def merge_pipeline_data(session: AsyncSession) -> MergedPipelineData:
         for dict_type, filename in PRE_TRANSLATOR_FILE_TYPES.items()
     }
 
+    yaml_dir = PIPELINE_DATA_DIR / "yaml"
+    yaml_dictionary = _merge_mapping(
+        _load_json_optional(yaml_dir / "dictionary.json"),
+        await _load_entries(session, "yaml_dictionary"),
+    )
+
     return MergedPipelineData(
         dictionary=dictionary,
         glossary=glossary,
         prompt=await _merge_prompt(session),
         pre_translator_files=pre_translator_files,
+        yaml_dictionary=yaml_dictionary,
+        yaml_prompt=await _merge_yaml_prompt(session, yaml_dir),
     )
 
 
@@ -102,3 +129,25 @@ def write_pre_translator_files(
             json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
             encoding="utf-8",
         )
+
+
+def write_yaml_data_files(
+    target_dir: Path,
+    *,
+    dictionary: dict[str, str],
+    prompt: str,
+) -> None:
+    """Materialise the YAML pipeline data dir (merged dictionary + prompt) inside
+    a task workspace, carrying over the bundled translation-memory cache."""
+    target_dir.mkdir(parents=True, exist_ok=True)
+    (target_dir / "dictionary.json").write_text(
+        json.dumps(dictionary, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    (target_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+
+    tm_dir = target_dir / "tm"
+    tm_dir.mkdir(parents=True, exist_ok=True)
+    base_tm = PIPELINE_DATA_DIR / "yaml" / "tm" / "cache.json"
+    tm_content = base_tm.read_text(encoding="utf-8") if base_tm.exists() else "{}"
+    (tm_dir / "cache.json").write_text(tm_content, encoding="utf-8")

@@ -12,11 +12,14 @@ COPY pipeline/ ./pipeline/
 
 COPY backend/pyproject.toml ./backend/
 COPY backend/app/ ./backend/app/
+# ВАЖНО: список зависимостей пайплайна должен совпадать с pipeline/pyproject.toml.
+# При добавлении новой зависимости в пайплайн — добавить её и сюда.
 RUN pip install --no-cache-dir \
     "click>=8.3.1" \
     "mistune>=3.2.0" \
     "python-dotenv>=1.2.2" \
     "requests>=2.33.0" \
+    "ruamel.yaml>=0.18" \
  && pip install --no-cache-dir -e ./backend/
 
 COPY backend/migrations/ ./backend/migrations/

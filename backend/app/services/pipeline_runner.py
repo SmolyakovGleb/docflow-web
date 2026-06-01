@@ -143,7 +143,7 @@ def _prepare_workspace(
     task: Task,
     merged_data: dictionary_merger.MergedPipelineData,
     content: str,
-) -> tuple[Path, Path, Path, Path]:
+) -> tuple[Path, Path, Path, Path, Path | None]:
     workspace = Path(tempfile.mkdtemp(prefix=f"docflow_{task.id}_"))
     input_dir = workspace / "input"
     output_dir = workspace / "output"
@@ -156,6 +156,15 @@ def _prepare_workspace(
         merged_data.pre_translator_files,
     )
 
+    yaml_data_dir: Path | None = None
+    if is_yaml_path(task.file_path):
+        yaml_data_dir = workspace / "yaml_data"
+        dictionary_merger.write_yaml_data_files(
+            yaml_data_dir,
+            dictionary=merged_data.yaml_dictionary,
+            prompt=merged_data.yaml_prompt,
+        )
+
     input_file = (
         input_dir / task.file_path
         if is_yaml_path(task.file_path)
@@ -163,7 +172,7 @@ def _prepare_workspace(
     )
     input_file.parent.mkdir(parents=True, exist_ok=True)
     input_file.write_text(content, encoding="utf-8")
-    return workspace, input_file, output_dir, pre_translator_dir
+    return workspace, input_file, output_dir, pre_translator_dir, yaml_data_dir
 
 
 def _load_pipeline_modules():
@@ -202,6 +211,7 @@ def _run_pipeline_sync(
     pre_translator_dir: Path,
     merged_data: dictionary_merger.MergedPipelineData,
     logger: logging.Logger,
+    yaml_data_dir: Path | None = None,
 ) -> Path:
     with _patched_pipeline_dirs(output_dir, pre_translator_dir) as pipeline_module:
         pipeline_module.run(
@@ -212,6 +222,7 @@ def _run_pipeline_sync(
             logger,
             merged_data.glossary,
             False,
+            yaml_data_dir=str(yaml_data_dir) if yaml_data_dir is not None else None,
         )
     return output_dir / input_file.name
 
@@ -223,6 +234,7 @@ async def _execute_pipeline(
     pre_translator_dir: Path,
     merged_data: dictionary_merger.MergedPipelineData,
     logger: logging.Logger,
+    yaml_data_dir: Path | None = None,
 ) -> Path:
     return await run_in_threadpool(
         _run_pipeline_sync,
@@ -231,6 +243,7 @@ async def _execute_pipeline(
         pre_translator_dir=pre_translator_dir,
         merged_data=merged_data,
         logger=logger,
+        yaml_data_dir=yaml_data_dir,
     )
 
 async def _cleanup_queue_after(task_id: UUID, delay: float) -> None:
@@ -449,7 +462,7 @@ async def run_task(task_id: UUID) -> None:
             content_to_translate = (
                 translation_ctx.content if translation_ctx is not None else task.original_content
             )
-            workspace, input_file, output_dir, pre_translator_dir = _prepare_workspace(
+            workspace, input_file, output_dir, pre_translator_dir, yaml_data_dir = _prepare_workspace(
                 task,
                 merged_data,
                 content_to_translate,
@@ -484,6 +497,7 @@ async def run_task(task_id: UUID) -> None:
                     pre_translator_dir=pre_translator_dir,
                     merged_data=merged_data,
                     logger=logger,
+                    yaml_data_dir=yaml_data_dir,
                 )
 
             await _set_stage(

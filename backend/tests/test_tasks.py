@@ -395,7 +395,7 @@ async def test_upload_unsupported_file_rejected(auth_client, test_project):
     )
 
     assert response.status_code == 400
-    assert response.json() == {"detail": "Only .md, .yaml and .yml files are allowed"}
+    assert response.json() == {"detail": "Only .md files and b24-toc.yaml/.yml files are allowed"}
 
 
 async def test_upload_too_large_rejected(auth_client, test_project):

@@ -111,6 +111,63 @@ async def test_merge_prompt(tmp_path, db_session, test_user, monkeypatch):
     assert merged.prompt == "Custom prompt"
 
 
+async def test_merge_yaml_dictionary_and_prompt(tmp_path, db_session, test_user, monkeypatch):
+    data_dir = tmp_path / "data"
+    pre_dir = data_dir / "pre_translator"
+    pre_dir.mkdir(parents=True)
+    seed_base_files(data_dir, pre_dir)
+
+    yaml_dir = data_dir / "yaml"
+    (yaml_dir / "tm").mkdir(parents=True)
+    write_json(yaml_dir / "dictionary.json", {"Календарь": "Calendar"})
+    (yaml_dir / "prompt.txt").write_text("Base yaml prompt", encoding="utf-8")
+    write_json(yaml_dir / "tm" / "cache.json", {})
+
+    monkeypatch.setattr(dictionary_merger, "PIPELINE_DATA_DIR", data_dir)
+    monkeypatch.setattr(dictionary_merger, "PRE_TRANSLATOR_DATA_DIR", pre_dir)
+
+    db_session.add_all(
+        [
+            DictionaryEntry(
+                dict_type="yaml_dictionary",
+                key="События",
+                value="Events",
+                created_by=test_user.id,
+            ),
+            DictionaryEntry(
+                dict_type="yaml_prompt",
+                key="main",
+                value="Custom yaml prompt",
+                created_by=test_user.id,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    merged = await dictionary_merger.merge_pipeline_data(db_session)
+
+    assert merged.yaml_dictionary == {"Календарь": "Calendar", "События": "Events"}
+    assert merged.yaml_prompt == "Custom yaml prompt"
+
+
+async def test_merge_yaml_dictionary_defaults_when_files_absent(
+    tmp_path, db_session, test_user, monkeypatch
+):
+    data_dir = tmp_path / "data"
+    pre_dir = data_dir / "pre_translator"
+    pre_dir.mkdir(parents=True)
+    seed_base_files(data_dir, pre_dir)
+
+    # No yaml/ subdir at all — merge must degrade gracefully.
+    monkeypatch.setattr(dictionary_merger, "PIPELINE_DATA_DIR", data_dir)
+    monkeypatch.setattr(dictionary_merger, "PRE_TRANSLATOR_DATA_DIR", pre_dir)
+
+    merged = await dictionary_merger.merge_pipeline_data(db_session)
+
+    assert merged.yaml_dictionary == {}
+    assert merged.yaml_prompt == ""
+
+
 async def test_merge_pre_translator_files(tmp_path, db_session, test_user, monkeypatch):
     data_dir = tmp_path / "data"
     pre_dir = data_dir / "pre_translator"

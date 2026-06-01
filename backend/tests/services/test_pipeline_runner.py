@@ -84,6 +84,7 @@ async def test_run_task_success(engine, db_session, test_project, mocker):
         pre_translator_dir,
         merged_data,
         logger,
+        **kwargs,
     ):
         assert input_file.read_text(encoding="utf-8") == "# Source"
         assert pre_translator_dir.exists()
@@ -377,6 +378,7 @@ async def test_run_task_captures_log(engine, db_session, test_project, mocker):
         pre_translator_dir,
         merged_data,
         logger,
+        **kwargs,
     ):
         logger.info("line one")
         logger.warning("line two")
@@ -430,6 +432,7 @@ async def test_run_task_emits_sse_events(engine, db_session, test_project, mocke
         pre_translator_dir,
         merged_data,
         logger,
+        **kwargs,
     ):
         logger.info("pipeline log")
         output_path = output_dir / input_file.name
