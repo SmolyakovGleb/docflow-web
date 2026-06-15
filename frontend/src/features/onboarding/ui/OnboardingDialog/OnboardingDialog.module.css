@@ -169,6 +169,28 @@
   line-height: 1.55;
 }
 
+.manualHint {
+  margin: -4px 0 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.manualHintButton {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.manualHintButton:hover {
+  text-decoration: underline;
+}
+
 .footer {
   display: flex;
   justify-content: flex-end;

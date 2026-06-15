@@ -14,6 +14,7 @@ interface OnboardingDialogProps {
   onSkip: () => void
   onConnectGithub: () => void
   onCreateProject: () => void
+  onTranslateManually?: () => void
 }
 
 const TOTAL_STEPS = 3
@@ -24,6 +25,7 @@ export function OnboardingDialog({
   onSkip,
   onConnectGithub,
   onCreateProject,
+  onTranslateManually,
 }: OnboardingDialogProps) {
   const { t } = useTranslation('onboarding')
   const currentStep =
@@ -123,6 +125,15 @@ export function OnboardingDialog({
           <p className={styles.noteText}>{t(currentStep.noteKey)}</p>
         </div>
       </SectionCard>
+
+      {onTranslateManually ? (
+        <p className={styles.manualHint}>
+          {t('manual_hint')}{' '}
+          <button type="button" className={styles.manualHintButton} onClick={onTranslateManually}>
+            {t('manual_hint_action')}
+          </button>
+        </p>
+      ) : null}
     </DialogShell>
   )
 }

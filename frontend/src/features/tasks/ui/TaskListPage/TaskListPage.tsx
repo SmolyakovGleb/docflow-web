@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { selectUser } from '@/features/auth/model/authSlice'
 import { redirectToGithubConnect } from '@/features/auth/lib/redirectToGithubConnect'
 import { useGetProjectsQuery } from '@/features/projects/api/projectsApi'
@@ -53,6 +53,7 @@ type TriggerDialogTab = 'repo' | 'upload'
 export function TaskListPage() {
   const { t } = useTranslation(['tasks', 'common'])
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const dispatch = useAppDispatch()
   const user = useAppSelector(selectUser)
   const selectedTaskIds = useAppSelector((state) => state.tasksUI.selectedTaskIds)
@@ -72,6 +73,7 @@ export function TaskListPage() {
   useTaskListSSE(getTasksArgs)
   const [isDialogOpen, setDialogOpen] = useState(false)
   const [dialogTab, setDialogTab] = useState<TriggerDialogTab>('repo')
+  const [translateParamHandled, setTranslateParamHandled] = useState(false)
   const [taskToRemove, setTaskToRemove] = useState<TaskSummary | null>(null)
   const [pendingPublishTask, setPendingPublishTask] = useState<TaskSummary | null>(null)
   const [publishDialogOpen, setPublishDialogOpen] = useState(false)
@@ -156,6 +158,23 @@ export function TaskListPage() {
       dispatch(setSelectedTaskIds(next))
     }
   }, [dispatch, tasks, selectedTaskIds])
+
+  // Open the upload tab when arriving from onboarding's "translate manually" link.
+  // Handled during render (React-recommended) so it works whether the page mounts
+  // with the param or the param appears while already on /tasks.
+  const wantsUploadDialog = searchParams.get('translate') === 'upload'
+  if (wantsUploadDialog && !translateParamHandled) {
+    setTranslateParamHandled(true)
+    setDialogTab('upload')
+    setDialogOpen(true)
+  }
+  // Strip the one-shot param (navigation only — not React state).
+  useEffect(() => {
+    if (!wantsUploadDialog) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('translate')
+    setSearchParams(next, { replace: true })
+  }, [wantsUploadDialog, searchParams, setSearchParams])
 
   const lastSelectedIdxRef = useRef(-1)
 

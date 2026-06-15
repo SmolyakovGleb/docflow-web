@@ -57,6 +57,10 @@ export function OnboardingGate() {
       onCreateProject={() => {
         void navigate('/repositories/new?onboarding=1')
       }}
+      onTranslateManually={() => {
+        markOnboardingDismissed(user.id)
+        void navigate('/tasks?translate=upload')
+      }}
     />
   )
 }
