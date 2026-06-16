@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     debug: bool = False
     database_url: str = Field(alias="DATABASE_URL")
     session_secret: str = Field(alias="SESSION_SECRET")
+    encryption_key: str = Field(alias="ENCRYPTION_KEY")
 
     postgres_user: str = Field(alias="POSTGRES_USER")
     postgres_password: str = Field(alias="POSTGRES_PASSWORD")
@@ -51,6 +52,22 @@ class Settings(BaseSettings):
     def validate_session_secret(cls, v: str) -> str:
         if len(v) < 32:
             raise ValueError("SESSION_SECRET must be at least 32 characters long")
+        return v
+
+    @field_validator("encryption_key")
+    @classmethod
+    def validate_encryption_key(cls, v: str) -> str:
+        # Должен быть валидным Fernet-ключом (urlsafe base64, 32 байта).
+        # Сгенерировать: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+        from cryptography.fernet import Fernet
+
+        try:
+            Fernet(v.encode("utf-8"))
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                "ENCRYPTION_KEY must be a valid Fernet key "
+                "(urlsafe base64, 32 bytes). Generate with Fernet.generate_key()."
+            ) from exc
         return v
 
     @property
