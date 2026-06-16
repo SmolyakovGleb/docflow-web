@@ -23,5 +23,17 @@ def is_yaml_path(path: str) -> bool:
     return PurePosixPath(path.lower()).suffix in YAML_SUFFIXES
 
 
+def is_safe_relative_path(path: str) -> bool:
+    """True если path — безопасный относительный forward-slash путь без traversal.
+
+    Отвергает абсолютные пути, обратные слэши и сегменты '', '.', '..'.
+    Используется и для входящих webhook-путей, и для ручного API (там же
+    оборачивается в HTTP 400).
+    """
+    if not path or path.startswith("/") or "\\" in path:
+        return False
+    return not any(part in {"", "..", "."} for part in path.split("/"))
+
+
 def translatable_error_text() -> str:
     return "Only .md files and b24-toc.yaml/.yml files are allowed"

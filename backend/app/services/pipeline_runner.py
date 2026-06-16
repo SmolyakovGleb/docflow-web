@@ -170,6 +170,12 @@ def _prepare_workspace(
         if is_yaml_path(task.file_path)
         else input_dir / Path(task.file_path).name
     )
+    # Defense-in-depth против path traversal: итоговый путь обязан лежать внутри
+    # input_dir. Входные пути уже фильтруются (webhook/manual), это последний рубеж.
+    resolved = input_file.resolve()
+    if not resolved.is_relative_to(input_dir.resolve()):
+        raise ValueError(f"Unsafe task file_path escapes workspace: {task.file_path!r}")
+    input_file = resolved
     input_file.parent.mkdir(parents=True, exist_ok=True)
     input_file.write_text(content, encoding="utf-8")
     return workspace, input_file, output_dir, pre_translator_dir, yaml_data_dir

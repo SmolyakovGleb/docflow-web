@@ -1,4 +1,5 @@
 from app.services.file_formats import (
+    is_safe_relative_path,
     is_translatable_path,
     is_yaml_path,
     translatable_error_text,
@@ -29,3 +30,19 @@ def test_yaml_path_detection_is_suffix_only() -> None:
 
 def test_error_text_lists_supported_formats() -> None:
     assert translatable_error_text() == "Only .md files and b24-toc.yaml/.yml files are allowed"
+
+
+def test_safe_relative_path_accepts_normal_paths() -> None:
+    assert is_safe_relative_path("docs/index.md")
+    assert is_safe_relative_path("api-reference/tasks/b24-toc.yaml")
+    assert is_safe_relative_path("file.md")
+
+
+def test_safe_relative_path_rejects_traversal_and_absolute() -> None:
+    # Path traversal — основной вектор: ../ уводит запись за пределы workspace.
+    assert not is_safe_relative_path("../../../tmp/b24-toc.yaml")
+    assert not is_safe_relative_path("docs/../../etc/passwd")
+    assert not is_safe_relative_path("/etc/b24-toc.yaml")
+    assert not is_safe_relative_path("docs\\b24-toc.yaml")
+    assert not is_safe_relative_path("./b24-toc.yaml")
+    assert not is_safe_relative_path("")

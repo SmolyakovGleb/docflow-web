@@ -19,7 +19,7 @@ from app.models.task import Task
 from app.models.user import User
 from app.services import pipeline_runner, task_list_events
 from app.services.auth import decrypt_github_access_token, decrypt_webhook_secret
-from app.services.file_formats import is_translatable_path
+from app.services.file_formats import is_safe_relative_path, is_translatable_path
 from app.services.github import GitHubAPIError, GitHubClient
 from app.services.tasks import _apply_exclude_patterns
 from app.services.webhook import is_valid_github_signature
@@ -56,7 +56,13 @@ def _collect_translatable_files(payload: dict[str, Any]) -> list[str]:
     for commit in payload.get("commits", []):
         for key in ("added", "modified"):
             for file_path in commit.get(key, []):
-                if isinstance(file_path, str) and is_translatable_path(file_path):
+                if (
+                    isinstance(file_path, str)
+                    and is_translatable_path(file_path)
+                    # Отбрасываем traversal-пути (../) — YAML-ветка writeText'ит полный
+                    # путь задачи, поэтому небезопасный путь мог бы записать файл вне workspace.
+                    and is_safe_relative_path(file_path)
+                ):
                     files.append(file_path)
 
     return list(dict.fromkeys(files))

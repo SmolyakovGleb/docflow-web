@@ -21,7 +21,11 @@ from app.models.user import User
 from app.schemas.task import ManualTaskFromRepo, TaskStatus, TaskUpdate
 from app.services import bitrix_notify, task_list_events
 from app.services.auth import decrypt_github_access_token
-from app.services.file_formats import is_translatable_path, translatable_error_text
+from app.services.file_formats import (
+    is_safe_relative_path,
+    is_translatable_path,
+    translatable_error_text,
+)
 from app.services.github import GitHubClient
 from app.services.projects import _get_user_team_id, get_project_visible_or_404
 
@@ -492,15 +496,10 @@ def parse_manual_repo_payload(payload: dict[str, Any]) -> ManualTaskFromRepo:
 
 
 def _ensure_safe_relative_path(path: str, *, field: str) -> None:
-    if not path or path.startswith("/") or "\\" in path:
+    if not is_safe_relative_path(path):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{field} must be a forward-slash relative path",
-        )
-    if any(part in {"", "..", "."} for part in path.split("/")):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{field} must not contain '.' or '..' segments",
+            detail=f"{field} must be a relative forward-slash path without '.'/'..' segments",
         )
 
 
