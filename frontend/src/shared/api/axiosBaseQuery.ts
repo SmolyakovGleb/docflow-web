@@ -1,6 +1,7 @@
 import type { BaseQueryFn, QueryReturnValue } from '@reduxjs/toolkit/query'
 import type { AxiosError, AxiosRequestConfig, Method } from 'axios'
 import { clearUser } from '@/features/auth/model/authSlice'
+import { clearAccessToken } from '@/shared/lib/authToken'
 import { axiosInstance } from '@/shared/lib/axios'
 
 export interface AxiosBaseQueryArgs {
@@ -67,9 +68,13 @@ export const axiosBaseQuery =
       const status = axiosError.response?.status
       const data = axiosError.response?.data
 
-      if (status === 401 && !extraOptions?.skipAuthRedirect) {
-        api.dispatch(clearUser())
-        redirectToLogin()
+      if (status === 401) {
+        // протухший/невалидный токен — убираем, чтобы не слать его снова
+        clearAccessToken()
+        if (!extraOptions?.skipAuthRedirect) {
+          api.dispatch(clearUser())
+          redirectToLogin()
+        }
       }
 
       const queryError: AxiosBaseQueryError = {}

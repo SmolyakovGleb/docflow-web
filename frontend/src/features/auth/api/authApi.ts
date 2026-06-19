@@ -1,5 +1,7 @@
 import { baseApi } from '@/shared/api/baseApi'
+import { clearAccessToken, setAccessToken } from '@/shared/lib/authToken'
 import type {
+  AuthResult,
   ChangePasswordPayload,
   LoginPayload,
   OkResponse,
@@ -18,23 +20,36 @@ export const authApi = baseApi.injectEndpoints({
         skipAuthRedirect: true,
       },
     }),
-    login: builder.mutation<UserRead, LoginPayload>({
+    login: builder.mutation<AuthResult, LoginPayload>({
       query: (data) => ({
         url: '/auth/login',
         method: 'POST',
         data,
       }),
+      // Кладём токен синхронно, до инвалидации User → рефетча /auth/me с Bearer.
+      transformResponse: (response: AuthResult) => {
+        if (response?.access_token) {
+          setAccessToken(response.access_token)
+        }
+        return response
+      },
       invalidatesTags: ['User'],
       extraOptions: {
         skipAuthRedirect: true,
       },
     }),
-    register: builder.mutation<UserRead, RegisterPayload>({
+    register: builder.mutation<AuthResult, RegisterPayload>({
       query: (data) => ({
         url: '/auth/register',
         method: 'POST',
         data,
       }),
+      transformResponse: (response: AuthResult) => {
+        if (response?.access_token) {
+          setAccessToken(response.access_token)
+        }
+        return response
+      },
       invalidatesTags: ['User'],
     }),
     logout: builder.mutation<OkResponse, void>({
@@ -43,6 +58,13 @@ export const authApi = baseApi.injectEndpoints({
         method: 'POST',
       }),
       invalidatesTags: ['User'],
+      async onQueryStarted(_arg, { queryFulfilled }) {
+        try {
+          await queryFulfilled
+        } finally {
+          clearAccessToken()
+        }
+      },
     }),
     changePassword: builder.mutation<OkResponse, ChangePasswordPayload>({
       query: (data) => ({

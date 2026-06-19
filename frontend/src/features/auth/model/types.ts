@@ -7,6 +7,16 @@ export interface UserRead {
   is_admin?: boolean
 }
 
+export interface AuthResult extends UserRead {
+  // JWT для заголовка Authorization (login/register возвращают его в теле)
+  access_token: string
+}
+
+export interface GithubConnectResponse {
+  authorize_url: string | null
+  already_linked: boolean
+}
+
 export interface LoginPayload {
   email: string
   password: string

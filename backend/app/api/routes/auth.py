@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -15,12 +15,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.session import get_db_session
+from app.models.github_oauth_state import GithubOauthState
 from app.models.invite_token import InviteToken
 from app.models.user import User
-from app.schemas.user import ChangePasswordRequest, UserLogin, UserRead, UserRegister
+from app.schemas.user import (
+    AuthResult,
+    ChangePasswordRequest,
+    GithubConnectResponse,
+    UserLogin,
+    UserRead,
+    UserRegister,
+)
 from app.services.auth import (
     DUMMY_PASSWORD_HASH,
-    GITHUB_OAUTH_STATE_COOKIE_NAME,
     GITHUB_OAUTH_STATE_MAX_AGE_SECONDS,
     SESSION_COOKIE_NAME,
     SESSION_LIFETIME_DAYS,
@@ -41,7 +48,6 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-GITHUB_OAUTH_RETURN_TO_COOKIE_NAME = "github_oauth_return_to"
 DEFAULT_GITHUB_REDIRECT_PATH = "/tasks"
 
 
@@ -69,56 +75,12 @@ def clear_session_cookie(response: Response) -> None:
     )
 
 
-def set_github_oauth_state_cookie(response: Response, state: str) -> None:
-    settings = get_settings()
-    response.set_cookie(
-        key=GITHUB_OAUTH_STATE_COOKIE_NAME,
-        value=state,
-        max_age=GITHUB_OAUTH_STATE_MAX_AGE_SECONDS,
-        httponly=True,
-        samesite="lax",
-        secure=not settings.debug,
-        path="/",
-    )
-
-
-def clear_github_oauth_state_cookie(response: Response) -> None:
-    settings = get_settings()
-    response.delete_cookie(
-        key=GITHUB_OAUTH_STATE_COOKIE_NAME,
-        httponly=True,
-        samesite="lax",
-        secure=not settings.debug,
-        path="/",
-    )
-
-
-def set_github_oauth_return_to_cookie(response: Response, redirect_url: str) -> None:
-    settings = get_settings()
-    response.set_cookie(
-        key=GITHUB_OAUTH_RETURN_TO_COOKIE_NAME,
-        value=redirect_url,
-        max_age=GITHUB_OAUTH_STATE_MAX_AGE_SECONDS,
-        httponly=True,
-        samesite="lax",
-        secure=not settings.debug,
-        path="/",
-    )
-
-
-def clear_github_oauth_return_to_cookie(response: Response) -> None:
-    settings = get_settings()
-    response.delete_cookie(
-        key=GITHUB_OAUTH_RETURN_TO_COOKIE_NAME,
-        httponly=True,
-        samesite="lax",
-        secure=not settings.debug,
-        path="/",
-    )
-
-
 def to_user_read(user: User) -> UserRead:
     return UserRead.model_validate(user)
+
+
+def to_auth_result(user: User, token: str) -> AuthResult:
+    return AuthResult(**to_user_read(user).model_dump(), access_token=token)
 
 
 def is_safe_return_path(path: str | None) -> bool:
@@ -169,20 +131,11 @@ def append_query_param(url: str, key: str, value: str) -> str:
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 
-def build_github_callback_redirect(
-    request: Request,
-    key: str,
-    value: str,
-) -> str:
-    redirect_url = request.cookies.get(GITHUB_OAUTH_RETURN_TO_COOKIE_NAME)
-    if not redirect_url:
-        redirect_url = build_frontend_redirect_url(request)
-    return append_query_param(redirect_url, key, value)
 
 
 @router.post(
     "/register",
-    response_model=UserRead,
+    response_model=AuthResult,
     status_code=status.HTTP_201_CREATED,
     summary="Регистрация",
     description=(
@@ -201,7 +154,7 @@ async def register(
     payload: UserRegister,
     response: Response,
     session: DbSession,
-) -> UserRead:
+) -> AuthResult:
     existing_user = await session.scalar(select(User).where(User.email == payload.email))
     if existing_user is not None:
         raise HTTPException(
@@ -250,14 +203,15 @@ async def register(
     await session.commit()
     await session.refresh(user)
 
-    set_session_cookie(response, create_jwt(user.id, user.token_version))
+    token = create_jwt(user.id, user.token_version)
+    set_session_cookie(response, token)
     logger.info("user_registered", extra={"user_id": str(user.id)})
-    return to_user_read(user)
+    return to_auth_result(user, token)
 
 
 @router.post(
     "/login",
-    response_model=UserRead,
+    response_model=AuthResult,
     summary="Вход",
     description=(
         "Аутентификация по email/паролю. Устанавливает `session` cookie (httponly, 30 дней). "
@@ -275,7 +229,7 @@ async def login(
     payload: UserLogin,
     response: Response,
     session: DbSession,
-) -> UserRead:
+) -> AuthResult:
     user = await session.scalar(select(User).where(User.email == payload.email))
     if user is None:
         await verify_password_async(payload.password, DUMMY_PASSWORD_HASH)
@@ -290,9 +244,10 @@ async def login(
     await session.commit()
     await session.refresh(user)
 
-    set_session_cookie(response, create_jwt(user.id, user.token_version))
+    token = create_jwt(user.id, user.token_version)
+    set_session_cookie(response, token)
     logger.info("login_success", extra={"user_id": str(user.id)})
-    return to_user_read(user)
+    return to_auth_result(user, token)
 
 
 @router.get(
@@ -314,37 +269,40 @@ async def me(current_user: CurrentUser) -> UserRead:
 
 @router.get(
     "/github/connect",
+    response_model=GithubConnectResponse,
     summary="Начать привязку GitHub",
     description=(
-        "Редирект на GitHub OAuth (scope: `repo`). "
-        "CSRF-токен сохраняется в httponly cookie на 5 минут."
+        "Создаёт серверную запись OAuth-state и возвращает URL авторизации GitHub "
+        "(scope: `repo`). Фронт сам делает переход на этот URL. State живёт 5 минут. "
+        "Без куки — работает за гейтвеем, который режет Set-Cookie."
     ),
     responses={
-        302: {"description": "Редирект на github.com/login/oauth/authorize"},
+        200: {"description": "URL авторизации (или already_linked=true)"},
         401: {"description": "Нет активной сессии"},
     },
 )
 async def github_connect(
     request: Request,
+    session: DbSession,
     current_user: CurrentUser,
     return_to: str | None = None,
     reconnect: bool = False,
-) -> RedirectResponse:
-    redirect_url = build_frontend_redirect_url(request, return_to)
+) -> GithubConnectResponse:
     if current_user.github_linked and not reconnect:
-        response = RedirectResponse(
-            url=append_query_param(redirect_url, "github_linked", "1"),
-            status_code=status.HTTP_302_FOUND,
-        )
-        clear_github_oauth_state_cookie(response)
-        clear_github_oauth_return_to_cookie(response)
-        return response
+        return GithubConnectResponse(authorize_url=None, already_linked=True)
 
     state = generate_github_oauth_state()
-    response = RedirectResponse(url=get_github_oauth_url(state), status_code=status.HTTP_302_FOUND)
-    set_github_oauth_state_cookie(response, state)
-    set_github_oauth_return_to_cookie(response, redirect_url)
-    return response
+    session.add(
+        GithubOauthState(
+            state=state,
+            user_id=current_user.id,
+            return_to=build_frontend_redirect_url(request, return_to),
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(seconds=GITHUB_OAUTH_STATE_MAX_AGE_SECONDS),
+        )
+    )
+    await session.commit()
+    return GithubConnectResponse(authorize_url=get_github_oauth_url(state))
 
 
 @router.get(
@@ -364,82 +322,65 @@ async def github_connect(
 async def github_callback(
     state: str,
     session: DbSession,
-    current_user: CurrentUser,
     request: Request,
     code: str | None = None,
     error: str | None = None,
 ) -> Response:
+    settings = get_settings()
+    fallback_url = f"{settings.frontend_base_url.rstrip('/')}{DEFAULT_GITHUB_REDIRECT_PATH}"
+
+    def redirect(url: str, key: str, value: str) -> RedirectResponse:
+        return RedirectResponse(
+            url=append_query_param(url, key, value),
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    now = datetime.now(timezone.utc)
+    state_row = await session.scalar(
+        select(GithubOauthState).where(GithubOauthState.state == state)
+    )
+    if state_row is None or state_row.expires_at <= now:
+        return redirect(fallback_url, "github_error", "invalid_state")
+
+    return_to = state_row.return_to or fallback_url
+    user_id = state_row.user_id
+    # single-use: consume the state immediately, до любых внешних вызовов
+    await session.delete(state_row)
+    await session.commit()
+
     if error:
-        response = RedirectResponse(
-            url=build_github_callback_redirect(request, "github_error", error),
-            status_code=status.HTTP_302_FOUND,
-        )
-        clear_github_oauth_state_cookie(response)
-        clear_github_oauth_return_to_cookie(response)
-        return response
-
+        return redirect(return_to, "github_error", error)
     if not code:
-        response = RedirectResponse(
-            url=build_github_callback_redirect(request, "github_error", "missing_code"),
-            status_code=status.HTTP_302_FOUND,
-        )
-        clear_github_oauth_state_cookie(response)
-        clear_github_oauth_return_to_cookie(response)
-        return response
+        return redirect(return_to, "github_error", "missing_code")
 
-    github_oauth_state = request.cookies.get(GITHUB_OAUTH_STATE_COOKIE_NAME)
-    if not github_oauth_state or github_oauth_state != state:
-        response = RedirectResponse(
-            url=build_github_callback_redirect(request, "github_error", "invalid_state"),
-            status_code=status.HTTP_302_FOUND,
-        )
-        clear_github_oauth_state_cookie(response)
-        clear_github_oauth_return_to_cookie(response)
-        return response
+    user = await session.get(User, user_id)
+    if user is None:
+        return redirect(return_to, "github_error", "oauth_failed")
 
     try:
         access_token = await exchange_code_for_token(code)
         github_user = await get_github_user(access_token)
     except HTTPException:
-        response = RedirectResponse(
-            url=build_github_callback_redirect(request, "github_error", "oauth_failed"),
-            status_code=status.HTTP_302_FOUND,
-        )
-        clear_github_oauth_state_cookie(response)
-        clear_github_oauth_return_to_cookie(response)
-        return response
+        return redirect(return_to, "github_error", "oauth_failed")
 
     existing_user = await session.scalar(
         select(User).where(
             User.github_id == github_user["id"],
-            User.id != current_user.id,
+            User.id != user.id,
         )
     )
     if existing_user is not None:
-        response = RedirectResponse(
-            url=build_github_callback_redirect(request, "github_error", "already_linked"),
-            status_code=status.HTTP_302_FOUND,
-        )
-        clear_github_oauth_state_cookie(response)
-        clear_github_oauth_return_to_cookie(response)
-        return response
+        return redirect(return_to, "github_error", "already_linked")
 
-    current_user.github_id = int(github_user["id"])
-    current_user.github_login = str(github_user["login"])
-    current_user.github_access_token = encrypt_github_access_token(access_token)
+    user.github_id = int(github_user["id"])
+    user.github_login = str(github_user["login"])
+    user.github_access_token = encrypt_github_access_token(access_token)
     await session.commit()
     logger.info(
         "github_linked",
-        extra={"user_id": str(current_user.id), "github_login": current_user.github_login},
+        extra={"user_id": str(user.id), "github_login": user.github_login},
     )
-
-    response = RedirectResponse(
-        url=build_github_callback_redirect(request, "github_linked", "1"),
-        status_code=status.HTTP_302_FOUND,
-    )
-    clear_github_oauth_state_cookie(response)
-    clear_github_oauth_return_to_cookie(response)
-    return response
+    return redirect(return_to, "github_linked", "1")
 
 
 @router.post(

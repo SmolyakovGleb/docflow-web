@@ -7,7 +7,7 @@ from typing import Annotated
 
 import bcrypt
 import httpx
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, status
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -30,6 +30,22 @@ GITHUB_USER_URL = "https://api.github.com/user"
 
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 SessionToken = Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)]
+AuthHeader = Annotated[str | None, Header(alias="Authorization")]
+
+
+def extract_bearer_or_cookie(authorization: str | None, session_token: str | None) -> str | None:
+    """Токен из `Authorization: Bearer <jwt>` (приоритет), иначе из session-куки.
+
+    Bearer нужен за гейтвеем VibeCode (он режет Set-Cookie); кука — fallback для
+    локалки и сред без гейтвея.
+    """
+    if authorization:
+        scheme, _, value = authorization.partition(" ")
+        if scheme.lower() == "bearer" and value.strip():
+            return value.strip()
+    return session_token
+
+
 DUMMY_PASSWORD_HASH = bcrypt.hashpw(
     b"docflow-dummy-password",
     bcrypt.gensalt(),
@@ -171,13 +187,15 @@ def decode_jwt(token: str) -> dict:
 
 async def get_current_user(
     session: DbSession,
+    authorization: AuthHeader = None,
     session_token: SessionToken = None,
 ) -> User:
-    if not session_token:
+    token = extract_bearer_or_cookie(authorization, session_token)
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     try:
-        payload = decode_jwt(session_token)
+        payload = decode_jwt(token)
         user_id = uuid.UUID(payload["sub"])
         token_version = int(payload["tv"])
     except (JWTError, KeyError, ValueError) as exc:
