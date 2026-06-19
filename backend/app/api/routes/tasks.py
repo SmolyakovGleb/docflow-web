@@ -26,7 +26,7 @@ from app.schemas.task import (
     TaskUpdate,
 )
 from app.services import pipeline_runner, task_list_events
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_current_user_sse
 from app.services.projects import _get_user_team_id, get_project_visible_or_404
 from app.services.tasks import (
     PublishConflictError,
@@ -48,6 +48,8 @@ from app.services.tasks import (
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+# Для SSE-стримов: токен принимается ещё и query-параметром (EventSource без заголовков).
+CurrentUserSse = Annotated[User, Depends(get_current_user_sse)]
 logger = logging.getLogger(__name__)
 
 
@@ -140,7 +142,7 @@ async def get_tasks(
 async def task_list_events_stream(
     request: Request,
     session: DbSession,
-    current_user: CurrentUser,
+    current_user: CurrentUserSse,
     project_id: UUID | None = None,
     status: TaskStatus | None = None,
     search: str | None = Query(default=None, min_length=1, max_length=200),
@@ -517,7 +519,7 @@ async def task_events(
     task_id: UUID,
     request: Request,
     session: DbSession,
-    current_user: CurrentUser,
+    current_user: CurrentUserSse,
 ) -> StreamingResponse:
     task = await get_task_or_404(session, task_id, current_user)
     queue = pipeline_runner.TASK_EVENT_QUEUES.get(task.id)
