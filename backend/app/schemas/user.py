@@ -40,6 +40,18 @@ class UserRead(BaseModel):
     is_admin: bool
 
 
+class AuthResult(UserRead):
+    # JWT в теле ответа: фронт кладёт его в localStorage и шлёт `Authorization: Bearer`.
+    # Нужно, потому что за гейтвеем VibeCode httpOnly-кука (Set-Cookie) вырезается.
+    access_token: str
+
+
+class GithubConnectResponse(BaseModel):
+    # connect стал XHR-эндпоинтом (вместо 302): фронт получает URL и сам делает на него переход.
+    authorize_url: str | None = None
+    already_linked: bool = False
+
+
 class ChangePasswordRequest(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

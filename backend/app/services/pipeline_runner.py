@@ -21,7 +21,13 @@ from app.db.session import get_session_factory
 from app.models.project import Project
 from app.models.task import Task
 from app.models.user import User
-from app.services import dictionary_merger, incremental_translate, paragraph_diff, task_list_events
+from app.services import (
+    dictionary_merger,
+    github_app,
+    incremental_translate,
+    paragraph_diff,
+    task_list_events,
+)
 from app.services.auth import decrypt_github_access_token
 from app.services.file_formats import is_yaml_path
 from app.services.github import GitHubClient
@@ -340,6 +346,13 @@ async def _queue_worker() -> None:
 
 
 async def _build_github_client(session, project: Project) -> GitHubClient | None:
+    # Installation-токен GitHub App, если репа покрыта установкой; иначе OAuth владельца.
+    installation_token = await github_app.installation_token_for_repo(
+        session, project.source_repo
+    )
+    if installation_token is not None:
+        return GitHubClient(installation_token)
+
     owner = await session.get(User, project.user_id)
     if owner is None or not owner.github_access_token:
         return None

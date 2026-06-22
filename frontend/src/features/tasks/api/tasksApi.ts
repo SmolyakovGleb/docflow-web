@@ -1,4 +1,5 @@
 import { baseApi } from '@/shared/api/baseApi'
+import { getAccessToken } from '@/shared/lib/authToken'
 import type {
   BatchPublishResponse,
   RetryTaskResponse,
@@ -17,8 +18,19 @@ export interface GetTasksParams {
   offset?: number
 }
 
+// EventSource не умеет слать заголовок Authorization, а за гейтвеем VibeCode
+// нет и куки — поэтому SSE-токен передаём query-параметром.
+function withAccessToken(url: string): string {
+  const token = getAccessToken()
+  if (!token) {
+    return url
+  }
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}access_token=${encodeURIComponent(token)}`
+}
+
 export function getTaskEventsUrl(taskId: string) {
-  return `/api/tasks/${taskId}/events`
+  return withAccessToken(`/api/tasks/${taskId}/events`)
 }
 
 export function getTaskListEventsUrl(params: GetTasksParams = {}) {
@@ -35,7 +47,7 @@ export function getTaskListEventsUrl(params: GetTasksParams = {}) {
   }
 
   const query = searchParams.toString()
-  return query ? `/api/tasks/events?${query}` : '/api/tasks/events'
+  return withAccessToken(query ? `/api/tasks/events?${query}` : '/api/tasks/events')
 }
 
 export const tasksApi = baseApi.injectEndpoints({
@@ -55,7 +67,7 @@ export const tasksApi = baseApi.injectEndpoints({
       },
       providesTags: (result) => [
         'Task',
-        ...(result?.items.map((task) => ({ type: 'Task' as const, id: task.id })) ?? []),
+        ...(result?.items?.map((task) => ({ type: 'Task' as const, id: task.id })) ?? []),
       ],
     }),
     getTask: builder.query<TaskDetail, string>({

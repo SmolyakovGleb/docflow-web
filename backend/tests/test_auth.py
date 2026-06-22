@@ -66,6 +66,26 @@ async def test_login_success(client, test_user):
     assert response.status_code == 200
     assert response.json()["email"] == "test@example.com"
     assert "session" in response.cookies
+    assert response.json()["access_token"]
+
+
+async def test_bearer_token_authenticates_without_cookie(client, test_user):
+    # Ради чего переделка: вход держится на Bearer-заголовке, даже когда
+    # session-куки нет (её режет гейтвей VibeCode на Set-Cookie).
+    login = await client.post(
+        "/auth/login",
+        json={"email": "test@example.com", "password": "testpassword"},
+    )
+    token = login.json()["access_token"]
+
+    client.cookies.clear()
+    response = await client.get(
+        "/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "test@example.com"
 
 
 async def test_login_wrong_password(client, test_user):

@@ -12,6 +12,7 @@ from app.models.commit_group import CommitGroup
 from app.models.user import User
 from app.schemas.commit_group import CommitGroupListResponse, CommitGroupRead
 from app.services import task_list_events
+from app.services import github_app
 from app.services.auth import decrypt_github_access_token, get_current_user
 from app.services.commit_groups import confirm_commit_group, list_commit_groups
 from app.services.github import GitHubClient
@@ -75,11 +76,15 @@ async def confirm_group_route(
     # Tasks always run with the project owner's GitHub token, so a team member
     # can confirm a group even if their own GitHub account is not linked.
     owner = await _get_project_owner(session, group.project)
-    if not owner.github_linked or not owner.github_access_token:
-        raise HTTPException(status_code=400, detail="GitHub account is not linked")
-
-    access_token = decrypt_github_access_token(owner.github_access_token)
-    github_client = GitHubClient(access_token)
+    installation_token = await github_app.installation_token_for_repo(
+        session, group.project.source_repo
+    )
+    if installation_token is not None:
+        github_client = GitHubClient(installation_token)
+    else:
+        if not owner.github_linked or not owner.github_access_token:
+            raise HTTPException(status_code=400, detail="GitHub account is not linked")
+        github_client = GitHubClient(decrypt_github_access_token(owner.github_access_token))
     tasks = await confirm_commit_group(session, group, owner, github_client)
     return {"created": len(tasks), "task_ids": [str(t.id) for t in tasks]}
 

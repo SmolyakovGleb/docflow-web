@@ -178,6 +178,42 @@ async def test_get_user_repos_returns_all_non_archived(mocked_async_client):
     assert mocked_async_client.get.await_count == 3
 
 
+async def test_list_installation_repos_paginates_and_filters(mocked_async_client):
+    mocked_async_client.get.side_effect = [
+        make_response(
+            "GET",
+            "https://api.github.com/installation/repositories?page=1",
+            200,
+            json={
+                "total_count": 3,
+                "repositories": [
+                    {"full_name": "acme/docs-ru", "archived": False},
+                    {"full_name": "acme/old", "archived": True},
+                ],
+            },
+        ),
+        make_response(
+            "GET",
+            "https://api.github.com/installation/repositories?page=2",
+            200,
+            json={"total_count": 3, "repositories": [{"full_name": "acme/docs-en"}]},
+        ),
+        make_response(
+            "GET",
+            "https://api.github.com/installation/repositories?page=3",
+            200,
+            json={"total_count": 3, "repositories": []},
+        ),
+    ]
+
+    client = GitHubClient("installation-token")
+
+    repos = await client.list_installation_repos()
+
+    assert repos == ["acme/docs-ru", "acme/docs-en"]
+    assert mocked_async_client.get.await_count == 3
+
+
 async def test_create_or_update_file_without_sha(mocked_async_client):
     mocked_async_client.put.return_value = make_response(
         "PUT",

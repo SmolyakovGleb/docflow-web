@@ -21,7 +21,7 @@ from app.schemas.project import (
     ProjectUpdate,
     ProjectWebhookSecretResponse,
 )
-from app.services import pipeline_runner
+from app.services import github_app, pipeline_runner
 from app.services.auth import (
     decrypt_github_access_token,
     encrypt_webhook_secret,
@@ -163,10 +163,16 @@ async def get_project_files(
         if project.user_id == current_user.id
         else await session.get(User, project.user_id)
     )
-    ensure_github_linked(project_owner)
-    github_client = GitHubClient(decrypt_github_access_token(project_owner.github_access_token))
     repo = project.target_repo if use_target else project.source_repo
     branch = project.target_branch if use_target else project.source_branch
+    installation_token = await github_app.installation_token_for_repo(session, repo)
+    if installation_token is not None:
+        github_client = GitHubClient(installation_token)
+    else:
+        ensure_github_linked(project_owner)
+        github_client = GitHubClient(
+            decrypt_github_access_token(project_owner.github_access_token)
+        )
     items = await github_client.get_repo_tree(repo, branch, normalized_path)
     return ProjectFilesResponse(items=items)
 

@@ -347,3 +347,33 @@ class GitHubClient:
                     repos.append(full_name)
 
             page += 1
+
+    async def list_installation_repos(self) -> list[str]:
+        """Репозитории, доступные текущей установке GitHub App.
+
+        Требует installation-токен. Возвращает ровно те репы, что админ выбрал
+        при установке App — в отличие от `get_user_repos` (все репы пользователя).
+        """
+        repos: list[str] = []
+        page = 1
+
+        while True:
+            response = await self._get(
+                f"{GITHUB_API_BASE_URL}/installation/repositories",
+                params={"per_page": "100", "page": str(page)},
+            )
+            self._raise_for_error(response)
+
+            payload = response.json()
+            items = payload.get("repositories") if isinstance(payload, dict) else None
+            if not items:
+                return repos
+
+            for repo_data in items:
+                if repo_data.get("archived"):
+                    continue
+                full_name = repo_data.get("full_name")
+                if isinstance(full_name, str):
+                    repos.append(full_name)
+
+            page += 1

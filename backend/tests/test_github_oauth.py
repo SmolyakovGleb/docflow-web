@@ -30,14 +30,16 @@ async def test_connect_unauthenticated(client, github_oauth_settings):
     assert response.json() == {"detail": "Not authenticated"}
 
 
-async def test_connect_redirects_to_github(auth_client, github_oauth_settings):
+async def test_connect_returns_authorize_url(auth_client, github_oauth_settings):
     response = await auth_client.get("/auth/github/connect", follow_redirects=False)
 
-    assert response.status_code == 302
-    assert response.cookies["github_oauth_state"]
-    assert response.cookies["github_oauth_return_to"].strip('"') == "http://localhost:3000/tasks"
+    assert response.status_code == 200
+    body = response.json()
+    assert body["already_linked"] is False
+    # state живёт на сервере, а не в куке — Set-Cookie за гейтвеем режется
+    assert "github_oauth_state" not in response.cookies
 
-    location = urlparse(response.headers["location"])
+    location = urlparse(body["authorize_url"])
     params = parse_qs(location.query)
 
     assert location.scheme == "https"
@@ -46,7 +48,7 @@ async def test_connect_redirects_to_github(auth_client, github_oauth_settings):
     assert params["client_id"] == ["github-client-id"]
     assert params["scope"] == ["repo"]
     assert params["redirect_uri"] == ["http://localhost:3000/auth/github/callback"]
-    assert params["state"] == [response.cookies["github_oauth_state"]]
+    assert params["state"]
 
 
 async def test_callback_saves_token(
@@ -61,7 +63,7 @@ async def test_callback_saves_token(
         follow_redirects=False,
         headers={"referer": "http://localhost:5173/repositories/new"},
     )
-    state = extract_state(connect_response.headers["location"])
+    state = extract_state(connect_response.json()["authorize_url"])
 
     mocker.patch("app.api.routes.auth.exchange_code_for_token", return_value="github-access-token")
     mocker.patch(
@@ -139,7 +141,7 @@ async def test_callback_account_already_linked(
         "/auth/github/connect?reconnect=1",
         follow_redirects=False,
     )
-    state = extract_state(connect_response.headers["location"])
+    state = extract_state(connect_response.json()["authorize_url"])
 
     mocker.patch("app.api.routes.auth.exchange_code_for_token", return_value="github-access-token")
     mocker.patch(
@@ -161,14 +163,16 @@ async def test_callback_account_already_linked(
     assert test_user.github_access_token is None
 
 
-async def test_callback_without_session_returns_401(client, github_oauth_settings):
+async def test_callback_unknown_state_no_session(client, github_oauth_settings):
+    # Callback больше не требует сессии — личность берётся из серверного state.
+    # Неизвестный state → редирект с ошибкой (а не 401).
     response = await client.get(
-        "/auth/github/callback?code=test-code&state=test-state",
+        "/auth/github/callback?code=test-code&state=unknown-state",
         follow_redirects=False,
     )
 
-    assert response.status_code == 401
-    assert response.json() == {"detail": "Not authenticated"}
+    assert response.status_code == 302
+    assert response.headers["location"] == "http://localhost:3000/tasks?github_error=invalid_state"
 
 
 async def test_callback_relinks_same_user_and_refreshes_token(
@@ -187,7 +191,7 @@ async def test_callback_relinks_same_user_and_refreshes_token(
         "/auth/github/connect?reconnect=1",
         follow_redirects=False,
     )
-    state = extract_state(connect_response.headers["location"])
+    state = extract_state(connect_response.json()["authorize_url"])
 
     mocker.patch(
         "app.api.routes.auth.exchange_code_for_token",
@@ -216,7 +220,7 @@ async def test_callback_relinks_same_user_and_refreshes_token(
     }
 
 
-async def test_connect_returns_to_current_frontend_screen_when_already_linked(
+async def test_connect_already_linked_returns_no_url(
     auth_client,
     db_session,
     test_user,
@@ -233,8 +237,10 @@ async def test_connect_returns_to_current_frontend_screen_when_already_linked(
         headers={"referer": "http://localhost:5173/repositories/new"},
     )
 
-    assert response.status_code == 302
-    assert response.headers["location"] == "http://localhost:5173/repositories/new?github_linked=1"
+    assert response.status_code == 200
+    body = response.json()
+    assert body["already_linked"] is True
+    assert body["authorize_url"] is None
 
 
 async def test_disconnect_unauthenticated(client):

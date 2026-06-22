@@ -7,7 +7,7 @@ from typing import Annotated
 
 import bcrypt
 import httpx
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Query, status
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -30,6 +30,25 @@ GITHUB_USER_URL = "https://api.github.com/user"
 
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 SessionToken = Annotated[str | None, Cookie(alias=SESSION_COOKIE_NAME)]
+AuthHeader = Annotated[str | None, Header(alias="Authorization")]
+# EventSource (SSE) не умеет слать заголовок Authorization, поэтому для стримов
+# токен принимаем ещё и query-параметром.
+SseQueryToken = Annotated[str | None, Query(alias="access_token")]
+
+
+def extract_bearer_or_cookie(authorization: str | None, session_token: str | None) -> str | None:
+    """Токен из `Authorization: Bearer <jwt>` (приоритет), иначе из session-куки.
+
+    Bearer нужен за гейтвеем VibeCode (он режет Set-Cookie); кука — fallback для
+    локалки и сред без гейтвея.
+    """
+    if authorization:
+        scheme, _, value = authorization.partition(" ")
+        if scheme.lower() == "bearer" and value.strip():
+            return value.strip()
+    return session_token
+
+
 DUMMY_PASSWORD_HASH = bcrypt.hashpw(
     b"docflow-dummy-password",
     bcrypt.gensalt(),
@@ -169,15 +188,12 @@ def decode_jwt(token: str) -> dict:
     return jwt.decode(token, settings.session_secret, algorithms=[ALGORITHM])
 
 
-async def get_current_user(
-    session: DbSession,
-    session_token: SessionToken = None,
-) -> User:
-    if not session_token:
+async def _resolve_user_from_token(session: AsyncSession, token: str | None) -> User:
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     try:
-        payload = decode_jwt(session_token)
+        payload = decode_jwt(token)
         user_id = uuid.UUID(payload["sub"])
         token_version = int(payload["tv"])
     except (JWTError, KeyError, ValueError) as exc:
@@ -192,6 +208,26 @@ async def get_current_user(
 
     set_user_id(str(user.id))
     return user
+
+
+async def get_current_user(
+    session: DbSession,
+    authorization: AuthHeader = None,
+    session_token: SessionToken = None,
+) -> User:
+    token = extract_bearer_or_cookie(authorization, session_token)
+    return await _resolve_user_from_token(session, token)
+
+
+async def get_current_user_sse(
+    session: DbSession,
+    access_token: SseQueryToken = None,
+    authorization: AuthHeader = None,
+    session_token: SessionToken = None,
+) -> User:
+    # Приоритет у query-параметра (EventSource), затем Bearer/кука.
+    token = access_token or extract_bearer_or_cookie(authorization, session_token)
+    return await _resolve_user_from_token(session, token)
 
 
 async def require_admin(current_user: User = Depends(get_current_user)) -> User:

@@ -19,7 +19,7 @@ from app.models.publication import Publication
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.task import ManualTaskFromRepo, TaskStatus, TaskUpdate
-from app.services import bitrix_notify, task_list_events
+from app.services import bitrix_notify, github_app, task_list_events
 from app.services.auth import decrypt_github_access_token
 from app.services.file_formats import (
     is_safe_relative_path,
@@ -95,6 +95,20 @@ def ensure_github_access(user: User) -> str:
         )
 
     return decrypt_github_access_token(user.github_access_token)
+
+
+async def resolve_repo_token(
+    session: AsyncSession, repo_full_name: str, fallback_user: User
+) -> str:
+    """installation-токен GitHub App для репы, иначе OAuth-токен fallback_user.
+
+    Позволяет публиковать/читать через App даже если у участника команды нет
+    привязанного GitHub-аккаунта.
+    """
+    token = await github_app.installation_token_for_repo(session, repo_full_name)
+    if token is not None:
+        return token
+    return ensure_github_access(fallback_user)
 
 
 def _visibility_condition(user_id: UUID, team_id: UUID | None):
@@ -392,8 +406,9 @@ async def create_manual_tasks_from_repo(
         if project.user_id == current_user.id
         else await session.get(User, project.user_id)
     )
-    access_token = ensure_github_access(project_owner)
-    github_client = GitHubClient(access_token)
+    github_client = GitHubClient(
+        await resolve_repo_token(session, project.source_repo, project_owner)
+    )
 
     unique_paths = list(dict.fromkeys(payload.file_paths))
     candidate_paths, skipped = _apply_exclude_patterns(unique_paths, project.exclude_patterns)
@@ -557,10 +572,11 @@ async def reset_task_for_retry(
     expected_status = task.status
 
     if not is_manual_upload_task(task):
-        access_token = ensure_github_access(current_user)
-        github_client = GitHubClient(access_token)
         if task.project is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        github_client = GitHubClient(
+            await resolve_repo_token(session, task.project.source_repo, current_user)
+        )
         current_sha = await github_client.get_file_sha(
             task.project.source_repo,
             task.file_path,
@@ -625,8 +641,9 @@ async def publish_task(
             detail="Task has no target repository",
         )
 
-    access_token = ensure_github_access(current_user)
-    github_client = GitHubClient(access_token)
+    github_client = GitHubClient(
+        await resolve_repo_token(session, project.target_repo, current_user)
+    )
 
     if target_path:
         _ensure_safe_relative_path(target_path, field="target_path")
@@ -731,9 +748,6 @@ async def publish_tasks_batch(
     if not task_ids:
         return BatchPublishResult()
 
-    access_token = ensure_github_access(current_user)
-    github_client = GitHubClient(access_token)
-
     team_id = await _get_user_team_id(session, current_user.id)
     visibility = _visibility_condition(current_user.id, team_id)
     stmt = (
@@ -759,6 +773,7 @@ async def publish_tasks_batch(
     result = BatchPublishResult()
 
     for (repo, branch), group_tasks in groups.items():
+        github_client = GitHubClient(await resolve_repo_token(session, repo, current_user))
         # Check all file SHAs in parallel to detect conflicts
         current_shas: list[str | None] = list(
             await asyncio.gather(

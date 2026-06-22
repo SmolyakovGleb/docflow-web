@@ -26,7 +26,7 @@ from app.schemas.task import (
     TaskUpdate,
 )
 from app.services import pipeline_runner, task_list_events
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_current_user_sse
 from app.services.projects import _get_user_team_id, get_project_visible_or_404
 from app.services.tasks import (
     PublishConflictError,
@@ -48,6 +48,8 @@ from app.services.tasks import (
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+# Для SSE-стримов: токен принимается ещё и query-параметром (EventSource без заголовков).
+CurrentUserSse = Annotated[User, Depends(get_current_user_sse)]
 logger = logging.getLogger(__name__)
 
 
@@ -140,7 +142,7 @@ async def get_tasks(
 async def task_list_events_stream(
     request: Request,
     session: DbSession,
-    current_user: CurrentUser,
+    current_user: CurrentUserSse,
     project_id: UUID | None = None,
     status: TaskStatus | None = None,
     search: str | None = Query(default=None, min_length=1, max_length=200),
@@ -157,6 +159,12 @@ async def task_list_events_stream(
         project_id=project_id,
         search=search,
     )
+
+    # КРИТИЧНО: SSE-стрим живёт долго (минуты/часы). Если держать request-scoped
+    # DB-сессию весь стрим, пул соединений (5+10) исчерпывается за несколько открытых
+    # вкладок → все запросы падают с QueuePool timeout. Стрим читает только in-memory
+    # очередь подписки и БД не трогает — освобождаем соединение в пул сразу.
+    await session.close()
 
     async def _stream() -> AsyncIterator[str]:
         try:
@@ -177,7 +185,11 @@ async def task_list_events_stream(
         finally:
             task_list_events.close_subscription(subscription.id)
 
-    return StreamingResponse(_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers=TASK_EVENTS_STREAM_HEADERS,
+    )
 
 
 @router.post(
@@ -517,20 +529,26 @@ async def task_events(
     task_id: UUID,
     request: Request,
     session: DbSession,
-    current_user: CurrentUser,
+    current_user: CurrentUserSse,
 ) -> StreamingResponse:
     task = await get_task_or_404(session, task_id, current_user)
-    queue = pipeline_runner.TASK_EVENT_QUEUES.get(task.id)
+    resolved_task_id = task.id
+    task_status = task.status
+    queue = pipeline_runner.TASK_EVENT_QUEUES.get(resolved_task_id)
+
+    # Освобождаем DB-соединение до начала (долгого) стрима — иначе пул исчерпывается.
+    # Дальше используем только in-memory очередь и локальные значения, БД не нужна.
+    await session.close()
 
     if queue is None:
         return StreamingResponse(
-            _single_status_event(task.status),
+            _single_status_event(task_status),
             media_type="text/event-stream",
             headers=TASK_EVENTS_STREAM_HEADERS,
         )
 
     return StreamingResponse(
-        _stream_task_events(task.id, request),
+        _stream_task_events(resolved_task_id, request),
         media_type="text/event-stream",
         headers=TASK_EVENTS_STREAM_HEADERS,
     )

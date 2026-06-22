@@ -8,6 +8,7 @@ import pytest
 from app.api.routes import tasks as task_routes
 from app.models.task import Task
 from app.services import pipeline_runner, task_list_events
+from app.services.auth import create_jwt
 
 
 async def create_task(db_session, test_project, status: str) -> Task:
@@ -157,6 +158,46 @@ async def test_task_list_events_stream_emits_matching_scope_event(
     assert response.status_code == 200
     assert "event: task_entered" in text
     assert f'"task_id": "{task.id}"' in text
+
+
+async def test_task_events_query_token_authenticates_without_cookie(
+    client,
+    db_session,
+    test_project,
+    test_user,
+):
+    # EventSource не шлёт Authorization, а за гейтвеем нет куки — токен в query.
+    task_list_events.TASK_LIST_EVENT_SUBSCRIPTIONS.clear()
+    task = await create_task(db_session, test_project, "queued")
+    token = create_jwt(test_user.id, test_user.token_version)
+
+    async def emit_once_subscribed():
+        while not task_list_events.TASK_LIST_EVENT_SUBSCRIPTIONS:
+            await asyncio.sleep(0)
+        subscription = next(iter(task_list_events.TASK_LIST_EVENT_SUBSCRIPTIONS.values()))
+        task_list_events.publish_task_entered_scope(task)
+        task_list_events.close_subscription(subscription.id)
+
+    emitter = asyncio.create_task(emit_once_subscribed())
+    try:
+        async with client.stream(
+            "GET", f"/tasks/events?status=queued&access_token={token}"
+        ) as response:
+            body = await response.aread()
+    finally:
+        await emitter
+
+    text = body.decode("utf-8")
+    assert response.status_code == 200
+    assert "event: task_entered" in text
+
+
+async def test_task_events_without_token_or_cookie_returns_401(client, db_session, test_project):
+    task = await create_task(db_session, test_project, "done")
+
+    response = await client.get(f"/tasks/{task.id}/events")
+
+    assert response.status_code == 401
 
 
 async def test_task_list_events_stream_emits_when_task_enters_status_scope(

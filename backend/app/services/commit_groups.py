@@ -67,7 +67,8 @@ async def confirm_commit_group(
     project = commit_group.project
     try:
         fetched = await asyncio.gather(*[
-            _fetch_file_metadata_safe(github_client, project, fp) for fp in to_process
+            _fetch_file_metadata_safe(github_client, github_client, project, fp)
+            for fp in to_process
         ])
     except Exception:
         commit_group.status = "pending_confirmation"
