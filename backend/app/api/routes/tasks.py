@@ -160,6 +160,12 @@ async def task_list_events_stream(
         search=search,
     )
 
+    # КРИТИЧНО: SSE-стрим живёт долго (минуты/часы). Если держать request-scoped
+    # DB-сессию весь стрим, пул соединений (5+10) исчерпывается за несколько открытых
+    # вкладок → все запросы падают с QueuePool timeout. Стрим читает только in-memory
+    # очередь подписки и БД не трогает — освобождаем соединение в пул сразу.
+    await session.close()
+
     async def _stream() -> AsyncIterator[str]:
         try:
             while True:
@@ -526,17 +532,23 @@ async def task_events(
     current_user: CurrentUserSse,
 ) -> StreamingResponse:
     task = await get_task_or_404(session, task_id, current_user)
-    queue = pipeline_runner.TASK_EVENT_QUEUES.get(task.id)
+    resolved_task_id = task.id
+    task_status = task.status
+    queue = pipeline_runner.TASK_EVENT_QUEUES.get(resolved_task_id)
+
+    # Освобождаем DB-соединение до начала (долгого) стрима — иначе пул исчерпывается.
+    # Дальше используем только in-memory очередь и локальные значения, БД не нужна.
+    await session.close()
 
     if queue is None:
         return StreamingResponse(
-            _single_status_event(task.status),
+            _single_status_event(task_status),
             media_type="text/event-stream",
             headers=TASK_EVENTS_STREAM_HEADERS,
         )
 
     return StreamingResponse(
-        _stream_task_events(task.id, request),
+        _stream_task_events(resolved_task_id, request),
         media_type="text/event-stream",
         headers=TASK_EVENTS_STREAM_HEADERS,
     )
