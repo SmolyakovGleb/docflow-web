@@ -30,6 +30,26 @@ class Settings(BaseSettings):
     model: str | None = Field(default=None, alias="MODEL")
     app_base_url: str = Field(default="http://localhost:8080", alias="APP_BASE_URL")
 
+    # GitHub App (точечный доступ к выбранным репам через installation-токены).
+    # Сосуществует со старым OAuth App (dual-mode) во время миграции.
+    github_app_id: str | None = Field(default=None, alias="GITHUB_APP_ID")
+    github_app_slug: str | None = Field(default=None, alias="GITHUB_APP_SLUG")
+    github_app_private_key: str | None = Field(default=None, alias="GITHUB_APP_PRIVATE_KEY")
+    github_app_webhook_secret: str | None = Field(default=None, alias="GITHUB_APP_WEBHOOK_SECRET")
+
+    @field_validator("github_app_private_key", mode="before")
+    @classmethod
+    def normalize_private_key(cls, v: str | None) -> str | None:
+        # В .env PEM обычно хранят одной строкой с литеральными \n — разворачиваем
+        # обратно в настоящие переводы строк, чтобы jose принял ключ.
+        if isinstance(v, str) and "\\n" in v and "-----BEGIN" in v:
+            return v.replace("\\n", "\n")
+        return v
+
+    @property
+    def github_app_enabled(self) -> bool:
+        return bool(self.github_app_id and self.github_app_private_key)
+
     @field_validator("debug", mode="before")
     @classmethod
     def validate_debug(cls, v: bool | str) -> bool:

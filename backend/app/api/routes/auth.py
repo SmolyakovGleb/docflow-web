@@ -26,6 +26,7 @@ from app.schemas.user import (
     UserRead,
     UserRegister,
 )
+from app.services import github_app
 from app.services.auth import (
     DUMMY_PASSWORD_HASH,
     GITHUB_OAUTH_STATE_MAX_AGE_SECONDS,
@@ -41,6 +42,7 @@ from app.services.auth import (
     hash_password_async,
     verify_password_async,
 )
+from app.services.projects import _get_user_team_id
 
 limiter = Limiter(key_func=get_remote_address)
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
@@ -381,6 +383,128 @@ async def github_callback(
         extra={"user_id": str(user.id), "github_login": user.github_login},
     )
     return redirect(return_to, "github_linked", "1")
+
+
+@router.get(
+    "/github/install",
+    summary="Начать установку GitHub App",
+    description=(
+        "Возвращает URL страницы установки GitHub App (с подписанным `state`), куда "
+        "фронт сам делает переход. JSON, а не 302 — чтобы запрос нёс Bearer за "
+        "гейтвеем, режущим куки (как `/auth/github/connect`). Требует `GITHUB_APP_SLUG`."
+    ),
+    responses={
+        200: {"description": "URL установки в поле install_url"},
+        401: {"description": "Нет активной сессии"},
+        500: {"description": "GitHub App не сконфигурирован"},
+    },
+)
+async def github_install(
+    request: Request,
+    session: DbSession,
+    current_user: CurrentUser,
+    return_to: str | None = None,
+) -> dict[str, str]:
+    settings = get_settings()
+    if not settings.github_app_slug:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GitHub App is not configured",
+        )
+    # Подписанный state (cookieless, как в OAuth-флоу) — привязывает будущую
+    # установку к этому пользователю в /github/setup, минуя стрипающий куки гейтвей.
+    state = generate_github_oauth_state()
+    session.add(
+        GithubOauthState(
+            state=state,
+            user_id=current_user.id,
+            return_to=build_frontend_redirect_url(request, return_to),
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(seconds=GITHUB_OAUTH_STATE_MAX_AGE_SECONDS),
+        )
+    )
+    await session.commit()
+    install_url = (
+        f"https://github.com/apps/{settings.github_app_slug}"
+        f"/installations/new?state={state}"
+    )
+    return {"install_url": install_url}
+
+
+@router.get(
+    "/github/setup",
+    summary="Callback после установки GitHub App",
+    description=(
+        "GitHub возвращает сюда `installation_id` и `setup_action` после установки. "
+        "Сохраняет установку и кэш её репозиториев, затем редиректит на фронт."
+    ),
+    responses={
+        302: {"description": "Установка сохранена, редирект на фронт"},
+    },
+)
+async def github_setup(
+    request: Request,
+    session: DbSession,
+    installation_id: int | None = None,
+    setup_action: str | None = None,
+    state: str | None = None,
+) -> Response:
+    settings = get_settings()
+    target = f"{settings.frontend_base_url.rstrip('/')}/settings"
+
+    def _redirect(key: str, value: str, url: str = target) -> RedirectResponse:
+        return RedirectResponse(
+            url=append_query_param(url, key, value),
+            status_code=status.HTTP_302_FOUND,
+        )
+
+    if setup_action not in {"install", "update"} or installation_id is None:
+        return _redirect("github_app_installed", "1")
+
+    # Привязываем установку к пользователю ТОЛЬКО по валидному подписанному state.
+    # Без него БД не трогаем (источник правды для непривязанных — подписанный вебхук).
+    now = datetime.now(timezone.utc)
+    state_row = (
+        await session.scalar(
+            select(GithubOauthState).where(GithubOauthState.state == state)
+        )
+        if state
+        else None
+    )
+    if state_row is None or state_row.expires_at <= now:
+        logger.warning(
+            "github_app_setup_no_valid_state",
+            extra={"installation_id": installation_id},
+        )
+        return _redirect("github_error", "invalid_state")
+
+    user_id = state_row.user_id
+    return_to = state_row.return_to or target
+    await session.delete(state_row)  # single-use
+    await session.commit()
+
+    team_id = await _get_user_team_id(session, user_id)
+    try:
+        await github_app.sync_installation(
+            session,
+            installation_id=installation_id,
+            account_login=None,
+            account_type=None,
+            created_by_user_id=user_id,
+            team_id=team_id,
+        )
+        await session.commit()
+        logger.info(
+            "github_app_installed",
+            extra={"installation_id": installation_id, "user_id": str(user_id)},
+        )
+    except github_app.GithubAppError:
+        logger.exception(
+            "github_app_setup_failed", extra={"installation_id": installation_id}
+        )
+        return _redirect("github_error", "app_setup_failed", return_to)
+
+    return _redirect("github_app_installed", "1", return_to)
 
 
 @router.post(

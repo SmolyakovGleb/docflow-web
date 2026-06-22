@@ -1,5 +1,9 @@
 from app.models.commit_group import CommitGroup  # noqa: F401
 from app.models.dictionary_entry import DictionaryEntry  # noqa: F401
+from app.models.github_installation import (  # noqa: F401
+    GithubInstallation,
+    GithubInstallationRepo,
+)
 from app.models.github_oauth_state import GithubOauthState  # noqa: F401
 from app.models.invite_token import InviteToken  # noqa: F401
 from app.models.notification_channel import NotificationChannel  # noqa: F401

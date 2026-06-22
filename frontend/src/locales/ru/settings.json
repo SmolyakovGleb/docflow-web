@@ -31,7 +31,12 @@
     "disconnect_success": "GitHub отключён",
     "not_connected_description": "Подключите GitHub чтобы включить webhook-интеграцию и публикацию переводов в репозитории.",
     "connect": "Подключить GitHub",
-    "error_title": "Ошибка подключения GitHub"
+    "error_title": "Ошибка подключения GitHub",
+    "app_section": "Доступ к репозиториям (GitHub App)",
+    "app_description": "Установите GitHub App на нужные репозитории, чтобы выдать точечный доступ (чтение исходников и публикация переводов) без доступа ко всем репозиториям организации.",
+    "app_install": "Установить / настроить доступ",
+    "app_installed_success": "GitHub App установлен — репозитории доступны",
+    "app_install_error": "Не удалось запустить установку GitHub App"
   },
   "notifications": {
     "title": "Уведомления",

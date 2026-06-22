@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { useDisconnectGithubMutation } from '@/features/auth/api/authApi'
+import { redirectToGithubAppInstall } from '@/features/auth/lib/redirectToGithubAppInstall'
 import { redirectToGithubConnect } from '@/features/auth/lib/redirectToGithubConnect'
 import { selectUser } from '@/features/auth/model/authSlice'
 import { translateApiError } from '@/shared/lib/errorMessages'
@@ -22,6 +23,25 @@ export function GithubPage() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const githubError = searchParams.get('github_error')
+  const appInstalled = searchParams.get('github_app_installed')
+
+  useEffect(() => {
+    if (appInstalled) {
+      toast.success(t('github.app_installed_success'))
+      const next = new URLSearchParams(searchParams)
+      next.delete('github_app_installed')
+      setSearchParams(next, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appInstalled])
+
+  const handleInstallApp = async () => {
+    try {
+      await redirectToGithubAppInstall()
+    } catch (err) {
+      toast.error(translateApiError(err))
+    }
+  }
 
   const handleDisconnect = async () => {
     try {
@@ -75,7 +95,7 @@ export function GithubPage() {
           <ActionBanner
             icon={<GitHubMark size={16} />}
             action={
-              <Button variant="secondary" size="sm" onClick={() => redirectToGithubConnect()}>
+              <Button variant="secondary" size="sm" onClick={() => void redirectToGithubConnect()}>
                 {t('github.connect')}
               </Button>
             }
@@ -83,6 +103,19 @@ export function GithubPage() {
             {t('github.not_connected_description')}
           </ActionBanner>
         )}
+      </SectionCard>
+
+      <SectionCard label={t('github.app_section')}>
+        <ActionBanner
+          icon={<GitHubMark size={16} />}
+          action={
+            <Button variant="secondary" size="sm" onClick={() => void handleInstallApp()}>
+              {t('github.app_install')}
+            </Button>
+          }
+        >
+          {t('github.app_description')}
+        </ActionBanner>
       </SectionCard>
 
       <ConfirmDialog
