@@ -181,7 +181,7 @@ function RepositoryDetailContent({
   }
 
   const totalTasks = tasks?.total ?? 0
-  const hasTasks = Boolean(tasks?.items.length)
+  const hasTasks = Boolean(tasks?.items?.length)
 
   return (
     <section className={styles.page}>
@@ -397,7 +397,7 @@ function RepositoryDetailContent({
             <Skeleton variant="rect" height={92} />
           ) : hasTasks ? (
             <div className={styles.taskList}>
-              {tasks?.items.map((task) => (
+              {tasks?.items?.map((task) => (
                 <Link key={task.id} className={styles.taskItem} to={`/tasks/${task.id}`}>
                   <div className={styles.taskMain}>
                     <div className={styles.taskPath}>{task.file_path}</div>

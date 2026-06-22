@@ -67,7 +67,7 @@ export const tasksApi = baseApi.injectEndpoints({
       },
       providesTags: (result) => [
         'Task',
-        ...(result?.items.map((task) => ({ type: 'Task' as const, id: task.id })) ?? []),
+        ...(result?.items?.map((task) => ({ type: 'Task' as const, id: task.id })) ?? []),
       ],
     }),
     getTask: builder.query<TaskDetail, string>({

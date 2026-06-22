@@ -105,7 +105,9 @@ export function TaskListPage() {
   const [retryTask] = useRetryTaskMutation()
   const [deleteTask, { isLoading: isDeletingTask }] = useDeleteTaskMutation()
 
-  const tasks = tasksResponse?.items ?? EMPTY_TASKS
+  // Жёсткая защита от неожиданной формы ответа (ошибка/не-массив) — иначе .map
+  // ниже роняет всю страницу в ErrorBoundary вместо показа состояния ошибки.
+  const tasks = Array.isArray(tasksResponse?.items) ? tasksResponse.items : EMPTY_TASKS
   const visibleTaskIds = useMemo(() => tasks.map((task) => task.id), [tasks])
   const selectedIdsSet = useMemo(() => new Set(selectedTaskIds), [selectedTaskIds])
   const groups = useMemo(() => groupByCommit(tasks), [tasks])
@@ -393,7 +395,7 @@ export function TaskListPage() {
           hasFilters={hasActiveFilters}
           hasProjects={projects.length > 0}
           onConnectGithub={() => {
-            redirectToGithubConnect()
+            void redirectToGithubConnect()
           }}
           onResetFilters={resetFilters}
           onOpenDialog={() => {
@@ -468,7 +470,7 @@ export function TaskListPage() {
         projects={projects}
         githubLinked={hasGithubLinked}
         onConnectGithub={() => {
-          redirectToGithubConnect()
+          void redirectToGithubConnect()
         }}
         onOpenRepositories={() => void navigate('/repositories')}
       />
