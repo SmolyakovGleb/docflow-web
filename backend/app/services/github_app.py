@@ -15,7 +15,8 @@ from collections.abc import Iterable
 
 import httpx
 from jose import jwt
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -191,26 +192,46 @@ async def upsert_installation(
 ) -> GithubInstallation:
     from datetime import datetime, timezone
 
+    suspended_at = datetime.now(timezone.utc) if suspended else None
+
+    # Атомарный upsert: при установке GitHub шлёт `installation`-вебхук на
+    # /webhook/github/app ОДНОВРЕМЕННО с редиректом браузера на /setup — оба
+    # вызывают upsert по одному installation_id. SELECT-then-INSERT тут гонится и
+    # падает на UNIQUE(installation_id). ON CONFLICT решает гонку атомарно.
+    # COALESCE: привязку к юзеру/команде не затираем NULL'ом из вебхука.
+    stmt = pg_insert(GithubInstallation).values(
+        installation_id=installation_id,
+        account_login=account_login,
+        account_type=account_type,
+        suspended_at=suspended_at,
+        created_by_user_id=created_by_user_id,
+        team_id=team_id,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["installation_id"],
+        set_={
+            "account_login": stmt.excluded.account_login,
+            "account_type": stmt.excluded.account_type,
+            "suspended_at": stmt.excluded.suspended_at,
+            "updated_at": func.now(),
+            "created_by_user_id": func.coalesce(
+                stmt.excluded.created_by_user_id,
+                GithubInstallation.created_by_user_id,
+            ),
+            "team_id": func.coalesce(
+                stmt.excluded.team_id, GithubInstallation.team_id
+            ),
+        },
+    )
+    await session.execute(stmt)
+    await session.flush()
+
     installation = await session.scalar(
         select(GithubInstallation).where(
             GithubInstallation.installation_id == installation_id
         )
     )
-    if installation is None:
-        installation = GithubInstallation(installation_id=installation_id)
-        session.add(installation)
-
-    installation.account_login = account_login
-    installation.account_type = account_type
-    installation.suspended_at = datetime.now(timezone.utc) if suspended else None
-    # Привязку к пользователю/команде проставляем только когда она известна
-    # (приходит из подписанного state в /github/setup) — не затираем при ресинке
-    # из вебхука, где user-контекста нет.
-    if created_by_user_id is not None:
-        installation.created_by_user_id = created_by_user_id
-    if team_id is not None:
-        installation.team_id = team_id
-    await session.flush()
+    assert installation is not None
     return installation
 
 
