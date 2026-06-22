@@ -179,7 +179,11 @@ async def task_list_events_stream(
         finally:
             task_list_events.close_subscription(subscription.id)
 
-    return StreamingResponse(_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers=TASK_EVENTS_STREAM_HEADERS,
+    )
 
 
 @router.post(
