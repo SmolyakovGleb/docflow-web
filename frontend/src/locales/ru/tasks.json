@@ -105,7 +105,8 @@
     "pipeline": "Пайплайн",
     "last_webhook": "Последний webhook {{value}}",
     "no_webhook": "Webhook ещё не приходил",
-    "count": "Показано {{visible}} из {{total}} задач"
+    "count": "Показано {{visible}} из {{total}} задач",
+    "loading_more": "Загрузка задач…"
   },
   "pipeline": {
     "prepare": "Подготовка",

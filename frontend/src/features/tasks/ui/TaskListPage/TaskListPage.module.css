@@ -11,6 +11,17 @@
   flex-direction: column;
 }
 
+.sentinel {
+  height: 1px;
+}
+
+.loadingMore {
+  padding: 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: center;
+}
+
 @media (max-width: 1280px) {
   .page {
     width: 100%;
