@@ -19,6 +19,9 @@ class TranslationContext:
     dirty_indices: list[int] = field(default_factory=list)
     aligned_old_ru: dict[int, str] = field(default_factory=dict)
     new_paras: list[str] = field(default_factory=list)
+    # Готовый перевод без обращения к LLM: документ изменился только реформатированием
+    # (грязных абзацев нет) — переводить нечего, переиспользуем старый RU целиком.
+    precomputed: str | None = None
 
 
 def _full(content: str, new_paras: list[str]) -> TranslationContext:
@@ -59,10 +62,17 @@ async def build_translation_context(
 
     old_en_paras = split_paragraphs(old_en)
     old_ru_paras = split_paragraphs(old_ru)
-    dirty_indices = find_dirty_paragraphs(new_paras, old_en_paras)
+
+    # Инкремент опирается на позиционный параллелизм old_en[k] ↔ old_ru[k]. Если число
+    # абзацев в старых EN и RU разошлось — параллелизм нарушен, и clean-абзацы получат
+    # ЧУЖОЙ старый перевод. Безопасно деградируем к полному переводу.
+    if len(old_en_paras) != len(old_ru_paras):
+        return _full(new_en, new_paras)
 
     if not new_paras:
         return _full(new_en, new_paras)
+
+    dirty_indices = find_dirty_paragraphs(new_paras, old_en_paras)
 
     ratio = len(dirty_indices) / len(new_paras)
     if ratio * 100 > project.incremental_threshold:
@@ -81,6 +91,22 @@ async def build_translation_context(
         for new_idx, old_idx in new_to_old_en.items()
         if old_idx < len(old_ru_paras)
     }
+
+    if not dirty_indices:
+        # Все абзацы чистые — переводить нечего. Собираем старый RU в новом порядке
+        # и отдаём как готовый результат, не запуская LLM на пустом вводе.
+        precomputed = "\n\n".join(
+            aligned_old_ru.get(i, new_paras[i]) for i in range(len(new_paras))
+        )
+        return TranslationContext(
+            content="",
+            is_incremental=True,
+            dirty_indices=[],
+            aligned_old_ru=aligned_old_ru,
+            new_paras=new_paras,
+            precomputed=precomputed,
+        )
+
     dirty_content = "\n\n".join(new_paras[i] for i in dirty_indices)
 
     return TranslationContext(

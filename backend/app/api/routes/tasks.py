@@ -64,8 +64,14 @@ TASK_EVENTS_STREAM_HEADERS = {
 }
 
 
-async def _stream_task_events(task_id: UUID, request: Request) -> AsyncIterator[str]:
-    queue = pipeline_runner.TASK_EVENT_QUEUES[task_id]
+async def _stream_task_events(
+    queue: "asyncio.Queue[dict[str, object] | None]",
+    task_id: UUID,
+    request: Request,
+) -> AsyncIterator[str]:
+    # Очередь передаётся уже захваченной из обработчика — НЕ перечитываем её
+    # bracket-доступом TASK_EVENT_QUEUES[task_id]: между захватом и первым шагом
+    # генератора очередь могла быть вытеснена/удалена (cleanup/eviction) → KeyError.
     reached_end = False
 
     try:
@@ -548,7 +554,7 @@ async def task_events(
         )
 
     return StreamingResponse(
-        _stream_task_events(resolved_task_id, request),
+        _stream_task_events(queue, resolved_task_id, request),
         media_type="text/event-stream",
         headers=TASK_EVENTS_STREAM_HEADERS,
     )
