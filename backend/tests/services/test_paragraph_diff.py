@@ -31,6 +31,37 @@ def test_split_paragraphs_empty_string():
     assert split_paragraphs("") == []
 
 
+def test_split_paragraphs_keeps_fenced_block_with_blank_line_intact():
+    # Пустая строка ВНУТРИ ```-блока не должна дробить его на абзацы.
+    text = "Intro\n\n```js\nconst a = 1;\n\nconst b = 2;\n```\n\nOutro"
+    assert split_paragraphs(text) == [
+        "Intro",
+        "```js\nconst a = 1;\n\nconst b = 2;\n```",
+        "Outro",
+    ]
+
+
+def test_split_paragraphs_fence_consistent_count_en_ru():
+    # EN и RU с одинаковой структурой блока кода → одинаковое число абзацев
+    # (иначе позиционное выравнивание инкремента подставит чужой перевод).
+    en = "A\n\n```\nx\n\ny\n```\n\nB"
+    ru = "Ä\n\n```\nx\n\ny\n```\n\nÄ2"
+    assert len(split_paragraphs(en)) == len(split_paragraphs(ru)) == 3
+
+
+def test_split_paragraphs_tilde_fence():
+    text = "P\n\n~~~\nline1\n\nline2\n~~~\n\nQ"
+    assert split_paragraphs(text) == ["P", "~~~\nline1\n\nline2\n~~~", "Q"]
+
+
+def test_split_paragraphs_unterminated_fence_is_single_block():
+    text = "Head\n\n```\nopen but never closed\n\nstill inside"
+    assert split_paragraphs(text) == [
+        "Head",
+        "```\nopen but never closed\n\nstill inside",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # find_dirty_paragraphs — 10-paragraph scenario
 # ---------------------------------------------------------------------------

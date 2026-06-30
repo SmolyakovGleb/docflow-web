@@ -232,6 +232,58 @@ async def test_incremental_alignment_survives_insertion():
     assert ctx.aligned_old_ru == {1: "ru A", 2: "ru B", 3: "ru C"}
 
 
+async def test_full_when_old_en_ru_paragraph_count_differs():
+    """Old EN и old RU разошлись по числу абзацев → позиционный параллелизм нарушен → full."""
+    old_en = _paras(5)
+    new_en = _paras_with_changes(5, changed=[1])  # 1/5 → иначе был бы инкремент
+    old_ru = "\n\n".join(f"RU para {i}" for i in range(4))  # на один абзац меньше
+
+    task = make_task(previous_task_id=uuid.uuid4(), before_sha="before-sha")
+    project = make_project(incremental_threshold=40)
+    client = make_github_client(old_en=old_en, old_ru=old_ru)
+
+    ctx = await build_translation_context(task, project, new_en, client)
+
+    assert ctx.is_incremental is False
+    assert ctx.content == new_en
+
+
+async def test_precomputed_when_no_dirty_paragraphs():
+    """Грязных абзацев нет → precomputed = старый RU, content пустой (LLM не нужен)."""
+    old_en = _paras(3)
+    new_en = _paras(3)  # идентично old_en → 0 грязных
+    old_ru = "RU 0\n\nRU 1\n\nRU 2"
+
+    task = make_task(previous_task_id=uuid.uuid4(), before_sha="before-sha")
+    project = make_project(incremental_threshold=40)
+    client = make_github_client(old_en=old_en, old_ru=old_ru)
+
+    ctx = await build_translation_context(task, project, new_en, client)
+
+    assert ctx.is_incremental is True
+    assert ctx.dirty_indices == []
+    assert ctx.precomputed == "RU 0\n\nRU 1\n\nRU 2"
+    assert ctx.content == ""
+
+
+async def test_precomputed_on_deletion_only_maps_surviving_old_ru():
+    """Удалён абзац, остальные чистые → 0 грязных → precomputed из старого RU
+    выживших абзацев в новом порядке."""
+    old_en = "A\n\nB\n\nC\n\nD"
+    old_ru = "ru A\n\nru B\n\nru C\n\nru D"
+    new_en = "A\n\nC\n\nD"  # удалён B; A,C,D чистые
+
+    task = make_task(previous_task_id=uuid.uuid4(), before_sha="before-sha")
+    project = make_project(incremental_threshold=40)
+    client = make_github_client(old_en=old_en, old_ru=old_ru)
+
+    ctx = await build_translation_context(task, project, new_en, client)
+
+    assert ctx.is_incremental is True
+    assert ctx.dirty_indices == []
+    assert ctx.precomputed == "ru A\n\nru C\n\nru D"
+
+
 async def test_full_when_one_above_threshold():
     """41% changed with threshold 40% → full (strictly greater)."""
     # 5/12 ≈ 41.6% > 40%

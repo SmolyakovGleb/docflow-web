@@ -17,6 +17,9 @@ frontend/.env
 frontend/.env.local
 frontend/.env.*.local
 
+# Local dev overrides (не для коммита: персональные настройки окружения)
+docker-compose.local.yml
+
 # OS
 .DS_Store
 Thumbs.db

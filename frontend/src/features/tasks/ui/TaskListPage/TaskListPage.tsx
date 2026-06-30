@@ -48,6 +48,7 @@ import { TriggerTranslationDialog } from '../TriggerTranslationDialog'
 import styles from './TaskListPage.module.css'
 
 const EMPTY_TASKS: TaskSummary[] = []
+const PAGE_SIZE = 50
 type TriggerDialogTab = 'repo' | 'upload'
 
 export function TaskListPage() {
@@ -60,17 +61,40 @@ export function TaskListPage() {
   const batchMode = useAppSelector((state) => state.tasksUI.batchMode)
 
   const { filters, setFilters, resetFilters } = useTaskFilters()
+  const [offset, setOffset] = useState(0)
+
+  // Сброс пагинации при любой смене фильтра — иначе остаёмся на странице,
+  // которой в новом scope может не быть. Делаем во время рендера (паттерн
+  // React для сброса state при смене ключа), а не в эффекте.
+  const filterScopeKey = `${filters.status ?? ''}|${filters.projectId ?? ''}|${filters.search ?? ''}`
+  const [prevFilterScope, setPrevFilterScope] = useState(filterScopeKey)
+  if (prevFilterScope !== filterScopeKey) {
+    setPrevFilterScope(filterScopeKey)
+    setOffset(0)
+  }
+
   const getTasksArgs = useMemo<GetTasksParams>(
     () => ({
       status: filters.status,
       project_id: filters.projectId,
       search: filters.search,
-      limit: 50,
-      offset: 0,
+      limit: PAGE_SIZE,
+      offset,
+    }),
+    [filters.status, filters.projectId, filters.search, offset],
+  )
+  // SSE-подписка не должна переподключаться при догрузке страниц, поэтому
+  // offset в её аргументы не входит (cache-ключ его всё равно игнорирует).
+  const sseArgs = useMemo<GetTasksParams>(
+    () => ({
+      status: filters.status,
+      project_id: filters.projectId,
+      search: filters.search,
+      limit: PAGE_SIZE,
     }),
     [filters.status, filters.projectId, filters.search],
   )
-  useTaskListSSE(getTasksArgs)
+  useTaskListSSE(sseArgs)
   const [isDialogOpen, setDialogOpen] = useState(false)
   const [dialogTab, setDialogTab] = useState<TriggerDialogTab>('repo')
   const [translateParamHandled, setTranslateParamHandled] = useState(false)
@@ -115,6 +139,31 @@ export function TaskListPage() {
   const hasGithubLinked = Boolean(user?.github_linked)
   const showToolbar = isLoading || Boolean(error) || tasks.length > 0 || hasActiveFilters
   const showFooter = !isLoading && !error && tasks.length > 0
+
+  const totalCount = tasksResponse?.total ?? 0
+  const hasMore = !isLoading && !error && tasks.length < totalCount
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+
+  // Бесконечный скролл: при приближении к низу списка догружаем следующую
+  // страницу. Наблюдатель отключается на первом срабатывании и пересоздаётся
+  // после загрузки (изменились hasMore/isFetching) — защита от двойного бампа.
+  useEffect(() => {
+    const node = sentinelRef.current
+    if (!node || !hasMore || isFetching) return undefined
+    if (typeof IntersectionObserver === 'undefined') return undefined
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          observer.disconnect()
+          setOffset((prev) => prev + PAGE_SIZE)
+        }
+      },
+      { rootMargin: '400px' },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasMore, isFetching])
 
   const bannerScopeKey = JSON.stringify({
     status: filters.status,
@@ -367,6 +416,7 @@ export function TaskListPage() {
         onRefresh={() => {
           clearNewTasks()
           window.scrollTo({ top: 0, behavior: 'smooth' })
+          setOffset(0)
           void refetch()
         }}
       />
@@ -434,6 +484,12 @@ export function TaskListPage() {
               onPublishGroup={(taskIds) => openBatchPublishDialog(taskIds)}
             />
           ))}
+          {hasMore ? (
+            <div ref={sentinelRef} className={styles.sentinel} aria-hidden="true" />
+          ) : null}
+          {isFetching && offset > 0 ? (
+            <div className={styles.loadingMore}>{t('footer.loading_more')}</div>
+          ) : null}
         </div>
       )}
 

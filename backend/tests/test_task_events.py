@@ -75,7 +75,7 @@ async def test_task_events_disconnect_keeps_queue_for_reconnect(db_session, test
             self._calls += 1
             return self._calls > 1
 
-    stream = task_routes._stream_task_events(task.id, FakeRequest())
+    stream = task_routes._stream_task_events(queue, task.id, FakeRequest())
 
     assert await anext(stream) == ": connected\n\n"
     assert "event: stage_update" in await anext(stream)

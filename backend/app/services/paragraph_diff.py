@@ -1,12 +1,55 @@
 from __future__ import annotations
 
+import re
 from difflib import SequenceMatcher
 from hashlib import md5
 
+# Строка-ограждение fenced-блока: ```… или ~~~… (3+), допускается отступ и info-string.
+_FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})([^\n]*)$")
+
 
 def split_paragraphs(text: str) -> list[str]:
-    blocks = text.split("\n\n")
-    return [b.strip() for b in blocks if b.strip()]
+    """Разбивает текст на абзацы по пустым строкам, НО не внутри fenced-блоков кода.
+
+    Наивный split("\\n\\n") разрывал блок ```…``` с пустой строкой внутри на части,
+    из-за чего число абзацев в EN и RU расходилось и позиционное выравнивание
+    инкремента подставляло чужой перевод. Здесь пустая строка внутри ограждённого
+    блока кода НЕ считается границей абзаца.
+    """
+    paragraphs: list[str] = []
+    current: list[str] = []
+    open_fence: tuple[str, int] | None = None
+
+    def flush() -> None:
+        if current:
+            joined = "\n".join(current).strip()
+            if joined:
+                paragraphs.append(joined)
+            current.clear()
+
+    for line in text.split("\n"):
+        match = _FENCE_RE.match(line)
+        if match:
+            marker = match.group(1)
+            char, length = marker[0], len(marker)
+            if open_fence is None:
+                open_fence = (char, length)
+            elif char == open_fence[0] and length >= open_fence[1] and match.group(2).strip() == "":
+                open_fence = None  # закрывающее ограждение (без info-string, длина >= открывающей)
+            current.append(line)
+            continue
+
+        if open_fence is not None:
+            current.append(line)
+            continue
+
+        if line.strip() == "":
+            flush()
+        else:
+            current.append(line)
+
+    flush()
+    return paragraphs
 
 
 def _hash(para: str) -> str:
