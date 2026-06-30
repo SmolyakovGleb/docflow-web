@@ -65,6 +65,36 @@ export const tasksApi = baseApi.injectEndpoints({
           params: resolvedParams,
         }
       },
+      // Бесконечный скролл: страницы (разный offset) с одинаковыми фильтрами
+      // живут в одной cache-записи. offset намеренно исключён из ключа, поэтому
+      // SSE-апдейты (updateQueryData без offset) попадают в ту же запись.
+      serializeQueryArgs: ({ endpointName, queryArgs }) => {
+        const { status, project_id, search, limit } = queryArgs ?? {}
+        return `${endpointName}(${JSON.stringify({
+          status: status ?? null,
+          project_id: project_id ?? null,
+          search: search?.trim() || null,
+          limit: limit ?? null,
+        })})`
+      },
+      merge: (currentCache, newData, { arg }) => {
+        // offset=0 — это первая страница / обновление сверху: заменяем целиком.
+        if (!arg || (arg.offset ?? 0) === 0) {
+          return newData
+        }
+        const seen = new Set(currentCache.items.map((task) => task.id))
+        for (const item of newData.items) {
+          if (!seen.has(item.id)) {
+            currentCache.items.push(item)
+          }
+        }
+        currentCache.total = newData.total
+        currentCache.status_counts = newData.status_counts
+        currentCache.limit = newData.limit
+        currentCache.offset = newData.offset
+      },
+      forceRefetch: ({ currentArg, previousArg }) =>
+        (currentArg?.offset ?? 0) !== (previousArg?.offset ?? 0),
       providesTags: (result) => [
         'Task',
         ...(result?.items?.map((task) => ({ type: 'Task' as const, id: task.id })) ?? []),
