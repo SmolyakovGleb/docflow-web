@@ -179,9 +179,10 @@ async def test_run_task_incremental_merges_dirty_paragraphs(
     assert "[prepare] Инкрементальный режим: 1 из 3 абзацев" in (updated_task.log or "")
 
 
-async def test_run_task_incremental_fails_when_pipeline_returns_too_few_paragraphs(
+async def test_run_task_incremental_degrades_to_full_on_paragraph_mismatch(
     engine, db_session, test_project, mocker
 ):
+    """Рассинхрон абзацев инкремента НЕ валит задачу: деградируем к полному переводу."""
     reset_pipeline_runner_state()
     task = await create_task(db_session, test_project)
 
@@ -218,11 +219,19 @@ async def test_run_task_incremental_fails_when_pipeline_returns_too_few_paragrap
         ),
     )
 
+    inputs_seen: list[str] = []
+
     async def fake_execute(*, input_file, output_dir, logger, **kwargs):
-        assert input_file.read_text(encoding="utf-8") == "Changed B\n\nChanged C"
+        text = input_file.read_text(encoding="utf-8")
+        inputs_seen.append(text)
         output_path = output_dir / input_file.name
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text("RU B", encoding="utf-8")
+        if text == "Changed B\n\nChanged C":
+            # инкрементальный прогон вернул слишком мало абзацев → рассинхрон
+            output_path.write_text("RU B", encoding="utf-8")
+        else:
+            # полный повторный прогон по оригиналу
+            output_path.write_text("RU FULL", encoding="utf-8")
         return output_path
 
     mocker.patch("app.services.pipeline_runner._execute_pipeline", side_effect=fake_execute)
@@ -234,10 +243,74 @@ async def test_run_task_incremental_fails_when_pipeline_returns_too_few_paragrap
         updated_task = await session.get(Task, task.id)
 
     assert updated_task is not None
-    assert updated_task.status == "failed"
-    assert updated_task.translated_content is None
-    assert "YAML" not in (updated_task.error or "")
-    assert "Incremental translation paragraph count mismatch" in (updated_task.error or "")
+    assert updated_task.status == "done"
+    assert updated_task.translated_content == "RU FULL"
+    # деградация = полный перевод: инкрементальные счётчики сбрасываются
+    assert updated_task.incremental_paragraphs_count is None
+    assert updated_task.incremental_total_paragraphs is None
+    # сначала инкрементальный прогон, затем полный по оригиналу
+    assert inputs_seen == ["Changed B\n\nChanged C", "# Source"]
+
+
+async def test_run_task_incremental_skips_pipeline_when_nothing_dirty(
+    engine, db_session, test_project, mocker
+):
+    """Грязных абзацев нет (только реформат) → LLM-пайплайн не запускается,
+    переиспользуется старый перевод (precomputed)."""
+    reset_pipeline_runner_state()
+    task = await create_task(db_session, test_project)
+
+    mocker.patch(
+        "app.services.pipeline_runner.get_session_factory",
+        return_value=make_session_factory(engine),
+    )
+    mocker.patch(
+        "app.services.pipeline_runner.dictionary_merger.merge_pipeline_data",
+        new=mocker.AsyncMock(
+            return_value=MergedPipelineData(
+                dictionary={},
+                glossary={},
+                prompt="Prompt",
+                pre_translator_files={
+                    "static_terms": {},
+                    "section_headings": {},
+                    "note_titles": {},
+                    "include_labels": {},
+                },
+            )
+        ),
+    )
+    mocker.patch(
+        "app.services.pipeline_runner._build_translation_context",
+        new=mocker.AsyncMock(
+            return_value=TranslationContext(
+                content="",
+                is_incremental=True,
+                dirty_indices=[],
+                aligned_old_ru={0: "RU A", 1: "RU B"},
+                new_paras=["A", "B"],
+                precomputed="RU A\n\nRU B",
+            )
+        ),
+    )
+
+    execute_mock = mocker.patch(
+        "app.services.pipeline_runner._execute_pipeline",
+        new=mocker.AsyncMock(),
+    )
+
+    await pipeline_runner.run_task(task.id)
+
+    session_factory = make_session_factory(engine)
+    async with session_factory() as session:
+        updated_task = await session.get(Task, task.id)
+
+    assert updated_task is not None
+    assert updated_task.status == "done"
+    assert updated_task.translated_content == "RU A\n\nRU B"
+    assert updated_task.incremental_paragraphs_count == 0
+    assert updated_task.incremental_total_paragraphs == 2
+    execute_mock.assert_not_called()  # пайплайн вообще не запускался
 
 
 async def test_run_task_yaml_skips_incremental_and_preserves_relative_input_path(

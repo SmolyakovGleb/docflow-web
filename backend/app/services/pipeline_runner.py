@@ -47,6 +47,13 @@ MAX_TASK_EVENT_QUEUES = 200
 app_logger = logging.getLogger(__name__)
 
 
+class IncrementalAssemblyError(Exception):
+    """Инкрементальная сборка не сложилась (рассинхрон абзацев / неполная карта).
+
+    Сигнал к восстановлению полным переводом, а НЕ к провалу задачи: инкремент —
+    это оптимизация, не требование корректности."""
+
+
 def _evict_oldest_queues_if_needed() -> None:
     while len(TASK_EVENT_QUEUES) >= MAX_TASK_EVENT_QUEUES:
         oldest_id = next(iter(TASK_EVENT_QUEUES))
@@ -258,6 +265,33 @@ async def _execute_pipeline(
         yaml_data_dir=yaml_data_dir,
     )
 
+
+async def _run_pipeline_collect(
+    task: Task,
+    merged_data: dictionary_merger.MergedPipelineData,
+    content: str,
+    logger: logging.Logger,
+    workspaces: list[Path],
+) -> str:
+    """Готовит воркспейс, гоняет пайплайн, возвращает текст результата.
+
+    Воркспейс добавляется в `workspaces` для последующей очистки — так повторный
+    полный прогон (деградация инкремента) не теряет уборку первого воркспейса."""
+    workspace, input_file, output_dir, pre_translator_dir, yaml_data_dir = _prepare_workspace(
+        task, merged_data, content
+    )
+    workspaces.append(workspace)
+    output_file = await _execute_pipeline(
+        input_file=input_file,
+        output_dir=output_dir,
+        pre_translator_dir=pre_translator_dir,
+        merged_data=merged_data,
+        logger=logger,
+        yaml_data_dir=yaml_data_dir,
+    )
+    return output_file.read_text(encoding="utf-8")
+
+
 async def _cleanup_queue_after(task_id: UUID, delay: float) -> None:
     await asyncio.sleep(delay)
     TASK_EVENT_QUEUES.pop(task_id, None)
@@ -414,11 +448,8 @@ def _assemble_translation(
             "Incremental translation paragraph count mismatch: "
             f"expected {len(dirty)}, got {len(out_paras)}"
         )
-        logger.error(
-            "%s",
-            message,
-        )
-        raise RuntimeError(message)
+        logger.warning("%s — деградируем к полному переводу", message)
+        raise IncrementalAssemblyError(message)
     missing_clean = [
         idx
         for idx in range(len(ctx.new_paras))
@@ -429,11 +460,8 @@ def _assemble_translation(
             "Incremental translation old paragraph mapping is incomplete: "
             f"missing clean indices {missing_clean}"
         )
-        logger.error(
-            "%s",
-            message,
-        )
-        raise RuntimeError(message)
+        logger.warning("%s — деградируем к полному переводу", message)
+        raise IncrementalAssemblyError(message)
     new_translations = {
         dirty[k]: out_paras[k] for k in range(min(len(dirty), len(out_paras)))
     }
@@ -461,7 +489,7 @@ async def run_task(task_id: UUID) -> None:
         _evict_oldest_queues_if_needed()
         TASK_EVENT_QUEUES[task.id] = queue
         log_handler: QueueLogHandler | None = None
-        workspace: Path | None = None
+        workspaces: list[Path] = []
 
         try:
             previous_status = task.status
@@ -478,62 +506,66 @@ async def run_task(task_id: UUID) -> None:
             await _emit_event(queue, "stage_update", {"stage": "prepare", "index": 1, "total": 3})
             merged_data = await dictionary_merger.merge_pipeline_data(session)
             translation_ctx = await _build_translation_context(session, task)
-            content_to_translate = (
-                translation_ctx.content if translation_ctx is not None else task.original_content
-            )
-            workspace, input_file, output_dir, pre_translator_dir, yaml_data_dir = _prepare_workspace(
-                task,
-                merged_data,
-                content_to_translate,
-            )
 
             loop = asyncio.get_running_loop()
             log_handler = QueueLogHandler(loop, queue, stage="prepare")
             logger = _build_task_logger(task.id, log_handler)
-            if translation_ctx is not None and translation_ctx.is_incremental:
+
+            precomputed = translation_ctx.precomputed if translation_ctx is not None else None
+            if precomputed is not None:
+                # Грязных абзацев нет — переводить нечего: переиспользуем старый RU,
+                # не запуская LLM-пайплайн на пустом вводе.
                 logger.info(
-                    "Инкрементальный режим: %d из %d абзацев",
-                    len(translation_ctx.dirty_indices),
+                    "Инкрементальный режим: изменений для перевода нет (0 из %d абзацев)",
                     len(translation_ctx.new_paras),
                 )
+                await _set_stage(
+                    session, task, queue, log_handler, stage="persist", index=3, total=3
+                )
+                final_content = precomputed
+                incremental_count: int | None = 0
+                incremental_total: int | None = len(translation_ctx.new_paras)
             else:
-                if is_yaml_path(task.file_path):
-                    logger.info("Формат: yaml")
-                logger.info("Полный перевод")
+                content_to_translate = (
+                    translation_ctx.content if translation_ctx is not None else task.original_content
+                )
+                if translation_ctx is not None and translation_ctx.is_incremental:
+                    logger.info(
+                        "Инкрементальный режим: %d из %d абзацев",
+                        len(translation_ctx.dirty_indices),
+                        len(translation_ctx.new_paras),
+                    )
+                else:
+                    if is_yaml_path(task.file_path):
+                        logger.info("Формат: yaml")
+                    logger.info("Полный перевод")
 
-            await _set_stage(
-                session,
-                task,
-                queue,
-                log_handler,
-                stage="pipeline",
-                index=2,
-                total=3,
-            )
-            output_file = await _execute_pipeline(
-                    input_file=input_file,
-                    output_dir=output_dir,
-                    pre_translator_dir=pre_translator_dir,
-                    merged_data=merged_data,
-                    logger=logger,
-                    yaml_data_dir=yaml_data_dir,
+                await _set_stage(
+                    session, task, queue, log_handler, stage="pipeline", index=2, total=3
+                )
+                output_text = await _run_pipeline_collect(
+                    task, merged_data, content_to_translate, logger, workspaces
                 )
 
-            await _set_stage(
-                session,
-                task,
-                queue,
-                log_handler,
-                stage="persist",
-                index=3,
-                total=3,
-            )
-            output_text = output_file.read_text(encoding="utf-8")
-            (
-                task.translated_content,
-                task.incremental_paragraphs_count,
-                task.incremental_total_paragraphs,
-            ) = _assemble_translation(translation_ctx, output_text, logger)
+                await _set_stage(
+                    session, task, queue, log_handler, stage="persist", index=3, total=3
+                )
+                try:
+                    final_content, incremental_count, incremental_total = _assemble_translation(
+                        translation_ctx, output_text, logger
+                    )
+                except IncrementalAssemblyError:
+                    # Инкремент не сложился — деградируем к полному переводу оригинала,
+                    # а не валим задачу. Инкремент — это оптимизация, не корректность.
+                    final_content = await _run_pipeline_collect(
+                        task, merged_data, task.original_content, logger, workspaces
+                    )
+                    incremental_count = None
+                    incremental_total = None
+
+            task.translated_content = final_content
+            task.incremental_paragraphs_count = incremental_count
+            task.incremental_total_paragraphs = incremental_total
             task.log = log_handler.get_log()
             task.error = None
             previous_status = task.status
@@ -575,7 +607,7 @@ async def run_task(task_id: UUID) -> None:
             await _emit_event(queue, "status_change", {"status": "failed"})
             app_logger.exception("task_failed", extra={"task_id": str(task.id)})
         finally:
-            if workspace is not None:
+            for workspace in workspaces:
                 shutil.rmtree(workspace, ignore_errors=True)
             await queue.put(None)
             _t = asyncio.create_task(_cleanup_queue_after(task.id, delay=3600.0))
