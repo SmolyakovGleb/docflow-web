@@ -433,18 +433,42 @@ async def reconcile_project(session: AsyncSession, project: Project) -> dict[str
     if last_sha == head_sha:
         return {"created": 0, "task_ids": [], "skipped": [], "up_to_date": True, "head_sha": head_sha}
 
+    # Нет базового sha (у проекта ни одной обработанной задачи) — это не пропуск
+    # инкремента, а первичный импорт всего репо (тысячи файлов). Авто-добор такого
+    # НЕ делаем: нужен ручной full-sync. Гард от «подтянул тысячи прошлых коммитов».
+    if not last_sha:
+        return {"created": 0, "task_ids": [], "skipped": [], "reason": "no_baseline_sha", "head_sha": head_sha}
+
     try:
-        if last_sha:
-            changed = await source_client.compare_files(project.source_repo, last_sha, head_sha)
-        else:
-            changed = await source_client.get_repo_tree(project.source_repo, project.source_branch)
-    except GitHubAPIError:
-        # last_sha мог исчезнуть после force-push → полная сверка по дереву ветки.
-        changed = await source_client.get_repo_tree(project.source_repo, project.source_branch)
+        changed = await source_client.compare_files(project.source_repo, last_sha, head_sha)
+    except GitHubAPIError as exc:
+        # Базовый sha недостижим (force-push/переписанная история) — весь репо НЕ тянем.
+        logger.warning(
+            "reconcile_base_unreachable",
+            extra={"project_id": str(project.id), "detail": exc.detail},
+        )
+        return {"created": 0, "task_ids": [], "skipped": [], "reason": "base_sha_unreachable", "head_sha": head_sha}
 
     changed = [f for f in changed if is_safe_relative_path(f)]
     if not changed:
         return {"created": 0, "task_ids": [], "skipped": [], "head_sha": head_sha}
+
+    # Гард от лавины: слишком много пропущенных файлов (очень старый базовый sha) →
+    # авто-добор не делаем, нужен ручной full-sync.
+    max_files = get_settings().catchup_max_files
+    if len(changed) > max_files:
+        logger.warning(
+            "reconcile_too_many_files",
+            extra={"project_id": str(project.id), "changed_files": len(changed), "cap": max_files},
+        )
+        return {
+            "created": 0,
+            "task_ids": [],
+            "skipped": [],
+            "reason": "too_many_changes",
+            "changed_files": len(changed),
+            "head_sha": head_sha,
+        }
 
     result = await _create_tasks_for_files(
         session,
@@ -456,6 +480,41 @@ async def reconcile_project(session: AsyncSession, project: Project) -> dict[str
     )
     result["head_sha"] = head_sha
     return result
+
+
+async def run_startup_catchup(session_factory) -> None:
+    """Фоновый catch-up при старте backend — ЗАМЕНЯЕТ внешний планировщик.
+
+    Механизм: пуш в спящую VM будит её (гейтвей стартует VM для доставки), но сама
+    вебхук-доставка не успевает за 10-секундный таймаут GitHub и теряется (GitHub
+    её не ретраит). Зато backend на старте сам сверяет HEAD source-веток с последним
+    обработанным sha и добирает пропущенное. Сессия — своя на проект, ошибка одного
+    проекта не мешает остальным. Гарды от лавины — внутри reconcile_project."""
+    try:
+        async with session_factory() as session:
+            project_ids = (await session.scalars(select(Project.id))).all()
+    except Exception:
+        logger.exception("startup_catchup_load_failed")
+        return
+
+    for project_id in project_ids:
+        try:
+            async with session_factory() as session:
+                project = await session.get(Project, project_id)
+                if project is None:
+                    continue
+                result = await reconcile_project(session, project)
+            if result.get("created"):
+                logger.info(
+                    "startup_catchup_created",
+                    extra={"project_id": str(project_id), "n": result["created"]},
+                )
+        except Exception:
+            logger.warning(
+                "startup_catchup_project_failed",
+                extra={"project_id": str(project_id)},
+                exc_info=True,
+            )
 
 
 @router.post(

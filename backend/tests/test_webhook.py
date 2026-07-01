@@ -685,7 +685,7 @@ async def test_catch_up_reconciles_missed_files(
 
     mocker.patch(
         "app.api.routes.webhook.get_settings",
-        return_value=mocker.Mock(catchup_secret="s3cr3t", max_file_chars=30000),
+        return_value=mocker.Mock(catchup_secret="s3cr3t", max_file_chars=30000, catchup_max_files=200),
     )
     github_client = mocker.Mock()
     github_client.get_branch_head_sha = mocker.AsyncMock(return_value="new-sha")
@@ -727,3 +727,70 @@ async def test_catch_up_disabled_without_secret(client, mocker):
     )
     response = await client.post("/webhook/catch-up/all", headers={"X-Catchup-Token": "x"})
     assert response.status_code == 503
+
+
+async def test_catch_up_skips_project_without_baseline(client, db_session, test_project, test_user, mocker):
+    # У проекта нет ни одной задачи → нет базового sha → полный импорт репо НЕ делаем.
+    test_user.github_id = 123456
+    test_user.github_login = "octocat"
+    test_user.github_access_token = encrypt_github_access_token("github-token")
+    await db_session.commit()
+
+    mocker.patch(
+        "app.api.routes.webhook.get_settings",
+        return_value=mocker.Mock(catchup_secret="s3cr3t", catchup_max_files=200, max_file_chars=30000),
+    )
+    github_client = mocker.Mock()
+    github_client.get_branch_head_sha = mocker.AsyncMock(return_value="head-sha")
+    github_client.compare_files = mocker.AsyncMock()
+    github_client.get_repo_tree = mocker.AsyncMock()
+    mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
+
+    response = await client.post("/webhook/catch-up/all", headers={"X-Catchup-Token": "s3cr3t"})
+    assert response.status_code == 200
+    assert response.json()["created"] == 0
+    # никакого импорта всего репо: ни compare, ни tree не дёрнуты
+    github_client.compare_files.assert_not_awaited()
+    github_client.get_repo_tree.assert_not_awaited()
+    tasks = (await db_session.scalars(select(Task).where(Task.project_id == test_project.id))).all()
+    assert tasks == []
+
+
+async def test_catch_up_skips_when_too_many_changes(client, db_session, test_project, test_user, mocker):
+    # Пропущено больше cap → авто-добор не делаем (гард от «тысяч коммитов»).
+    test_user.github_id = 123456
+    test_user.github_login = "octocat"
+    test_user.github_access_token = encrypt_github_access_token("github-token")
+    db_session.add(
+        Task(
+            user_id=test_user.id,
+            project_id=test_project.id,
+            team_id=test_project.team_id,
+            file_path="docs/old.md",
+            github_ref="refs/heads/main",
+            github_sha="old-sha",
+            original_content="# Old",
+            status="published",
+        )
+    )
+    await db_session.commit()
+
+    mocker.patch(
+        "app.api.routes.webhook.get_settings",
+        return_value=mocker.Mock(catchup_secret="s3cr3t", catchup_max_files=5, max_file_chars=30000),
+    )
+    many = [f"docs/f{i}.md" for i in range(10)]  # 10 > cap 5
+    github_client = mocker.Mock()
+    github_client.get_branch_head_sha = mocker.AsyncMock(return_value="new-sha")
+    github_client.compare_files = mocker.AsyncMock(return_value=many)
+    github_client.get_file_content = mocker.AsyncMock(return_value=("x", "s"))
+    github_client.get_file_sha = mocker.AsyncMock(return_value="t")
+    mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
+    mocker.patch("app.api.routes.webhook.pipeline_runner.schedule_task", new=mocker.AsyncMock())
+
+    response = await client.post("/webhook/catch-up/all", headers={"X-Catchup-Token": "s3cr3t"})
+    assert response.status_code == 200
+    # файлы не скачивались, задачи не создавались
+    github_client.get_file_content.assert_not_awaited()
+    tasks = (await db_session.scalars(select(Task).where(Task.file_path.like("docs/f%")))).all()
+    assert tasks == []

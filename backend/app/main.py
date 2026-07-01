@@ -143,6 +143,17 @@ async def _lifespan(app: FastAPI):
     )
     pipeline_runner._WORKER_TASK = worker
 
+    # Catch-up при старте: пуш будит спящую VM, но его вебхук-доставка теряется
+    # (GitHub-таймаут 10с, без ретрая) — на старте сами добираем пропущенное.
+    # Фоном, чтобы не тормозить готовность/health. Гарды от лавины — в reconcile.
+    # Включён, когда catch-up сконфигурирован (в тестах секрета нет → без сети).
+    if settings.catchup_secret:
+        from app.api.routes.webhook import run_startup_catchup
+
+        asyncio.create_task(
+            run_startup_catchup(session_factory), name="docflow.startup_catchup"
+        )
+
     yield
 
     worker.cancel()

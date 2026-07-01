@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # Секрет для catch-up-эндпоинта (внешний триггер добирает пропущенные вебхуки,
     # напр. потерянные на холодном старте спящей VM). Не задан → эндпоинт выключен.
     catchup_secret: str | None = Field(default=None, alias="CATCHUP_SECRET")
+    # Гард catch-up от лавины: если пропущено больше файлов (очень старый базовый sha
+    # / переписанная история) — авто-добор НЕ делаем, нужен ручной full-sync.
+    catchup_max_files: int = Field(default=200, alias="CATCHUP_MAX_FILES")
 
     # GitHub App (точечный доступ к выбранным репам через installation-токены).
     # Сосуществует со старым OAuth App (dual-mode) во время миграции.
