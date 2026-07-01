@@ -612,3 +612,112 @@ async def test_webhook_ignores_non_published_tasks_for_previous_task_id(
         )
     ).one()
     assert new_task.previous_task_id is None
+
+
+async def test_webhook_skips_oversized_file(client, db_session, test_project, test_user, mocker):
+    test_user.github_id = 123456
+    test_user.github_login = "octocat"
+    test_user.github_access_token = encrypt_github_access_token("github-token")
+    await db_session.commit()
+
+    # лимит 10 символов: большой файл уходит в skipped(too_large), задача не создаётся.
+    mocker.patch(
+        "app.api.routes.webhook.get_settings",
+        return_value=mocker.Mock(max_file_chars=10),
+    )
+
+    def content_by_path(repo, path, ref):
+        if path == "docs/big.md":
+            return ("x" * 50, "big-sha")
+        return ("ok", "small-sha")
+
+    github_client = mocker.Mock()
+    github_client.get_file_content = mocker.AsyncMock(side_effect=content_by_path)
+    github_client.get_file_sha = mocker.AsyncMock(return_value="target-sha")
+    mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
+    mocker.patch("app.api.routes.webhook.pipeline_runner.schedule_task", new=mocker.AsyncMock())
+
+    payload = {
+        "ref": "refs/heads/main",
+        "after": "after-sha",
+        "commits": [{"added": ["docs/small.md"], "modified": ["docs/big.md"]}],
+    }
+    body, headers = sign_payload(test_project.plaintext_webhook_secret, payload)
+    response = await client.post(f"/webhook/{test_project.id}", content=body, headers=headers)
+
+    assert response.status_code == 202
+    data = response.json()
+    assert data["created"] == 1
+    too_large = [s for s in data["skipped"] if s.get("reason") == "too_large"]
+    assert len(too_large) == 1
+    assert too_large[0]["file_path"] == "docs/big.md"
+    assert too_large[0]["limit"] == 10
+
+    tasks = (
+        await db_session.scalars(select(Task).where(Task.project_id == test_project.id))
+    ).all()
+    assert {t.file_path for t in tasks} == {"docs/small.md"}
+
+
+async def test_catch_up_reconciles_missed_files(client, db_session, test_project, test_user, mocker):
+    test_user.github_id = 123456
+    test_user.github_login = "octocat"
+    test_user.github_access_token = encrypt_github_access_token("github-token")
+    db_session.add(
+        Task(
+            user_id=test_user.id,
+            project_id=test_project.id,
+            team_id=test_project.team_id,
+            file_path="docs/old.md",
+            github_ref="refs/heads/main",
+            github_sha="old-sha",
+            original_content="# Old",
+            status="published",
+        )
+    )
+    await db_session.commit()
+
+    mocker.patch(
+        "app.api.routes.webhook.get_settings",
+        return_value=mocker.Mock(catchup_secret="s3cr3t", max_file_chars=30000),
+    )
+    github_client = mocker.Mock()
+    github_client.get_branch_head_sha = mocker.AsyncMock(return_value="new-sha")
+    github_client.compare_files = mocker.AsyncMock(return_value=["docs/new.md"])
+    github_client.get_file_content = mocker.AsyncMock(return_value=("# New", "src-sha"))
+    github_client.get_file_sha = mocker.AsyncMock(return_value="tgt-sha")
+    mocker.patch("app.api.routes.webhook.GitHubClient", return_value=github_client)
+    mocker.patch("app.api.routes.webhook.pipeline_runner.schedule_task", new=mocker.AsyncMock())
+
+    response = await client.post("/webhook/catch-up/all", headers={"X-Catchup-Token": "s3cr3t"})
+
+    assert response.status_code == 200
+    assert response.json()["created"] >= 1
+    github_client.compare_files.assert_any_await(test_project.source_repo, "old-sha", "new-sha")
+    new_tasks = (
+        await db_session.scalars(
+            select(Task).where(
+                Task.file_path == "docs/new.md", Task.project_id == test_project.id
+            )
+        )
+    ).all()
+    assert len(new_tasks) == 1
+    assert new_tasks[0].github_sha == "new-sha"
+
+
+async def test_catch_up_rejects_bad_token(client, mocker):
+    mocker.patch(
+        "app.api.routes.webhook.get_settings",
+        return_value=mocker.Mock(catchup_secret="s3cr3t"),
+    )
+    response = await client.post("/webhook/catch-up/all", headers={"X-Catchup-Token": "wrong"})
+    assert response.status_code == 403
+
+
+async def test_catch_up_disabled_without_secret(client, mocker):
+    mocker.patch(
+        "app.api.routes.webhook.get_settings",
+        return_value=mocker.Mock(catchup_secret=None),
+    )
+    response = await client.post("/webhook/catch-up/all", headers={"X-Catchup-Token": "x"})
+    assert response.status_code == 503

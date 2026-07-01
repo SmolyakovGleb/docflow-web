@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 from typing import Annotated, Any
@@ -157,24 +158,23 @@ async def _resolve_github_client(
     return GitHubClient(access_token)
 
 
-async def _process_push(
-    session: AsyncSession, project: Project, payload: dict[str, Any]
+async def _create_tasks_for_files(
+    session: AsyncSession,
+    project: Project,
+    translatable_files: list[str],
+    *,
+    github_ref: str,
+    after_sha: str | None,
+    before_sha: str | None,
+    commit_message: str | None = None,
+    commit_author_name: str | None = None,
+    commit_author_login: str | None = None,
 ) -> dict[str, Any]:
-    """Обработка push-события для одного проекта: фильтр файлов → задачи → пайплайн."""
-    expected_ref = f"refs/heads/{project.source_branch}"
-    if payload.get("ref") != expected_ref:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Push is not for the configured source branch",
-        )
+    """Общее ядро: список переводимых путей → задачи. Используют и вебхук, и catch-up.
 
-    translatable_files = _collect_translatable_files(payload)
-    if not translatable_files:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No translatable files in this push",
-        )
-
+    Шаги: exclude-паттерны → дедуп активных (queued/running) → bulk-защита →
+    скачивание файлов (атомарно) → лимит размера → создание задач + запуск пайплайна.
+    """
     translatable_files, skipped_files = _apply_exclude_patterns(
         translatable_files,
         project.exclude_patterns,
@@ -212,32 +212,10 @@ async def _process_push(
             }
         )
 
-    if not files_to_process and skipped_files:
+    if not files_to_process:
         return {"created": 0, "task_ids": [], "skipped": skipped_files}
 
     owner = await _get_project_owner(session, project)
-    before_sha: str | None = payload.get("before") or None
-    commit_message = None
-    commit_author_name = None
-    commit_author_login = None
-    head_commit = payload.get("head_commit")
-    if isinstance(head_commit, dict):
-        message = head_commit.get("message")
-        if isinstance(message, str):
-            commit_message = message
-        author = head_commit.get("author")
-        if isinstance(author, dict):
-            author_name = author.get("name")
-            if isinstance(author_name, str):
-                commit_author_name = author_name
-            author_login = author.get("username")
-            if isinstance(author_login, str):
-                commit_author_login = author_login
-    sender = payload.get("sender")
-    if isinstance(sender, dict):
-        sender_login = sender.get("login")
-        if isinstance(sender_login, str):
-            commit_author_login = sender_login
 
     # Bulk protection: too many files → create CommitGroup for manual confirmation
     if len(files_to_process) > project.webhook_file_limit:
@@ -245,8 +223,8 @@ async def _process_push(
             project_id=project.id,
             user_id=owner.id,
             team_id=project.team_id,
-            github_sha=payload.get("after"),
-            github_ref=str(payload["ref"]),
+            github_sha=after_sha,
+            github_ref=github_ref,
             before_sha=before_sha,
             commit_message=commit_message,
             commit_author_name=commit_author_name,
@@ -294,7 +272,33 @@ async def _process_push(
             detail=f"Unexpected error fetching files: {type(exc).__name__}: {exc}",
         ) from exc
 
-    previous_task_by_path = await _get_previous_task_ids(session, project.id, files_to_process)
+    # Лимит размера: слишком большие файлы не переводим (контекст LLM/стоимость/надёжность).
+    # Задача не создаётся, файл виден в skipped с причиной too_large.
+    max_chars = get_settings().max_file_chars
+    within_limit: list[tuple[str, str, str | None, str | None]] = []
+    for file_path, original_content, source_file_sha, target_file_sha in fetched:
+        if len(original_content) > max_chars:
+            skipped_files.append(
+                {
+                    "file_path": file_path,
+                    "reason": "too_large",
+                    "size": len(original_content),
+                    "limit": max_chars,
+                }
+            )
+            continue
+        within_limit.append((file_path, original_content, source_file_sha, target_file_sha))
+
+    if not within_limit:
+        logger.info(
+            "webhook_all_skipped",
+            extra={"project_id": str(project.id), "skipped_count": len(skipped_files)},
+        )
+        return {"created": 0, "task_ids": [], "skipped": skipped_files}
+
+    previous_task_by_path = await _get_previous_task_ids(
+        session, project.id, [fp for fp, *_ in within_limit]
+    )
 
     tasks_to_create: list[Task] = [
         Task(
@@ -302,8 +306,8 @@ async def _process_push(
             project_id=project.id,
             team_id=project.team_id,
             file_path=file_path,
-            github_ref=str(payload["ref"]),
-            github_sha=payload.get("after"),
+            github_ref=github_ref,
+            github_sha=after_sha,
             commit_message=commit_message,
             commit_author_name=commit_author_name,
             commit_author_login=commit_author_login,
@@ -314,7 +318,7 @@ async def _process_push(
             before_sha=before_sha,
             previous_task_id=previous_task_by_path.get(file_path),
         )
-        for file_path, original_content, source_file_sha, target_file_sha in fetched
+        for file_path, original_content, source_file_sha, target_file_sha in within_limit
     ]
 
     try:
@@ -350,6 +354,110 @@ async def _process_push(
     }
 
 
+def _extract_push_meta(payload: dict[str, Any]) -> dict[str, str | None]:
+    commit_message = commit_author_name = commit_author_login = None
+    head_commit = payload.get("head_commit")
+    if isinstance(head_commit, dict):
+        message = head_commit.get("message")
+        if isinstance(message, str):
+            commit_message = message
+        author = head_commit.get("author")
+        if isinstance(author, dict):
+            author_name = author.get("name")
+            if isinstance(author_name, str):
+                commit_author_name = author_name
+            author_login = author.get("username")
+            if isinstance(author_login, str):
+                commit_author_login = author_login
+    sender = payload.get("sender")
+    if isinstance(sender, dict):
+        sender_login = sender.get("login")
+        if isinstance(sender_login, str):
+            commit_author_login = sender_login
+    return {
+        "commit_message": commit_message,
+        "commit_author_name": commit_author_name,
+        "commit_author_login": commit_author_login,
+    }
+
+
+async def _process_push(
+    session: AsyncSession, project: Project, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Обработка push-события для одного проекта: фильтр файлов → задачи → пайплайн."""
+    expected_ref = f"refs/heads/{project.source_branch}"
+    if payload.get("ref") != expected_ref:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Push is not for the configured source branch",
+        )
+
+    translatable_files = _collect_translatable_files(payload)
+    if not translatable_files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No translatable files in this push",
+        )
+
+    return await _create_tasks_for_files(
+        session,
+        project,
+        translatable_files,
+        github_ref=str(payload["ref"]),
+        after_sha=payload.get("after"),
+        before_sha=payload.get("before") or None,
+        **_extract_push_meta(payload),
+    )
+
+
+async def reconcile_project(session: AsyncSession, project: Project) -> dict[str, Any]:
+    """Catch-up: сверяет HEAD source-ветки с последним обработанным sha и добирает
+    файлы, для которых задачи не создались (напр. вебхук, потерянный на холодном
+    старте спящей VM — GitHub такие доставки не ретраит)."""
+    owner = await _get_project_owner(session, project)
+    source_client = await _resolve_github_client(session, project.source_repo, owner)
+    try:
+        head_sha = await source_client.get_branch_head_sha(
+            project.source_repo, project.source_branch
+        )
+    except GitHubAPIError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    # База сверки — sha последнего пуша, который РЕАЛЬНО создал задачи по проекту.
+    last_sha = await session.scalar(
+        select(Task.github_sha)
+        .where(Task.project_id == project.id, Task.github_sha.isnot(None))
+        .order_by(Task.created_at.desc())
+        .limit(1)
+    )
+    if last_sha == head_sha:
+        return {"created": 0, "task_ids": [], "skipped": [], "up_to_date": True, "head_sha": head_sha}
+
+    try:
+        if last_sha:
+            changed = await source_client.compare_files(project.source_repo, last_sha, head_sha)
+        else:
+            changed = await source_client.get_repo_tree(project.source_repo, project.source_branch)
+    except GitHubAPIError:
+        # last_sha мог исчезнуть после force-push → полная сверка по дереву ветки.
+        changed = await source_client.get_repo_tree(project.source_repo, project.source_branch)
+
+    changed = [f for f in changed if is_safe_relative_path(f)]
+    if not changed:
+        return {"created": 0, "task_ids": [], "skipped": [], "head_sha": head_sha}
+
+    result = await _create_tasks_for_files(
+        session,
+        project,
+        changed,
+        github_ref=f"refs/heads/{project.source_branch}",
+        after_sha=head_sha,
+        before_sha=last_sha,
+    )
+    result["head_sha"] = head_sha
+    return result
+
+
 @router.post(
     "/webhook/{project_id}",
     status_code=status.HTTP_202_ACCEPTED,
@@ -363,11 +471,11 @@ async def _process_push(
         "2. `ping` → `200 {ok: true}`\n"
         "3. Фильтр: только `.md`, `.yaml`, `.yml` из "
         "`commits[*].added/modified` в `source_branch`\n"
-        "4. Применить `exclude_patterns`, дедупликацию (`queued`/`running`)\n"
+        "4. Применить `exclude_patterns`, дедупликацию (`queued`/`running`), лимит размера\n"
         "5. Скачать файлы через GitHub API (атомарно — при ошибке задачи не создаются)\n"
         "6. Создать задачи и запустить пайплайн в фоне\n\n"
         "**Возможные `skipped.reason`:** "
-        "`already_queued`, `pipeline_running`, `excluded_by_pattern`."
+        "`already_queued`, `pipeline_running`, `excluded_by_pattern`, `too_large`."
     ),
     responses={
         202: {"description": "Задачи созданы и поставлены в очередь"},
@@ -421,6 +529,60 @@ async def github_webhook(
         ) from exc
 
     return await _process_push(session, project, payload)
+
+
+@router.post(
+    "/webhook/catch-up/all",
+    status_code=status.HTTP_200_OK,
+    tags=["webhook"],
+    summary="Reconcile missed pushes (catch-up)",
+    description=(
+        "Добирает задачи для пушей, которые не создались (напр. вебхук потерян на "
+        "холодном старте спящей VM — GitHub такие доставки не ретраит).\n\n"
+        "Для каждого проекта: HEAD source-ветки vs последний обработанный `github_sha` "
+        "→ `compare` → создание задач для пропущенных файлов.\n\n"
+        "Аутентификация: заголовок `X-Catchup-Token` == `CATCHUP_SECRET`. Предназначен "
+        "для внешнего планировщика (заодно будит VM). Отключён, если секрет не задан."
+    ),
+    responses={
+        200: {"description": "Сверка выполнена, результат по каждому проекту"},
+        403: {"description": "Неверный или отсутствующий X-Catchup-Token"},
+        503: {"description": "Catch-up не сконфигурирован (нет CATCHUP_SECRET)"},
+    },
+)
+async def catch_up(request: Request, session: DbSession) -> dict[str, Any]:
+    settings = get_settings()
+    if not settings.catchup_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Catch-up is not configured",
+        )
+    token = request.headers.get("X-Catchup-Token") or ""
+    if not hmac.compare_digest(token, settings.catchup_secret):
+        logger.warning("catchup_invalid_token")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid catch-up token"
+        )
+
+    projects = (await session.scalars(select(Project))).all()
+    results: list[dict[str, Any]] = []
+    total_created = 0
+    for project in projects:
+        try:
+            result = await reconcile_project(session, project)
+            total_created += int(result.get("created", 0))
+            results.append(
+                {"project_id": str(project.id), "source_repo": project.source_repo, **result}
+            )
+        except HTTPException as exc:
+            results.append({"project_id": str(project.id), "skipped_reason": str(exc.detail)})
+        except Exception:
+            logger.exception("catchup_project_failed", extra={"project_id": str(project.id)})
+            await session.rollback()
+            results.append({"project_id": str(project.id), "skipped_reason": "internal_error"})
+
+    logger.info("catchup_done", extra={"projects": len(projects), "created": total_created})
+    return {"projects": len(projects), "created": total_created, "results": results}
 
 
 async def _handle_app_installation_event(

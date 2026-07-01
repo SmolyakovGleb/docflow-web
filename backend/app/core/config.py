@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     model: str | None = Field(default=None, alias="MODEL")
     app_base_url: str = Field(default="http://localhost:8080", alias="APP_BASE_URL")
 
+    # Файлы крупнее лимита не переводятся (защита от дорогих/ненадёжных прогонов и
+    # переполнения контекста LLM): задача не создаётся, файл попадает в skipped.
+    max_file_chars: int = Field(default=30_000, alias="MAX_FILE_CHARS")
+    # Секрет для catch-up-эндпоинта (внешний триггер добирает пропущенные вебхуки,
+    # напр. потерянные на холодном старте спящей VM). Не задан → эндпоинт выключен.
+    catchup_secret: str | None = Field(default=None, alias="CATCHUP_SECRET")
+
     # GitHub App (точечный доступ к выбранным репам через installation-токены).
     # Сосуществует со старым OAuth App (dual-mode) во время миграции.
     github_app_id: str | None = Field(default=None, alias="GITHUB_APP_ID")

@@ -180,6 +180,39 @@ class GitHubClient:
 
         return sorted(files)
 
+    async def get_branch_head_sha(self, repo: str, branch: str) -> str:
+        """Публичный HEAD-sha ветки (для catch-up-сверки с последним обработанным)."""
+        return await self._get_branch_commit_sha(repo, branch)
+
+    async def compare_files(self, repo: str, base: str, head: str) -> list[str]:
+        """Переводимые изменённые файлы (added/modified/renamed/changed) между base и
+        head — источник истины для catch-up вместо усечённого payload вебхука. Files в
+        compare пагинируются (GitHub отдаёт ≤300/стр)."""
+        repo_name = quote(repo, safe="/")
+        base_head = f"{quote(base, safe='')}...{quote(head, safe='')}"
+        files: list[str] = []
+        page = 1
+        while page <= 20:  # backstop: до 300*20 файлов
+            response = await self._get(
+                f"{GITHUB_API_BASE_URL}/repos/{repo_name}/compare/{base_head}",
+                params={"per_page": "300", "page": str(page)},
+            )
+            self._raise_for_error(response)
+            page_files = response.json().get("files") or []
+            for item in page_files:
+                filename = item.get("filename")
+                status = item.get("status")
+                if (
+                    isinstance(filename, str)
+                    and status in ("added", "modified", "renamed", "changed")
+                    and is_translatable_path(filename)
+                ):
+                    files.append(filename)
+            if len(page_files) < 300:
+                break
+            page += 1
+        return list(dict.fromkeys(files))
+
     async def create_or_update_file(
         self,
         *,
