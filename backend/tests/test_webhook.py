@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 
 from sqlalchemy import select
 
@@ -659,7 +660,12 @@ async def test_webhook_skips_oversized_file(client, db_session, test_project, te
     assert {t.file_path for t in tasks} == {"docs/small.md"}
 
 
-async def test_catch_up_reconciles_missed_files(client, db_session, test_project, test_user, mocker):
+async def test_catch_up_reconciles_missed_files(
+    client, db_session, test_project, test_user, mocker, caplog
+):
+    # INFO включён, чтобы отработал финальный logger.info("catchup_done", extra=...):
+    # ловит регрессию, когда ключ extra совпадает с полем LogRecord (KeyError → 500).
+    caplog.set_level(logging.INFO, logger="app.api.routes.webhook")
     test_user.github_id = 123456
     test_user.github_login = "octocat"
     test_user.github_access_token = encrypt_github_access_token("github-token")

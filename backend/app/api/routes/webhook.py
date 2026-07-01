@@ -581,7 +581,9 @@ async def catch_up(request: Request, session: DbSession) -> dict[str, Any]:
             await session.rollback()
             results.append({"project_id": str(project.id), "skipped_reason": "internal_error"})
 
-    logger.info("catchup_done", extra={"projects": len(projects), "created": total_created})
+    # ВАЖНО: ключи в extra не должны совпадать с полями LogRecord ('created' — время
+    # записи → KeyError "Attempt to overwrite"). Поэтому created_total, а не created.
+    logger.info("catchup_done", extra={"projects": len(projects), "created_total": total_created})
     return {"projects": len(projects), "created": total_created, "results": results}
 
 
